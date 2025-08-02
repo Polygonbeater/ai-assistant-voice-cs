@@ -1,6 +1,6 @@
 porcupine:
   keyword_path: /home/polygon-beater-studio/porcupine-env-3.10/lib/python3.10/site-packages/pvporcupine/resources/keyword_files/linux/porcupine_linux.ppn
-  access_key: r3tGR8xI8OPY+bv/nz/8m7hUU9iINFyKzsvCBdZ/d5IHySiLp4eZYA==
+  access_key: 
 tts:
   model_name: tts_models/cs/cv/vits
   language: cs
