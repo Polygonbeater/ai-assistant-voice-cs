@@ -1,0 +1,39 @@
+# 🐍 Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# 📦 Balíčky a metadata
+*.egg-info/
+*.egg
+
+# 🔁 Virtuální prostředí
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# 💾 Dočasné audio výstupy
+*.wav
+tts_output.wav
+command.wav
+
+# 📝 Přepisy a logy
+*.log
+*.tmp
+
+# 🧠 Modely a velké soubory
+models/
+*.gguf
+*.bin
+
+# 👨‍💻 Editory
+.vscode/
+*.swp
+*.swo
+
+# 📂 OS-specific
+.DS_Store
+Thumbs.db
