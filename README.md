@@ -52,7 +52,7 @@ You will need:
 - [FFmpeg](https://ffmpeg.org)
 - [Git](https://git-scm.com)
 - Picovoice Porcupine SDK
-- A Czech-compatible [LLaMA model in GGUF format](https://huggingface.co/TheBloke/csMPT-7B-GGUF)
+- A Czech-compatible [LLaMA model in GGUF format](https://huggingface.co/TheBloke/csMPT-7B-v2-GGUF)
 - A Czech Coqui TTS model (e.g. `tts_models/cs/cv-corpus-11-0/cs-mlt`)
 
 ---
@@ -74,6 +74,22 @@ porcupine:
 
 tts:
   model_name: "tts_models/cs/cv-corpus-11-0/cs-mlt"
+```
+
+---
+
+## 📁 Project Structure
+
+```
+ai-assistant-voice-cs/
+├── ai_assistant.py      # Main loop (wake word + VAD + logic)
+├── config.yaml          # Configuration file (wake word path, rate, etc.)
+├── audio.py             # Wake word and audio recording
+├── whisper.py           # Speech-to-text wrapper
+├── llama.py             # LLaMA model wrapper
+├── tts.py               # TTS (Coqui) wrapper
+├── .gitignore
+└── README.md
 ```
 
 ---
