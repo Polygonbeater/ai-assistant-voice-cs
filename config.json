@@ -1,0 +1,30 @@
+{
+  "porcupine": {
+    "access_key": "r3tGR8xI8OPY+bv/nz/8m7hUU9iINFyKzsvCBdZ/d5IHySiLp4eZYA==",
+    "model_path": "models/porcupine_params.pv",
+    "keyword": "computer",
+    "sensitivity": 0.7
+  },
+  "whisper": {
+    "model": "medium",
+    "language": "cs"
+  },
+  "llama": {
+    "model": "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+    "max_tokens": 150
+  },
+  "tts": {
+    "model_name": "tts_models/cs/cv/vits",
+    "gpu": false
+  },
+  "audio": {
+    "device_index": -1,
+    "wake_word_device_index": -1,
+    "max_recording_time": 15
+  },
+  "silero_vad": {
+    "sample_rate": 16000,
+    "threshold": 0.3,
+    "silence_duration_ms": 2000
+  }
+}
