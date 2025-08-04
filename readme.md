@@ -158,4 +158,3 @@ Built with passion for the Czech language ❤️🇨🇿
 
 ### ⚖️ License
 Licensed under the [MIT License](https://github.com/Polygonbeater/ai-assistant-voice-cs/blob/main/LICENSE). Copyright (c) 2025 Polygonbeater.
-
