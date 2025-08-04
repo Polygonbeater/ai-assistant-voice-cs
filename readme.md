@@ -40,9 +40,9 @@ The entire process, from addressing the assistant to its response, occurs in sev
 * A Czech-compatible LLaMA model in GGUF format.
 
 ### Installation
-1.  **Clone the repository:**
+1. **Clone the repository:**
     ```bash
-    git clone [https://github.com/Polygonbeater/ai-assistant-voice-cs.git](https://github.com/Polygonbeater/ai-assistant-voice-cs.git)
+    git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
     cd ai-assistant-voice-cs
     ```
 
