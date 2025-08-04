@@ -1,3 +1,5 @@
+
+
 # 🤖 Offline Czech Voice Assistant
 
 Welcome! This is an AI voice assistant designed to operate **completely offline**, utilizing local tools and models, with a specific focus on the **Czech language**.
@@ -158,4 +160,3 @@ Built with passion for the Czech language ❤️🇨🇿
 
 ### ⚖️ License
 Licensed under the [MIT License](https://github.com/Polygonbeater/ai-assistant-voice-cs/blob/main/LICENSE). Copyright (c) 2025 Polygonbeater.
-
