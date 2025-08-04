@@ -2,20 +2,33 @@
 
 Welcome! This is an AI voice assistant designed to operate **completely offline**, utilizing local tools and models, with a specific focus on the **Czech language**.
 
-## Technologies & Key Features
+## Key Features
 
-### Technologies Used
-* 🧠 **LLM:** [llama.cpp](https://github.com/ggerganov/llama.cpp) for response generation, utilizing models in the GGUF format (e.g., [Mistral-7B](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1)).
-* 🗣️ **TTS:** [Coqui TTS](https://github.com/coqui-ai/TTS) for high-quality Czech text-to-speech.
-* 👂 **Wake-Word:** [Picovoice Porcupine](https://github.com/Picovoice/porcupine) for hands-free activation using a custom keyword.
-* 🎙️ **STT:** [Whisper](https://github.com/openai/whisper) (offline versions like [whisper.cpp](https://github.com/ggerganov/whisper.cpp) or [faster-whisper](https://github.com/SYSTRAN/faster-whisper)) for accurate speech-to-text transcription.
+* **100% Offline:** No data ever leaves your computer. All operations are processed locally.
+* **Czech Language:** The assistant is built from the ground up for the Czech language—from speech transcription to response generation.
+* **Wake-Word Detection:** It listens for a custom keyword (e.g., "computer") and activates without needing a button press.
+* **Voice Activity Detection (VAD):** Intelligently trims silence from recordings, which speeds up and improves the accuracy of transcription.
+* **Open-Source:** The entire project is built on publicly available tools.
 
-### Key Features
-* **Fully Offline:** No internet connection or cloud APIs required.
-* **Czech Language Support:** Understands, processes, and responds in Czech.
-* **Wake-Word Detection:** Activates on a configurable voice command.
-* **VAD:** Utilizes Voice Activity Detection to trim silent periods from recordings.
-* **Open-Source:** Built with open-source tools and frameworks.
+## Technologies Used
+
+| Component                  | Tool                                                              | Description                                                                    |
+| :------------------------- | :---------------------------------------------------------------- | :----------------------------------------------------------------------------- |
+| **Response Generation (LLM)** | [Llama.cpp](https://github.com/ggerganov/llama.cpp)               | For efficiently running large language models (GGUF format) on standard hardware. |
+| **Text-to-Speech (TTS)** | [Coqui TTS](https://github.com/coqui-ai/TTS)                      | For high-quality and natural-sounding Czech voice synthesis.                   |
+| **Wake-Word Detection** | [Picovoice Porcupine](https://github.com/Picovoice/porcupine)     | For reliable and low-resource hands-free activation.                           |
+| **Speech-to-Text (STT)** | [OpenAI Whisper](https://github.com/openai/whisper)               | For accurate offline transcription of the Czech language.                      |
+| **Voice Activity Detection** | [Silero VAD](https://github.com/snakers4/silero-vad)              | For real-time separation of speech from silence.                               |
+
+## How It Works
+
+The entire process, from addressing the assistant to its response, occurs in several steps:
+
+1.  **Wake-Word Detection:** `audio.py` continuously listens using `Picovoice Porcupine`. Once it hears the keyword, it triggers the next step.
+2.  **Command Recording:** After activation, `audio.py` uses `Silero VAD` to detect speech, and the recording automatically stops when the user finishes speaking.
+3.  **Speech-to-Text (STT):** The recording is passed to `stt_module.py`, which uses `OpenAI Whisper` to transcribe the spoken words into text.
+4.  **Response Generation (LLM):** The transcribed text is sent to `llama_module.py`. It first checks for simple math expressions. If none are found, it generates a response using `Llama.cpp`.
+5.  **Text-to-Speech (TTS):** The generated text response is passed to `tts_module.py`, which uses `Coqui TTS` to convert the text into audio and play it back.
 
 ## 🚀 Getting Started
 
@@ -23,44 +36,39 @@ Welcome! This is an AI voice assistant designed to operate **completely offline*
 * [Python 3.10+](https://www.python.org)
 * [FFmpeg](https://ffmpeg.org)
 * [Git](https://git-scm.com)
-* [Picovoice Porcupine SDK](https://console.picovoice.ai/) (requires an access key)
-* A Czech-compatible LLaMA model in GGUF format
-* A Czech Coqui TTS model (e.g., `tts_models/cs/cv/vits`)
+* A [Picovoice Account](https://console.picovoice.ai/) for a free access key.
+* A Czech-compatible LLaMA model in GGUF format.
 
 ### Installation
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
-   cd ai-assistant-voice-cs
-   ```
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/Polygonbeater/ai-assistant-voice-cs.git](https://github.com/Polygonbeater/ai-assistant-voice-cs.git)
+    cd ai-assistant-voice-cs
+    ```
 
-2. **Install dependencies:**
-   Required Python packages:
-   * `llama_cpp_python`: For LLM.
-   * `openai-whisper`: For Speech-to-Text.
-   * `TTS`: For Text-to-Speech.
-   * `pvporcupine`: For wake-word detection.
-   ```bash
-   pip install -r requirements.txt
-   ```
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ### 📥 Downloading Models
-Models are not included due to size. Download manually:
+Models are not included due to their size. Download them manually and place them in the `models/` directory.
 
 * **LLaMA Model:**
-  * Download a GGUF model (e.g., `mistral-7b-instruct-v0.2.Q4_K_M.gguf`) from [Hugging Face](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/blob/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf).
-  * Place in `models/`.
+    * Download a GGUF model (e.g., `mistral-7b-instruct-v0.2.Q4_K_M.gguf`) from [Hugging Face](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF).
+    * Place the downloaded file in the `models/` folder.
 
 * **Picovoice Porcupine Wake-Word:**
-  * Obtain an access key from [Picovoice Console](https://console.picovoice.ai/).
-  * Download the `.ppn` file for your wake-word and OS from [Picovoice Porcupine GitHub](https://github.com/Picovoice/porcupine/tree/master/lib/common).
-  * Place in `models/` and update `config.json`.
+    * Obtain your free access key from [Picovoice Console](https://console.picovoice.ai/).
+    * Download the `.ppn` file for your desired wake-word and OS from the [Porcupine GitHub repository](https://github.com/Picovoice/porcupine/tree/master/resources/keyword_files).
+    * Place the `.ppn` file in the `models/` folder.
 
-* **Coqui TTS:**
-  * Automatically downloaded on first run.
+* **Coqui TTS & Silero VAD:**
+    * These models will be downloaded automatically on the first run.
 
 ### 🎨 Configuration
-Create `config.json`:
+Create a `config.json` file and populate it with your settings.
+
 ```json
 {
   "porcupine": {
@@ -98,38 +106,56 @@ Create `config.json`:
 * **whisper**: Speech-to-text model and language.
 * **llama**: LLaMA model path and token limit.
 * **tts**: Text-to-speech model and GPU usage.
-* **audio**: Audio device settings.
+* **audio**: Audio device settings (`-1` for default).
 * **silero_vad**: Voice activity detection parameters.
 
 ### 🏃‍♂️ Running the Assistant
-Run the script (prompts for microphone selection on first run):
+Run the script. It will prompt for microphone selection on the first run.
 ```bash
 python3 main.py
 ```
 
-## 📁 Project Structure
-* `main.py`: Main loop and core logic.
-* `audio.py`: Audio recording and wake-word detection.
-* `stt_module.py`: Speech-to-text wrapper.
-* `llama_module.py`: LLaMA model wrapper.
-* `tts_module.py`: Text-to-speech wrapper.
-* `list_tts_models.py`: Utility script for listing TTS models.
-* `config.json`: Configuration file.
-* `models/`: Directory for AI models.
-* `requirements.txt`: Dependencies.
-* `LICENSE`: License file.
-* `README.md`: This file.
+### 📁 Project Structure
+```
+.
+├── 🐍 Core Logic
+│   ├── main.py              # Main application entry point and orchestration
+│   ├── audio.py             # Handles audio input, wake-word, and VAD
+│   ├── stt_module.py        # Speech-to-Text (Whisper) wrapper
+│   ├── llama_module.py      # Large Language Model (Llama.cpp) wrapper
+│   └── tts_module.py        # Text-to-Speech (Coqui TTS) wrapper
+│
+├── ⚙️ Configuration & Data
+│   ├── config.json          # Main configuration for all modules
+│   ├── requirements.txt     # Python package dependencies
+│   └── models/              # Directory for storing AI models (not in git)
+│
+├── 🛠️ Utilities
+│   └── list_tts_models.py   # Utility script to list available TTS models
+│
+└── 📖 Documentation
+    ├── LICENSE              # Project's MIT License
+    └── README.md            # This documentation file
+```
 
-## 🗺️ Future Plans & Vision
-* **Blender Integration:** Generate `bpy` scripts for voice-controlled 3D scenes in Blender.
-* **Advanced Programming Assistance:** Integrate with editors like Neovim for code generation, debugging, and refactoring.
-* **General Workflow Automation:** Automate tasks like file management and app control via voice.
+### 🗺️ Future Plans & Vision
+* **Blender Integration:** Generate `bpy` scripts for voice-controlled 3D scenes.
+* **Advanced Programming Assistance:** Integrate with editors like Neovim for code generation.
+* **Workflow Automation:** Automate tasks like file management and app control.
 
-Contributions and ideas are welcome!
+### 👋 Contributing
+Contributions are welcome! If you have an idea for an improvement or a new feature, feel free to fork the repository and submit a pull request.
 
-## 💖 Credits
+1.  Fork the Project.
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the Branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+
+### 💖 Credits
 Created by [Vítězslav Koneval](https://github.com/Polygonbeater).  
 Built with passion for the Czech language ❤️🇨🇿
 
-## ⚖️ License
-Licensed under the [MIT License](https://github.com/Polygonbeater/ai-assistant-voice-cs/blob/main/LICENSE).
+### ⚖️ License
+Licensed under the [MIT License](https://github.com/Polygonbeater/ai-assistant-voice-cs/blob/main/LICENSE). Copyright (c) 2025 Polygonbeater.
+
