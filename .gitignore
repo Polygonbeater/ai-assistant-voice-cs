@@ -12,3 +12,14 @@ main.spec
 # Ignoruj dočasné a cache soubory
 __pycache__/
 *.pyc
+
+# Lokální konfigurace a citlivé klíče
+config.json
+
+# Nahrávky a audio mezipaměť
+debug_recording.wav
+*.wav
+
+# Python virtuální prostředí a cache
+venv/
+__pycache__/

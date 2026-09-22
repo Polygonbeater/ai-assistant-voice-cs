@@ -1,0 +1,15 @@
+{
+  "porcupine": {
+    "access_key": "YOUR_PICOVOICE_ACCESS_KEY",
+    "keyword_path": "path/to/keyword.ppn"
+  },
+  "whisper": {
+    "model": "medium"
+  },
+  "llama": {
+    "model": "path/to/mistral.gguf"
+  },
+  "tts": {
+    "use_gpu": false
+  }
+}
