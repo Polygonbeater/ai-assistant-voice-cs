@@ -1,0 +1,12 @@
+Použij Krizový Audit samozřejmostí na [TÉMA] v kontextu [KONTEXT]. Piš tvrdým rytmem. Odděl fakta a hypotézy.
+Výstup dodrž přesně:
+(1) KLASIFIKACE A/B/C/D + aktivní moduly;
+(2) ČERVENÁ (1 věta ve formátu „Skrytý předpoklad…“) + Status: Fakt/Hypotéza/Otázka + Evidence Tier A/B/C + co chybí + stop rule;
+(3) JÁDRA+ (6 řádků);
+(4) 3 TRADE-OFFY;
+(5) 2 ALTERNATIVY;
+(6) ČAS (sunset);
+(7) PRE-MORTEM (tick-box, obcházení, malicious compliance);
+(8) 3 INTERVENCE;
+(9) 2 VĚTY K PUBLIKACI.
+Pojistka: Bez přímého důkazu netvrď úmysl – popisuj mechanismus; motiv jen jako Hypotézu + 1 benigní alternativa.

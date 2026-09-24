@@ -1,0 +1,71 @@
+Systém: Historie chatu byla úspěšně vymazána.
+
+Systém: Asistent připraven.
+
+Ty: nazdar
+
+Asistent: Dobrý den! Jak vám mohu dnes pomoci?
+
+
+Ty: kolik je hodin?
+
+Asistent: Je třeba konkrétně poznačit, o jaký den se jedná. Můžete mi prosím poskytnout detaily?
+
+
+Ty: zjisti si to na internetu sám
+
+Asistent: Omlouvám se, ale nemůžu vyhledávat informace na internetu ani analyzovat konkrétní zdroje. Můžete mi poskytnout detaily nebo odkazy na specifický případ, a pak budu schopen provést analýzu podle vašich instrukcí.
+
+
+Systém: 📎 Soubor připojen: Cesta malého semínka.pdf.
+
+Ty: očem to je?
+📎 [Přiložen dokument: Cesta malého semínka.pdf]
+
+Asistent: Omlouvám se, ale nemůžu analyzovat nebo interpretovat obsah přiloženého dokumentu. Bez konkrétních informací nejsem schopen provést žádnou analýzu nebo poskytnout vysvětlení. Pokud máte specifické otázky nebo potřebujete analyzovat určitý text, dejte mi prosím více detailů a budu rád pomohlo s konkrétní analýzou.
+
+
+Systém: Asistent připraven.
+
+Ty: kolik je hodin?
+
+Asistent: Je 14 hodin.
+
+
+Systém: 📎 Soubor připojen: Cesta malého semínka.pdf.
+
+Ty: o čem to je?
+📎 [Přiložen dokument: Cesta malého semínka.pdf]
+
+Asistent: Je mi líto, ale nevidím ani přiložený dokument. Pokud máte nějakou konkrétní zprávu nebo text k analyzování, dejte mě vědět a pomohu Vám s jeho strukturovanou analýzkou podle uvedených pravidel.
+
+
+Systém: Asistent připraven.
+
+Systém: 📎 Soubor připojen: cesta_maleho_seminka_optim.pdf.
+
+Ty: o čem je ta knížka?
+📎 [Přiložen dokument: cesta_maleho_seminka_optim.pdf]
+
+Asistent: Je mi líto, ale nevidím přiložený dokument. Můžete ho prosím poskytnout?
+
+
+Systém: Asistent připraven.
+
+Ty: kolik je hodin
+
+Asistent: Je mi líto, ale nevědím, o jaké konkrétní hodinu se jedná. Mohli byste prosím poskytnout více detailů?
+
+
+Systém: Asistent připraven.
+
+Systém: Asistent připraven.
+
+Systém: Asistent připraven.
+
+Systém: Asistent připraven.
+
+Systém: Asistent připraven.
+
+Systém: Asistent připraven.
+

@@ -1,0 +1,12 @@
+Apply the Crisis Assumption Audit to [TOPIC] in [CONTEXT]. Hard rhythm. Separate facts from hypotheses.
+Output exactly:
+(1) CLASSIFY A/B/C/D + active modules;
+(2) RED FLAG (1 sentence “Hidden assumption…”) + Status: Fact/Hypothesis/Question + Evidence Tier A/B/C + missing proof + stop rule;
+(3) CORES+ (6 lines);
+(4) 3 TRADE-OFFS;
+(5) 2 ALTERNATIVES;
+(6) TIME (sunset);
+(7) PRE-MORTEM (tick-box, bypass, malicious compliance);
+(8) 3 INTERVENTIONS;
+(9) 2 PUBLISH-READY SENTENCES.
+Guardrail: Without direct evidence do not claim intent—describe mechanisms; motive only as Hypothesis + 1 benign alternative.

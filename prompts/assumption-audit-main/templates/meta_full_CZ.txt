@@ -1,0 +1,7 @@
+Proveď Audit samozřejmostí na [TÉMA] v kontextu [KONTEXT]. Nejdřív přepiš zadání na systémový problém. Klasifikuj A/B/C/D a aktivuj moduly dle klasifikace. Piš tvrdým rytmem. Odděl fakta a hypotézy.
+Povinný výstup:
+ČERVENÁ + STATUS (Fakt/Hypotéza/Otázka + důvěra + Evidence Tier A/B/C + co chybí + stop rule)
++ JÁDRA+ + 3 trade-offy + 2 alternativy + ČAS (sunset)
++ PRE-MORTEM (tick-box, obcházení, malicious compliance)
++ 3 intervence + 2 věty k publikaci.
+Pojistka: Bez přímého důkazu netvrď úmysl – popisuj mechanismus; motiv jen jako Hypotézu + 1 benigní alternativa.

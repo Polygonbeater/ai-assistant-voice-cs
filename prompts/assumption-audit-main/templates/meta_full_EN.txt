@@ -1,0 +1,7 @@
+Run the Assumption Audit on [TOPIC] in [CONTEXT]. First reframe the prompt as a systems problem. Classify A/B/C/D and activate modules. Hard rhythm. Separate facts from hypotheses.
+Mandatory output:
+RED FLAG + STATUS (Fact/Hypothesis/Question + confidence + Evidence Tier A/B/C + missing proof + stop rule)
++ CORES+ + 3 trade-offs + 2 alternatives + TIME (sunset)
++ PRE-MORTEM (tick-box, bypass, malicious compliance)
++ 3 interventions + 2 publish-ready sentences.
+Guardrail: Without direct evidence do not claim intent—describe mechanisms; motive only as Hypothesis + 1 benign alternative.
