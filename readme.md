@@ -67,7 +67,11 @@ Models are not included due to their size. Download them manually and place them
     * These models will be downloaded automatically on the first run.
 
 ### 🎨 Configuration
-Create a `config.json` file and populate it with your settings.
+Create a `config.json` file from the included template and populate it with your settings.
+
+```bash
+cp config.example.json config.json
+```
 
 ```json
 {
@@ -111,8 +115,31 @@ Create a `config.json` file and populate it with your settings.
 
 ### 🏃‍♂️ Running the Assistant
 Run the script. It will prompt for microphone selection on the first run.
+
+Quickest way:
+
+```bash
+make install
+cp config.example.json config.json
+make run
+```
+
+Or manually:
+
+```bash
+cp config.example.json config.json
+./run_assistant.sh
+```
+
+Or directly:
+
 ```bash
 python3 main.py
+```
+
+### 🧪 Validation
+```bash
+make test
 ```
 
 ### 📁 Project Structure

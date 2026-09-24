@@ -18,16 +18,67 @@ from tts_module import initialize_tts, speak_async
 # Nastavení logování
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+def _resolve_model_path(base_dir: str, configured_path: str) -> str:
+    """Převede cestu v konfiguraci na absolutní cestu k projektu."""
+    if not configured_path:
+        raise ValueError("Konfigurační hodnota cesty nesmí být prázdná.")
+
+    if os.path.isabs(configured_path):
+        return configured_path
+
+    return os.path.normpath(os.path.join(base_dir, configured_path))
+
+
+def validate_config(config: dict) -> dict:
+    """Kontroluje, že konfigurace obsahuje všechny potřebné klíče."""
+    if not isinstance(config, dict):
+        raise ValueError("Konfigurace musí být objekt JSON.")
+
+    required_sections = {
+        'porcupine': ['access_key', 'model_path', 'keyword'],
+        'whisper': ['model'],
+        'llama': ['model'],
+        'tts': ['model_name'],
+        'audio': ['device_index', 'wake_word_device_index', 'max_recording_time'],
+        'silero_vad': ['sample_rate', 'threshold', 'silence_duration_ms'],
+    }
+
+    missing = []
+    for section_name, required_keys in required_sections.items():
+        section = config.get(section_name)
+        if not isinstance(section, dict):
+            missing.append(f"{section_name} (sekce chybí)")
+            continue
+        for key in required_keys:
+            value = section.get(key)
+            if value is None or (isinstance(value, str) and value.strip() == ''):
+                missing.append(f"{section_name}.{key}")
+
+    if missing:
+        raise ValueError("Chybějící nebo neplatné klíče v konfiguraci: " + ", ".join(sorted(missing)))
+
+    return config
+
+
 def load_config(path="config.json"):
-    """Načte konfiguraci ze souboru."""
+    """Načte konfiguraci ze souboru a přidá přátelské chybové hlášení."""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
     except FileNotFoundError:
-        logging.error(f"Konfigurační soubor '{path}' nebyl nalezen.")
+        logging.error(
+            f"Konfigurační soubor '{path}' nebyl nalezen. "
+            "Zkopírujte config.example.json do config.json a nastavte své údaje."
+        )
         sys.exit(1)
     except json.JSONDecodeError:
         logging.error(f"Chyba při parsování souboru '{path}'.")
+        sys.exit(1)
+
+    try:
+        return validate_config(config)
+    except ValueError as exc:
+        logging.error(f"Neplatná konfigurace: {exc}")
         sys.exit(1)
 
 def get_audio_device_index(p: pyaudio.PyAudio):
@@ -58,15 +109,19 @@ def normalize_audio(audio_data_np: np.ndarray) -> np.ndarray:
     """
     Zesílí nahrávku na optimální úroveň pro Whisper.
     """
+    if audio_data_np is None or audio_data_np.size == 0:
+        logging.warning("Nahrávka je prázdná, vracím nepozměněné audio.")
+        return np.asarray(audio_data_np if audio_data_np is not None else [], dtype=np.int16)
+
     logging.info("Normalizuji hlasitost nahrávky...")
     peak = np.abs(audio_data_np).max()
     if peak == 0:
-        return audio_data_np # Nahrávka je tichá
+        return audio_data_np  # Nahrávka je tichá
 
     # Cílová hlasitost (80% maximální možné)
     target_peak = 32767 * 0.8
     gain = target_peak / peak
-    
+
     normalized_audio = (audio_data_np * gain).astype(np.int16)
     return normalized_audio
 
@@ -80,8 +135,13 @@ async def main():
         config = load_config()
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        config['porcupine']['model_path'] = os.path.join(script_dir, config['porcupine']['model_path'])
-        config['llama']['model'] = os.path.join(script_dir, config['llama']['model'])
+        config['porcupine']['model_path'] = _resolve_model_path(script_dir, config['porcupine']['model_path'])
+        config['llama']['model'] = _resolve_model_path(script_dir, config['llama']['model'])
+
+        if not os.path.exists(config['porcupine']['model_path']):
+            raise FileNotFoundError(f"Soubor Porcupine modelu nebyl nalezen: {config['porcupine']['model_path']}")
+        if not os.path.exists(config['llama']['model']):
+            raise FileNotFoundError(f"Soubor LLaMA modelu nebyl nalezen: {config['llama']['model']}")
 
         pa = pyaudio.PyAudio()
         
