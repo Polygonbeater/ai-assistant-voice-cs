@@ -54,10 +54,6 @@ cp config.example.json config.json
 python gui.py
 ```
 
-### Terminal / Voice Assistant
-```bash
-python main.py
-```
 
 ---
 
