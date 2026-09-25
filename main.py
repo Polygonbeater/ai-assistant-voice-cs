@@ -10,7 +10,6 @@ import torch
 import gc
 
 # Importujeme funkce z našich modulů
-from audio import initialize_porcupine, initialize_vad, capture_wake_word, record_with_vad
 from stt_module import initialize_whisper, transcribe_audio_np
 from llama_module import initialize_llama, generate_response
 from tts_module import initialize_tts, speak_async
@@ -35,7 +34,6 @@ def validate_config(config: dict) -> dict:
         raise ValueError("Konfigurace musí být objekt JSON.")
 
     required_sections = {
-        'porcupine': ['access_key', 'model_path', 'keyword'],
         'whisper': ['model'],
         'llama': ['model'],
         'tts': ['model_name'],
@@ -135,11 +133,8 @@ async def main():
         config = load_config()
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        config['porcupine']['model_path'] = _resolve_model_path(script_dir, config['porcupine']['model_path'])
         config['llama']['model'] = _resolve_model_path(script_dir, config['llama']['model'])
 
-        if not os.path.exists(config['porcupine']['model_path']):
-            raise FileNotFoundError(f"Soubor Porcupine modelu nebyl nalezen: {config['porcupine']['model_path']}")
         if not os.path.exists(config['llama']['model']):
             raise FileNotFoundError(f"Soubor LLaMA modelu nebyl nalezen: {config['llama']['model']}")
 
@@ -150,7 +145,6 @@ async def main():
         config['audio']['wake_word_device_index'] = device_index
         
         logging.info("Inicializuji všechny modely, prosím čekejte...")
-        porcupine = await loop.run_in_executor(None, initialize_porcupine, config)
         vad_model, _ = await loop.run_in_executor(None, initialize_vad)
         whisper_model = await loop.run_in_executor(None, initialize_whisper, config)
         llm = await loop.run_in_executor(None, initialize_llama, config)
@@ -195,13 +189,12 @@ async def main():
         logging.info("Ukončuji aplikaci a provádím úklid...")
         if 'pa' in locals():
             try:
-                pa.terminate()
+                if pa is not None: pa.terminate()
                 logging.info("PyAudio ukončeno.")
             except Exception as e:
                 logging.error(f"Chyba při ukončení PyAudio: {e}")
         if 'porcupine' in locals():
             try:
-                porcupine.delete()
                 logging.info("Porcupine ukončeno.")
             except Exception as e:
                 logging.error(f"Chyba při ukončení Porcupine: {e}")
