@@ -37,3 +37,44 @@ cd ai-assistant-voice-cs
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+### 2. Models and Configuration
+Place your LLM model in `.gguf` format (e.g., Qwen 2.5 or GLM-4) into the `models/` directory.
+```bash
+cp config.example.json config.json
+```
+
+---
+
+## 💻 Usage
+
+### Graphical Interface (Recommended)
+```bash
+python gui.py
+```
+
+### Terminal / Voice Assistant
+```bash
+python main.py
+```
+
+---
+
+## 📁 Project Structure
+
+* `gui.py` – Desktop GUI with streaming and history
+* `llama_module.py` – LLM logic, chat API, context management, and presets
+* `web_search.py` – News and research module (ČT24, RSS, trafilatura)
+* `document_service.py` – Processing and extraction of uploaded documents
+* `history_repository.py` – Persistent conversation session management
+* `audio.py` – Audio recording, VAD, and wake-word detection
+* `stt_module.py` – Voice transcription via OpenAI Whisper
+* `tts_module.py` – Voice synthesis via Coqui TTS
+* `prompts/` – Methodological and analytical system prompts
+
+---
+
+## 💖 Author & License
+* **Author:** Vítězslav Koneval (Polygon Beater)
+* **License:** Released under the MIT License.
