@@ -23,3 +23,13 @@ debug_recording.wav
 # Python virtuální prostředí a cache
 venv/
 __pycache__/
+config.json
+*.log
+sessions/*.json
+!sessions/.gitkeep
+models/
+venv/
+__pycache__/
+*.pyc
+*.bak
+*.bak_*
