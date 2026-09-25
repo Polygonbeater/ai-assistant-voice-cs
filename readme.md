@@ -1,84 +1,39 @@
-# ğŸ¤© Polygon Beater AI Assistant
+# ğŸ¤– Polygon Beater AI Assistant
 
-ModernÃ­, plnÄ› lokÃ¡lnÃ­ AI asistent zamÄ›Å™enÃ½ na **ceskÃ© jazyk**, soukromÃ­ a vysokou produktivitu. Kombinuje offline inferenci velkÃ½ch jazykovÃ½ch modelÅ¯ (GGUF), kompletnÃ­ hlasovÃ½ stack (Wake-Word, VAD, Whisper STT, Coqui TTS), hloubkovou analÃ½zu dokumentÅ¯ a volitelnÃ© Å¾ivÃ© ovÄ›Å™Å¯vani dat na webu.
-
----
-
-## ğŸŒŸ KlÃ­ÄovÃ© vlastnosti
-
-* **100% SoukromÃ­ a lokÃ¡lnÃ­ provoz:** Data neopouÅ¡tÄ›ji zaÅ™Ã­zenÃ­, inference bÄ›Å¾Ã­ lokÃ¡lnÄ› pÅ™es optimalizovanÃ© jÃ¡dro `llama.cpp`.
-* **ModernÃ­ tmavÃ© rozhranÃ­ (GUI):**
-  * PÅ™ehlednÃ¡ postrannÃ­ liÅ¡ta se sprÃ¡vou, vyhledÃ¡vÃ¡nÃ­m a historiÃ­ konverzacÃ­.
-  * PlynulÃ© tokenovÃ© streamovÃ¡nÃ­ v reÃ¡lnÃ©m Äase.
-  * FormÃ¡tovÃ¡nÃ­ Markdownu (nadpisy, odrÃ¡Å¾ky, tuÄnÃ© pÃ­smo se sjednocenÃ½m Å™Ã¡dkovÃ¡nÃ­m).
-  * InteraktivnÃ­ klikatelnÃ© webovÃ© odkazy otevÃ­ranÃ© v prohlÃ­Å¾eÄi.
-* **<'ã$[[YÙ[°ëHÛ›[™H™qoš[NŠŠ‚ˆ
-ˆ[ño››ÜİZİ]˜XÙHÛ›[™H™qhY\±hpëH™Y°ë[HÛZÛ]0ë[K‚ˆ
-ˆ1fpë[pèH[YÜ˜XÙHš]°êZÈ™YYH1#HÛÛÙÛH™]ÜÈ”ÔË‚ˆ
-ˆ]]ÛX]XÚğêH1#Zqh]1&Û°ëH1#[0è[šñ¯(˜Yš[]\˜X
-HH1fYY0è]°è[°ëHÛÛ^HÈ1"Ø\Ûİ°ï[ZH˜^•ÛZHH™›ÚšK‚Šˆ
-Š¼'äéˆ[˜[0î^˜HÚİ[Y[1kÈ
-QÊNŠŠ‚ˆ
-ˆÚØ[qoš]0êHÚ›]0ëHHİ^›İ°è[°ëH˜Y›\İ°ë[ZH^İ°ï[ZHÛİX›ÜK‚Šˆ
-Š¼'éèˆ[˜[]XÚğêHY]ÙZŞH	ˆ™\Ù]NŠŠ‚ˆ
-ˆ[YÜ›İ˜[°êH°è[XÙH›È]Y]1fYYÚÛY1kÈ
-
-\Üİ[\[Ûˆ]Y]
-ŠZ a strukturovanÃ© expertÃ­zy.
-* **ğŸ¯ KompletnÃ­ hlasovÃ½ ekosystÃ©m:**
-  * **Wake-Word Detekce:** Hands-free aktivace klÃ­ÄovÃ½m slovem.
-  * **Detekce Å™eÄi (VAD):** Silero VAD pro oÅ™ezÃ¡nÃ­ ticha.
-  * **PÅ™epis hlasu (STT):** OpenAI Whisper optimalizovanÃ½ pro Äesky.
-  * **SyntÃ©za Å™eÄi (TTS):** PÅ™irozenÃ¹ hlasovÃ¹ vÃ½stup pÅ™es Coqui TTS.
+A modern, fully local AI assistant focused on the **Czech language**, privacy, and high productivity. It combines offline inference of Large Language Models (GGUF), a complete voice stack (Wake-Word, VAD, Whisper STT, Coqui TTS), in-depth document analysis, and optional live web data verification.
 
 ---
 
-## ğŸš  Rychly start
+## ğŸŒŸ Key Features
 
-### 1. Instalace
-``bash
-git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
+* **100% Privacy & Local Operation:** Data never leaves your device. Inference runs locally via the optimized `llama.cpp` engine.
+* **Modern Dark Interface (GUI):**
+  * Clean sidebar for managing, searching, and viewing conversation history.
+  * Smooth, real-time token streaming.
+  * Markdown formatting support (headings, bullets, bold text with consistent line spacing).
+  * Interactive, clickable web links that open directly in your browser.
+* **ğŸŒ Intelligent Online Mode:**
+  * One-click activation for online research.
+  * Direct integration of live feeds from ÄŒT24 and Google News RSS.
+  * Automatic article cleaning (`trafilatura`) and context delivery with timestamps and sources.
+* **ğŸ“„ Document Analysis (RAG):**
+  * Instant summarization and querying over your own text files.
+* **ğŸ§  Analytical Methodologies & Presets:**
+  * Integrated frameworks for Assumption Audits and structured expertise.
+* **ğŸ™ï¸ Complete Voice Ecosystem:**
+  * **Wake-Word Detection:** Hands-free activation via a keyword.
+  * **Voice Activity Detection (VAD):** Silero VAD for silence trimming.
+  * **Speech-to-Text (STT):** OpenAI Whisper optimized for Czech.
+  * **Text-to-Speech (TTS):** Natural voice output via Coqui TTS.
+
+---
+
+## ğŸš€ Quick Start
+
+### 1. Installation
+```bash
+git clone [https://github.com/Polygonbeater/ai-assistant-voice-cs.git](https://github.com/Polygonbeater/ai-assistant-voice-cs.git)
 cd ai-assistant-voice-cs
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 2. Modely a konfigurace
-Do sloÅ¾ky `models/` vloÅ¾te lokÃ¡lnÃ­ LLM model ve formÃ¡tu `.gguf` (napÅ™. Qwen 2.5 nebo GLM-4).
-```bash
-cp config.example.json config.json
-```
-
----
-
-## ğŸ’» SpuÅ¡tÄ›nÃ­
-
-### GrafickÃ© rozhrani (doporuÄeno)
-```bash
-python gui.py
-```
-
-### TerminÃ¡lovy / hlasove asistent
-```bash
-python main.py
-```J
----
-
-## ğŸ“ Struktura projektu
-
-* `gui.py` â€“ DesktopovÃ© grafickÃ© rozhranÃ  se streamovÃ¡nÃ­m a historiÃ¨
-* `llama_module.py` â€“ LLM logika, chat API, sprÃ¡va kontextu a presety
-* `web_search.py` â€“ RphavÅ‘ejskÃ½ a zesherÅ¡nÃ­ modul (Ä‚E4, RSS, trafilatura)
-* `document_service.py` â€“ RpracovÃ¡nÃ­ a extrakce nahranÃ½ch dokumentÅ§
-* `history_repository.py` â€“ PerzystentnÃ­ sprÃ¡va konverzaÄnÃ­ch relacÃ­
-* `audio.py` â€“ ZÃ¡znam zvuku, VAD a wake-word detekce
-* `stt_module.py` â€“ HlasovÃ½ pÅ™epis pÅ™es OpenAI£ Whisper
-* `tts_module.py` â€“ SyntÃ­za hlasu pÅ™es Coqui TTS,
-* `prompts/` â€“ MetodickÃ© a analytickÃ© systÃ©movÃ© prompty
-
----
-
-## ğŸ‘– Autor & Licence
-* **Autor:** VÃ­tÄ›zslav Koneval (Polygon Beater)
-* **Licence:** VydÃ¡no pod licencÃ­ MIT License.
