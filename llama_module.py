@@ -107,7 +107,7 @@ def _create_full_prompt(
     """Sestaví prompt ve formátu, který očekává Mistral Instruct."""
     return f"[INST] {system_prompt} [/INST]\n[INST] {user_text} [/INST]"
 
-def generate_response(llm: Llama, prompt: str, config: dict) -> str:
+def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=None, **kwargs) -> str:
     """
     Generuje textovou odpověď. Nejprve zkusí matematiku, pak LLM.
     """
