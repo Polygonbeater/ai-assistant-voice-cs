@@ -85,6 +85,31 @@ class HistoryRepository:
             session["updated_at"] = self._now()
             self._write_session(session_id, session)
 
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._lock:
+            path = self.sessions_dir / f"{session_id}.json"
+            if path.is_file():
+                try:
+                    path.unlink()
+                    return True
+                except OSError:
+                    pass
+            return False
+
+    def delete_empty_sessions(self) -> int:
+        removed = 0
+        with self._lock:
+            for path in self.sessions_dir.glob("*.json"):
+                try:
+                    session = self._read_session(path.stem)
+                    if not session.get("messages"):
+                        path.unlink()
+                        removed += 1
+                except Exception:
+                    continue
+        return removed
+
     def _read_session(self, session_id: str) -> dict:
         if not session_id or Path(session_id).name != session_id:
             raise ValueError("Neplatné ID relace.")
