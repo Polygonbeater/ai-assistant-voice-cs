@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+import re
+import webbrowser
 import asyncio
 import copy
 import json
@@ -13,7 +14,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from audio import initialize_vad, record_with_vad
 from document_service import DocumentService
 from history_repository import HistoryRepository
-from llama_module import ANALYTICAL_PRESETS, DEFAULT_ANALYTICAL_PRESET, generate_response, initialize_llama
+from llama_module import ANALYTICAL_PRESETS, DEFAULT_ANALYTICAL_PRESET, DEFAULT_SYSTEM_PROMPT, load_analytical_prompt, DEFAULT_ANALYTICAL_PRESET, generate_response, initialize_llama
 from stt_module import initialize_whisper, transcribe_audio_np
 from tts_module import initialize_tts, speak_async
 
@@ -57,6 +58,8 @@ class AssistantGUI(tk.Tk):
         self.document_service = document_service or DocumentService()
         self.token_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.request_in_progress = False
+        self.link_counter = 0
+        self.stop_event = threading.Event()
         self.document_context = ""
         self.attached_file: Path | None = None
         self.status_animation_step = 0
@@ -114,9 +117,94 @@ class AssistantGUI(tk.Tk):
         self.minsize(720, 520)
         self.configure(bg=self.COLORS["background"])
         self._create_widgets()
+        if hasattr(self, 'chat_box'):
+            self._attach_context_menu(self.chat_box, is_editable=False)
+        if hasattr(self, 'prompt_entry'):
+            self._attach_context_menu(self.prompt_entry, is_editable=True)
+        self._update_online_branding()
         self._refresh_session_list()
         self._load_history()
         self.after(30, self.process_token_queue)
+
+
+    def _attach_context_menu(self, widget, is_editable=True):
+        menu = tk.Menu(
+            self,
+            tearoff=0,
+            bg=self.COLORS.get("panel", "#1e293b"),
+            fg=self.COLORS.get("text", "#ffffff"),
+            activebackground=self.COLORS.get("accent", "#38bdf8"),
+            activeforeground="#0f172a"
+        )
+
+        def get_selected():
+            try:
+                if isinstance(widget, tk.Entry):
+                    start = widget.index(tk.SEL_FIRST)
+                    end = widget.index(tk.SEL_LAST)
+                    return widget.get()[start:end]
+                return widget.get(tk.SEL_FIRST, tk.SEL_LAST)
+            except tk.TclError:
+                return ""
+
+        def do_copy():
+            text = get_selected()
+            if text:
+                self.clipboard_clear()
+                self.clipboard_append(text)
+
+        def do_cut():
+            text = get_selected()
+            if text:
+                self.clipboard_clear()
+                self.clipboard_append(text)
+                try:
+                    widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                except tk.TclError:
+                    pass
+
+        def do_paste():
+            try:
+                text = self.clipboard_get()
+                if not text:
+                    return
+                try:
+                    widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                except tk.TclError:
+                    pass
+                widget.insert(tk.INSERT, text)
+            except Exception:
+                pass
+
+        def do_select_all(event=None):
+            if isinstance(widget, tk.Entry):
+                widget.select_range(0, tk.END)
+                widget.icursor(tk.END)
+            else:
+                widget.tag_add("sel", "1.0", "end")
+            return "break"
+
+        def show_popup(event):
+            menu.delete(0, tk.END)
+            has_sel = bool(get_selected())
+
+            if is_editable:
+                menu.add_command(label="Vyjmout", command=do_cut, state=tk.NORMAL if has_sel else tk.DISABLED)
+            menu.add_command(label="Kopírovat", command=do_copy, state=tk.NORMAL if has_sel else tk.DISABLED)
+            if is_editable:
+                can_paste = False
+                try:
+                    can_paste = bool(self.clipboard_get())
+                except Exception:
+                    pass
+                menu.add_command(label="Vložit", command=do_paste, state=tk.NORMAL if can_paste else tk.DISABLED)
+            menu.add_separator()
+            menu.add_command(label="Vybrat vše", command=do_select_all)
+            menu.tk_popup(event.x_root, event.y_root)
+
+        widget.bind("<Button-3>", show_popup)
+        widget.bind("<Control-a>", do_select_all)
+        widget.bind("<Control-A>", do_select_all)
 
     def _create_widgets(self):
         workspace = tk.Frame(self, bg=self.COLORS["background"])
@@ -125,7 +213,7 @@ class AssistantGUI(tk.Tk):
         self.sidebar = tk.Frame(
             workspace,
             bg=self.COLORS["panel"],
-            width=230,
+            width=340,
             height=720,
             highlightthickness=1,
             highlightbackground="#263449",
@@ -226,6 +314,13 @@ class AssistantGUI(tk.Tk):
         self.sessions_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sessions_scrollbar.configure(command=self.sessions_list.yview)
         self.sessions_list.bind("<<ListboxSelect>>", self._session_selected)
+        self.sessions_list.bind("<Delete>", self._delete_selected_session)
+        self.sessions_list.bind("<BackSpace>", self._delete_selected_session)
+        self.sessions_list.bind("<Button-3>", self._show_session_menu)
+
+        self.session_popup = tk.Menu(self, tearoff=0, bg=self.COLORS["panel_alt"], fg=self.COLORS["text"], activebackground=self.COLORS["accent_dark"], activeforeground="white")
+        self.session_popup.add_command(label="Smazat konverzaci", command=self._delete_selected_session)
+        self.session_popup.add_command(label="Odstranit všechny prázdné chaty", command=self._cleanup_empty_sessions)
         tk.Label(
             self.sidebar,
             text="Lokální historie je uložena\npouze na tomto zařízení.",
@@ -258,20 +353,22 @@ class AssistantGUI(tk.Tk):
         self.header_toggle_button.pack(side=tk.LEFT, padx=(0, 10))
         title_frame = tk.Frame(header, bg=self.COLORS["background"])
         title_frame.pack(side=tk.LEFT)
-        tk.Label(
+        self.header_title_label = tk.Label(
             title_frame,
-            text="Offline AI Assistant",
+            text="Polygon Beater AI",
             bg=self.COLORS["background"],
             fg=self.COLORS["text"],
             font=("TkDefaultFont", 20, "bold"),
-        ).pack(anchor="w")
-        tk.Label(
+        )
+        self.header_title_label.pack(anchor="w")
+        self.header_subtitle_label = tk.Label(
             title_frame,
             text="Soukromý lokální chat • data zůstávají v zařízení",
             bg=self.COLORS["background"],
             fg=self.COLORS["muted"],
             font=("TkDefaultFont", 10),
-        ).pack(anchor="w", pady=(3, 0))
+        )
+        self.header_subtitle_label.pack(anchor="w", pady=(3, 0))
 
         self.status_label = tk.Label(
             header,
@@ -307,6 +404,9 @@ class AssistantGUI(tk.Tk):
         self.chat_box.tag_configure("assistant", background=self.COLORS["assistant_bubble"], lmargin1=12, lmargin2=12, rmargin=90, spacing1=8, spacing3=10)
         self.chat_box.tag_configure("label", foreground=self.COLORS["accent"], font=("TkDefaultFont", 9, "bold"))
         self.chat_box.tag_configure("error", foreground=self.COLORS["danger"])
+        self.chat_box.tag_configure("hyperlink", foreground="#38bdf8", underline=1)
+        self.chat_box.tag_bind("hyperlink", "<Enter>", lambda _e: self.chat_box.configure(cursor="hand2"))
+        self.chat_box.tag_bind("hyperlink", "<Leave>", lambda _e: self.chat_box.configure(cursor=""))
 
         composer = tk.Frame(main_area, bg=self.COLORS["background"])
         composer.pack(fill=tk.X, padx=28, pady=(0, 24))
@@ -433,6 +533,65 @@ class AssistantGUI(tk.Tk):
         )
         self.send_button.pack(side=tk.RIGHT, padx=8, pady=7)
 
+
+    def _insert_formatted_text(self, text: str, base_tag: str):
+        """Převede Markdown (tučné písmo **, nadpisy ###, webové odkazy) na stylovaný text."""
+        import re
+        import webbrowser
+        import tkinter.font as tkfont
+
+
+        re_bold = re.compile(r'\*\*(.+?)\*\*')
+        re_link = re.compile(r'\[([^\]]+)\]\((https?://[^\s\)]+)\)|(https?://[^\s\)]+)')
+
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            is_header = False
+            display_line = line
+            if display_line.startswith("### "):
+                is_header = True
+                display_line = display_line[4:]
+            elif display_line.startswith("## "):
+                is_header = True
+                display_line = display_line[3:]
+            elif display_line.startswith("# "):
+                is_header = True
+                display_line = display_line[2:]
+
+            line_base_tag = (base_tag, "chat_header") if is_header else (base_tag,)
+
+            parts = re_bold.split(display_line)
+            for p_idx, part in enumerate(parts):
+                if not part:
+                    continue
+                is_bold = (p_idx % 2 == 1)
+                active_tags = line_base_tag + (("chat_bold",) if is_bold else ())
+
+                last_idx = 0
+                for match in re_link.finditer(part):
+                    s, e = match.span()
+                    if s > last_idx:
+                        self.chat_box.insert(tk.END, part[last_idx:s], active_tags)
+
+                    if match.group(1):
+                        lbl = match.group(1).strip()
+                        u = match.group(2).strip()
+                    else:
+                        u = match.group(3).strip()
+                        lbl = u.split("://")[-1].split("/")[0]
+
+                    tag_name = f"link_{self.link_counter}"
+                    self.link_counter += 1
+                    self.chat_box.insert(tk.END, f"🔗 {lbl}", active_tags + ("hyperlink", tag_name))
+                    self.chat_box.tag_bind(tag_name, "<Button-1>", lambda _e, url=u: webbrowser.open(url))
+                    last_idx = e
+
+                if last_idx < len(part):
+                    self.chat_box.insert(tk.END, part[last_idx:], active_tags)
+
+            if i < len(lines) - 1:
+                self.chat_box.insert(tk.END, "\n", (base_tag,))
+
     def _write_message(
         self,
         role: str,
@@ -443,8 +602,10 @@ class AssistantGUI(tk.Tk):
         self.chat_box.configure(state=tk.NORMAL)
         label = "Vy" if role == "user" else "Asistent"
         self.chat_box.insert(tk.END, f"\n{label}\n", "label")
-        self.chat_box.insert(tk.END, content, "error" if error else role)
-        if not streaming:
+        if streaming:
+            self.stream_start_index = self.chat_box.index("end-1c")
+        else:
+            self._insert_formatted_text(content, "error" if error else role)
             self.chat_box.insert(tk.END, "\n")
         self.chat_box.see(tk.END)
         self.chat_box.configure(state=tk.DISABLED)
@@ -458,14 +619,21 @@ class AssistantGUI(tk.Tk):
     def _create_settings_panel(self):
         fields = tk.Frame(self.settings_panel, bg=self.COLORS["panel_alt"])
         fields.pack(fill=tk.X, padx=10, pady=10)
-        self._settings_label(fields, "LLM teplota")
-        tk.Entry(fields, textvariable=self.llm_temperature, width=8).pack(
-            fill=tk.X, pady=(0, 6)
-        )
-        self._settings_label(fields, "Max. tokenů")
-        tk.Entry(fields, textvariable=self.llm_max_tokens, width=8).pack(
-            fill=tk.X, pady=(0, 6)
-        )
+
+        # Řádek 1: Teplota a Tokeny vedle sebe
+        row1 = tk.Frame(fields, bg=self.COLORS["panel_alt"])
+        row1.pack(fill=tk.X, pady=(0, 6))
+        col1 = tk.Frame(row1, bg=self.COLORS["panel_alt"])
+        col1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self._settings_label(col1, "LLM teplota")
+        tk.Entry(col1, textvariable=self.llm_temperature).pack(fill=tk.X)
+
+        col2 = tk.Frame(row1, bg=self.COLORS["panel_alt"])
+        col2.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0))
+        self._settings_label(col2, "Max. tokenů")
+        tk.Entry(col2, textvariable=self.llm_max_tokens).pack(fill=tk.X)
+
+        # Řádek 2: AI model
         self._settings_label(fields, "AI model (.gguf)")
         model_values = (
             list(self.model_options)
@@ -478,16 +646,25 @@ class AssistantGUI(tk.Tk):
             state="readonly" if self.model_options else "disabled",
         )
         self.model_combobox.pack(fill=tk.X, pady=(0, 6))
-        self._settings_label(fields, "Jazyk Whisper")
-        tk.Entry(fields, textvariable=self.whisper_language, width=8).pack(
-            fill=tk.X, pady=(0, 6)
-        )
-        self._settings_label(fields, "TTS model")
-        tk.Entry(fields, textvariable=self.tts_model_name).pack(
-            fill=tk.X, pady=(0, 6)
-        )
+
+        # Řádek 3: Whisper a TTS vedle sebe
+        row2 = tk.Frame(fields, bg=self.COLORS["panel_alt"])
+        row2.pack(fill=tk.X, pady=(0, 6))
+        col3 = tk.Frame(row2, bg=self.COLORS["panel_alt"])
+        col3.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self._settings_label(col3, "Jazyk Whisper")
+        tk.Entry(col3, textvariable=self.whisper_language).pack(fill=tk.X)
+
+        col4 = tk.Frame(row2, bg=self.COLORS["panel_alt"])
+        col4.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0))
+        self._settings_label(col4, "TTS model")
+        tk.Entry(col4, textvariable=self.tts_model_name).pack(fill=tk.X)
+
+        # Řádek 4: Přepínače vedle sebe
+        row_checks = tk.Frame(fields, bg=self.COLORS["panel_alt"])
+        row_checks.pack(fill=tk.X, pady=(0, 6))
         tk.Checkbutton(
-            fields,
+            row_checks,
             text="TTS GPU",
             variable=self.tts_gpu,
             bg=self.COLORS["panel_alt"],
@@ -495,17 +672,20 @@ class AssistantGUI(tk.Tk):
             selectcolor=self.COLORS["panel"],
             activebackground=self.COLORS["panel_alt"],
             activeforeground=self.COLORS["text"],
-        ).pack(anchor="w")
+        ).pack(side=tk.LEFT)
         tk.Checkbutton(
-            fields,
+            row_checks,
             text="Online režim",
             variable=self.online_mode,
+            command=self._update_online_branding,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
             selectcolor=self.COLORS["panel"],
             activebackground=self.COLORS["panel_alt"],
             activeforeground=self.COLORS["text"],
-        ).pack(anchor="w", pady=(0, 6))
+        ).pack(side=tk.LEFT, padx=(16, 0))
+
+        # Řádek 5: Analytická metodika
         self._settings_label(fields, "Analytická metodika")
         self.analytical_combobox = ttk.Combobox(
             fields,
@@ -514,10 +694,25 @@ class AssistantGUI(tk.Tk):
             state="readonly",
         )
         self.analytical_combobox.pack(fill=tk.X, pady=(0, 6))
-        self._settings_label(fields, "Systémový prompt")
-        tk.Entry(fields, textvariable=self.system_prompt).pack(
-            fill=tk.X, pady=(0, 8)
+        self.analytical_combobox.bind("<<ComboboxSelected>>", self._on_preset_change)
+
+        # Řádek 6: Víceřádkový editor systémového promptu
+        self._settings_label(fields, "Systémový prompt (pravidla / metodika)")
+        self.system_prompt_text = scrolledtext.ScrolledText(
+            fields,
+            height=5,
+            wrap=tk.WORD,
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["text"],
+            insertbackground=self.COLORS["text"],
+            font=("TkDefaultFont", 8),
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground="#263449",
         )
+        self.system_prompt_text.insert("1.0", self.system_prompt.get())
+        self.system_prompt_text.pack(fill=tk.X, pady=(0, 8))
+
         self.settings_apply_button = tk.Button(
             fields,
             text="Použít nastavení",
@@ -564,15 +759,38 @@ class AssistantGUI(tk.Tk):
             )
             self.settings_visible = True
 
+    
+    def _on_preset_change(self, _event=None):
+        preset = self.analytical_preset.get()
+        try:
+            prompt_content = load_analytical_prompt(preset)
+        except Exception:
+            prompt_content = None
+
+        content = prompt_content.strip() if prompt_content else DEFAULT_SYSTEM_PROMPT
+        self.system_prompt.set(content)
+        if hasattr(self, "system_prompt_text"):
+            self.system_prompt_text.delete("1.0", tk.END)
+            self.system_prompt_text.insert("1.0", content)
+
+        self.config.setdefault("llama", {})["analytical_preset"] = preset
+        self.config["llama"]["system_prompt"] = content
+
     def apply_settings(self):
         try:
             temperature = float(self.llm_temperature.get())
-            max_tokens = int(self.llm_max_tokens.get())
+            raw_tokens = str(self.llm_max_tokens.get()).strip()
+            if raw_tokens.lower() == "auto":
+                max_tokens = "auto"
+            else:
+                max_tokens = int(raw_tokens)
+                if max_tokens <= 0:
+                    raise ValueError
         except ValueError:
-            messagebox.showerror("Nastavení", "Teplota a počet tokenů musí být čísla.")
+            messagebox.showerror("Nastavení", "Teplota musí být číslo (0.0 až 2.0) a počet tokenů číslo nebo 'auto'.")
             return
-        if not 0 <= temperature <= 2 or max_tokens <= 0:
-            messagebox.showerror("Nastavení", "Zadejte platnou teplotu a počet tokenů.")
+        if not 0 <= temperature <= 2:
+            messagebox.showerror("Nastavení", "Zadejte platnou teplotu v rozmezí 0.0 až 2.0.")
             return
         self.config.setdefault("llama", {})
         selected_model_name = self.selected_model.get().strip()
@@ -598,7 +816,7 @@ class AssistantGUI(tk.Tk):
             {
                 "temperature": temperature,
                 "max_tokens": max_tokens,
-                "system_prompt": self.system_prompt.get().strip(),
+                "system_prompt": (self.system_prompt_text.get("1.0", tk.END).strip() if hasattr(self, "system_prompt_text") else self.system_prompt.get().strip()),
                 "model": selected_model,
                 "online_mode": self.online_mode.get(),
                 "analytical_preset": self.analytical_preset.get(),
@@ -670,6 +888,44 @@ class AssistantGUI(tk.Tk):
             self.sessions_list.selection_set(selected_index)
             self.sessions_list.see(selected_index)
 
+
+    def _show_session_menu(self, event):
+        idx = self.sessions_list.nearest(event.y)
+        if idx >= 0:
+            self.sessions_list.selection_clear(0, tk.END)
+            self.sessions_list.selection_set(idx)
+            self.sessions_list.activate(idx)
+            self.session_popup.post(event.x_root, event.y_root)
+
+    def _delete_selected_session(self, _event=None):
+        selection = self.sessions_list.curselection()
+        if not selection or selection[0] >= len(self.session_summaries):
+            return
+        session = self.session_summaries[selection[0]]
+        session_id = session["session_id"]
+        title = session.get("title", "Nový chat")
+
+        msgs = self.history_repository.load_session(session_id)
+        if msgs:
+            if not messagebox.askyesno("Smazat konverzaci", f"Opravdu chcete smazat konverzaci:\n'{title}'?"):
+                return
+
+        self.history_repository.delete_session(session_id)
+        self._refresh_session_list()
+
+        if session_id == self.active_session_id:
+            if self.session_summaries:
+                self.active_session_id = self.session_summaries[0]["session_id"]
+                self._render_active_session()
+                self._refresh_session_list()
+            else:
+                self.new_chat()
+
+    def _cleanup_empty_sessions(self):
+        count = self.history_repository.delete_empty_sessions()
+        self._refresh_session_list()
+        messagebox.showinfo("Úklid historie", f"Bylo odstraněno {count} prázdných konverzací.")
+
     def _session_selected(self, _event=None):
         selection = self.sessions_list.curselection()
         if not selection or self.request_in_progress:
@@ -703,6 +959,17 @@ class AssistantGUI(tk.Tk):
                 "Nový chat lze otevřít až po dokončení aktuální odpovědi.",
             )
             return
+        if self.active_session_id:
+            try:
+                msgs = self.history_repository.load_session(self.active_session_id)
+                if not msgs:
+                    self.chat_box.configure(state=tk.NORMAL)
+                    self.chat_box.delete("1.0", tk.END)
+                    self.chat_box.configure(state=tk.DISABLED)
+                    self.prompt_entry.delete(0, tk.END)
+                    return
+            except Exception:
+                pass
         self.active_session_id = self.history_repository.create_session()["session_id"]
         while True:
             try:
@@ -804,13 +1071,23 @@ class AssistantGUI(tk.Tk):
 
     def _start_generation(self, prompt: str, display_text: str | None = None):
         self.voice_tts_enabled = self.voice_enabled.get()
+        if hasattr(self, "config"):
+            self.config.setdefault("llama", {})["online_mode"] = bool(self.online_mode.get())
         display_text = display_text or prompt
         self._write_message("user", display_text)
         self.history_repository.append(self.active_session_id, "user", display_text)
         self._refresh_session_list()
         self._write_message("assistant", "", streaming=True)
         self.request_in_progress = True
-        self.send_button.configure(state=tk.DISABLED)
+        self.stop_event.clear()
+        self.send_button.configure(
+            text="⏹ Zastavit",
+            bg=self.COLORS["danger"],
+            activebackground="#b91c1c",
+            activeforeground="white",
+            command=self.stop_generation,
+            state=tk.NORMAL,
+        )
         self.listen_button.configure(state=tk.DISABLED)
         self._set_status("● Přemýšlím…", "#fbbf24", animate=True)
         worker = threading.Thread(target=self._generate_in_background, args=(prompt,), daemon=True)
@@ -818,11 +1095,25 @@ class AssistantGUI(tk.Tk):
 
     def _generate_in_background(self, prompt: str):
         try:
+            from llama_module import classify_methodology, load_analytical_prompt
+            preset_now = self.config.get("llama", {}).get("analytical_preset", "")
+            if preset_now == "⚡ Auto (Doporučit)":
+                self.token_queue.put(("auto_status", "● Určuji optimální metodiku…"))
+                detected = classify_methodology(self.llm, prompt)
+                self.config["llama"]["analytical_preset"] = detected
+                self.token_queue.put(("auto_switched", detected))
+
+            # Načtení předchozí historie (posledních 6 zpráv pro zachování kontextu bez přehlcení paměti)
+            raw_history = self.history_repository.load_session(self.active_session_id) or []
+            chat_history = raw_history[:-1][-6:] if len(raw_history) > 1 else []
+
             response = generate_response(
                 self.llm,
                 prompt,
                 self.config,
+                chat_history=chat_history,
                 callback_on_token=lambda token: self.token_queue.put(("token", token)),
+                stop_event=self.stop_event,
             )
             if self.voice_tts_enabled and "tts" not in self.voice_models:
                 self.voice_models["tts"] = initialize_tts(self.config)
@@ -841,12 +1132,25 @@ class AssistantGUI(tk.Tk):
                     self._set_status(value, self.COLORS["accent"])
                 elif event_type == "voice_transcript":
                     self.send_message(value)
+                elif event_type == "auto_status":
+                    self._set_status(value, "#fbbf24")
+                elif event_type == "auto_switched":
+                    if hasattr(self, "analytical_preset_combo"):
+                        self.analytical_preset_combo.set(value)
+                    if hasattr(self, "_on_analytical_preset_selected"):
+                        self._on_analytical_preset_selected()
                 elif event_type == "token":
                     self._append_stream_token(value)
                 elif event_type == "complete":
+                    self.chat_box.configure(state=tk.NORMAL)
+                    if hasattr(self, "stream_start_index"):
+                        self.chat_box.delete(self.stream_start_index, tk.END)
+                        self.chat_box.insert(tk.END, "\n")
+                        self._insert_formatted_text(value, "assistant")
+                        self.chat_box.insert(tk.END, "\n")
+                    self.chat_box.configure(state=tk.DISABLED)
                     self.history_repository.append(self.active_session_id, "assistant", value)
                     self._refresh_session_list()
-                    self._append_stream_token("\n")
                     self._finish_request()
                 elif event_type == "error":
                     self.chat_box.configure(state=tk.NORMAL)
@@ -866,7 +1170,7 @@ class AssistantGUI(tk.Tk):
                     if self._llm_config_before_reload is not None:
                         self.config["llama"] = self._llm_config_before_reload
                         self.selected_model.set(
-                            str(self.config["llama"].get("model", ""))
+                            Path(str(self.config["llama"].get("model", ""))).name
                         )
                         self._llm_config_before_reload = None
                     if self.settings_apply_button is not None:
@@ -878,9 +1182,42 @@ class AssistantGUI(tk.Tk):
         finally:
             self.after(30, self.process_token_queue)
 
+
+    def stop_generation(self):
+        if self.request_in_progress:
+            self.stop_event.set()
+            self._set_status("● Zastavování…", self.COLORS["danger"])
+            self.send_button.configure(state=tk.DISABLED)
+
+    def _update_online_branding(self, *args):
+        is_online = bool(self.online_mode.get())
+        if hasattr(self, "config") and "llama" in self.config:
+            self.config["llama"]["online_mode"] = is_online
+        if hasattr(self, "header_title_label") and hasattr(self, "header_subtitle_label"):
+            if is_online:
+                self.header_title_label.configure(text="Polygon Beater AI  🌐")
+                self.header_subtitle_label.configure(
+                    text="Online vyhledávání aktivní • data dotazu jsou ověřována na webu",
+                    fg=self.COLORS["accent"],
+                )
+                self.title("Polygon Beater AI Assistant (Online)")
+            else:
+                self.header_title_label.configure(text="Polygon Beater AI")
+                self.header_subtitle_label.configure(
+                    text="Soukromý lokální chat • data zůstávají v zařízení",
+                    fg=self.COLORS["muted"],
+                )
+                self.title("Polygon Beater AI Assistant (Offline)")
+
     def _finish_request(self):
         self.request_in_progress = False
-        self.send_button.configure(state=tk.NORMAL)
+        self.send_button.configure(
+            text="Odeslat  ➜",
+            bg=self.COLORS["accent_dark"],
+            activebackground=self.COLORS["accent"],
+            command=self.submit_prompt,
+            state=tk.NORMAL,
+        )
         self.listen_button.configure(
             state=tk.NORMAL if self.voice_enabled.get() else tk.DISABLED
         )
