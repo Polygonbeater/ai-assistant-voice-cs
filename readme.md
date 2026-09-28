@@ -1,6 +1,6 @@
 # 🤖 Polygon Beater AI Assistant
 
-A modern, fully local AI assistant focused on the **Czech language**, privacy, and high productivity. It combines offline inference of Large Language Models (GGUF), a complete voice stack (Wake-Word, VAD, Whisper STT, Coqui TTS), in-depth document analysis, and optional live web data verification.
+A modern, fully local AI assistant focused on the **Czech language**, privacy, and high productivity. It combines offline inference of Large Language Models (GGUF), a complete voice stack (VAD, Whisper STT, Coqui TTS), in-depth document analysis, and optional live web data verification.
 
 ---
 
@@ -21,7 +21,6 @@ A modern, fully local AI assistant focused on the **Czech language**, privacy, a
 * **🧠 Analytical Methodologies & Presets:**
   * Integrated frameworks for Assumption Audits and structured expertise.
 * **🎙️ Complete Voice Ecosystem:**
-  * **Wake-Word Detection:** Hands-free activation via a keyword.
   * **Voice Activity Detection (VAD):** Silero VAD for silence trimming.
   * **Speech-to-Text (STT):** OpenAI Whisper optimized for Czech.
   * **Text-to-Speech (TTS):** Natural voice output via Coqui TTS.
@@ -32,7 +31,7 @@ A modern, fully local AI assistant focused on the **Czech language**, privacy, a
 
 ### 1. Installation
 ```bash
-git clone [https://github.com/Polygonbeater/ai-assistant-voice-cs.git](https://github.com/Polygonbeater/ai-assistant-voice-cs.git)
+git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
 cd ai-assistant-voice-cs
 python3 -m venv venv
 source venv/bin/activate
@@ -54,7 +53,6 @@ cp config.example.json config.json
 python gui.py
 ```
 
-
 ---
 
 ## 📁 Project Structure
@@ -64,7 +62,7 @@ python gui.py
 * `web_search.py` – News and research module (ČT24, RSS, trafilatura)
 * `document_service.py` – Processing and extraction of uploaded documents
 * `history_repository.py` – Persistent conversation session management
-* `audio.py` – Audio recording, VAD, and wake-word detection
+* `audio.py` – Audio recording and VAD
 * `stt_module.py` – Voice transcription via OpenAI Whisper
 * `tts_module.py` – Voice synthesis via Coqui TTS
 * `prompts/` – Methodological and analytical system prompts
