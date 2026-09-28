@@ -1,70 +1,23 @@
 import pyaudio
-import pvporcupine
 import numpy as np
 import logging
 import torch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def initialize_porcupine(config: dict):
-    """Inicializuje Porcupine pro detekci klíčového slova."""
-    try:
-        access_key = config['porcupine']['access_key']
-        model_path = config['porcupine']['model_path']
-        keyword = config['porcupine']['keyword']
-        sensitivity = config['porcupine'].get('sensitivity', 0.5)
-        logging.info(f"Inicializuji Porcupine s vestavěným klíčovým slovem: '{keyword}'")
-        return pvporcupine.create(
-            access_key=access_key,
-            model_path=model_path,
-            keywords=[keyword],
-            sensitivities=[sensitivity]
-        )
-    except Exception as e:
-        logging.error(f"Chyba při inicializaci Porcupine: {e}")
-        raise
-
 def initialize_vad():
     """Inicializuje Silero VAD model."""
     try:
         logging.info("Načítám Silero VAD model...")
         model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
-                                      model='silero_vad',
-                                      force_reload=False,
-                                      onnx=True)
+                                     model='silero_vad',
+                                     force_reload=False,
+                                     onnx=True)
         logging.info("Silero VAD model načten.")
         return model, utils
     except Exception as e:
         logging.error(f"Chyba při inicializaci Silero VAD: {e}")
         raise
-
-def capture_wake_word(porcupine: pvporcupine.Porcupine, pa: pyaudio.PyAudio, config: dict):
-    """Zachytí zvukový vstup a čeká na detekci klíčového slova."""
-    device_index = config['audio']['wake_word_device_index']
-    stream = None
-    try:
-        stream = pa.open(
-            rate=porcupine.sample_rate,
-            channels=1,
-            format=pyaudio.paInt16,
-            input=True,
-            frames_per_buffer=porcupine.frame_length,
-            input_device_index=device_index
-        )
-        while True:
-            pcm = stream.read(porcupine.frame_length, exception_on_overflow=False)
-            pcm_np = np.frombuffer(pcm, dtype=np.int16)
-            keyword_index = porcupine.process(pcm_np)
-            if keyword_index >= 0:
-                return keyword_index
-    except KeyboardInterrupt:
-        logging.info("Přerušení detekce klíčového slova uživatelem.")
-        raise
-    finally:
-        if stream:
-            stream.stop_stream()
-            stream.close()
-            logging.info("Audio stream pro Porcupine uzavřen.")
 
 def record_with_vad(config: dict, pa: pyaudio.PyAudio, vad_model) -> np.ndarray:
     """Nahrává audio po detekci klíčového slova pomocí Silero VAD."""

@@ -1,16 +1,10 @@
 {
-  "porcupine": {
-    "access_key": "YOUR_PICOVOICE_ACCESS_KEY",
-    "model_path": "models/porcupine_params.pv",
-    "keyword": "computer",
-    "sensitivity": 0.7
-  },
   "whisper": {
     "model": "medium",
     "language": "cs"
   },
   "llama": {
-    "model": "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+    "model": "models/glm-4-9b-chat.Q4_K_M.gguf",
     "max_tokens": 150
   },
   "tts": {
@@ -19,7 +13,6 @@
   },
   "audio": {
     "device_index": -1,
-    "wake_word_device_index": -1,
     "max_recording_time": 15
   },
   "silero_vad": {
