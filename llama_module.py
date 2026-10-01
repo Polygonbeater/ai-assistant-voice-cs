@@ -214,13 +214,76 @@ def classify_methodology(llm, user_text: str) -> str:
     return "Vypnuto (Standardní chat)"
 
 
-def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None, chat_history: list = None, **kwargs) -> str:
-    """Generuje odpověď přes Chat API modelu s podporou streamování, paměti a přerušení."""
+CZECH_ABBREVIATIONS = {
+    'např.', 'tzv.', 'atd.', 'apod.', 'tj.', 'tzn.', 'č.', 'str.',
+    'ing.', 'mgr.', 'dr.', 'bc.', 'odd.', 'kol.', 'prof.', 'mudr.', 'judr.'
+}
+
+
+def extract_sentence_chunks(buffer: str, is_final: bool = False) -> tuple[list[str], str]:
+    """
+    Rozdělí textový buffer na ucelené věty nebo logické úseky podle interpunkce.
+    Vrací seznam dokončených úseků (vhodných pro okamžitou TTS syntézu) a zbývající buffer.
+    """
+    chunks = []
+    while True:
+        # Hledáme větnou interpunkci (. ! ?) nebo nový řádek
+        match = re.search(r'([.!?]+|\n+)(?:\s+|$)', buffer)
+        if not match:
+            # Pokud je věta dlouhá (> 75 znaků) a obsahuje čárku, středník, dvojtečku nebo pomlčku
+            if len(buffer) > 75:
+                clause_match = re.search(r'([,;:—–]|\s-\s)\s*', buffer)
+                if clause_match:
+                    split_pos = clause_match.end()
+                    chunk = buffer[:split_pos].strip()
+                    if chunk:
+                        chunks.append(chunk)
+                    buffer = buffer[split_pos:]
+                    continue
+            break
+
+        punct_end = match.end(1)
+        full_match_end = match.end()
+        candidate = buffer[:punct_end].strip()
+
+        # Ochrana proti roztržení zkratek a řadových číslovek (např. '1. října')
+        last_word = candidate.split()[-1].lower() if candidate.split() else ''
+        is_ordinal_or_abbrev = (
+            last_word in CZECH_ABBREVIATIONS or
+            bool(re.search(r'\b\d+\.$', candidate))
+        )
+
+        if is_ordinal_or_abbrev and not is_final:
+            remaining = buffer[full_match_end:]
+            next_match = re.search(r'([.!?]+|\n+)(?:\s+|$)', remaining)
+            if not next_match:
+                break
+            punct_end = full_match_end + next_match.end(1)
+            full_match_end = full_match_end + next_match.end()
+            candidate = buffer[:punct_end].strip()
+
+        if candidate:
+            chunks.append(candidate)
+        buffer = buffer[full_match_end:]
+
+    if is_final and buffer.strip():
+        chunks.append(buffer.strip())
+        buffer = ""
+
+    return chunks, buffer
+
+
+def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None, chat_history: list = None, **kwargs):
+    """
+    Generuje odpověď přes Chat API modelu a vrací (yield) text po ucelených větách / logických úsecích.
+    Zároveň průběžně volá callback_on_token pro okamžité vykreslování jednotlivých tokenů v GUI.
+    """
     math_result = _try_evaluate_math(prompt)
     if math_result:
         if callback_on_token:
             callback_on_token(math_result)
-        return math_result
+        yield math_result
+        return
 
     try:
         llama_config = config.get("llama", {})
@@ -265,7 +328,7 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
             except ValueError:
                 max_tokens = 1536
 
-                # Dynamické vložení systémového času a data
+        # Dynamické vložení systémového času a data
         from datetime import datetime
         now = datetime.now()
         dny = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
@@ -298,7 +361,7 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
             stream=True,
         )
 
-        tokens = []
+        sentence_buffer = ""
         for chunk in stream:
             if stop_event and stop_event.is_set():
                 logging.info("Generování přerušeno uživatelem (Stop).")
@@ -306,15 +369,27 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
             delta = chunk["choices"][0].get("delta", {})
             text_piece = delta.get("content") or ""
             if text_piece:
-                tokens.append(text_piece)
                 if callback_on_token:
                     callback_on_token(text_piece)
+                sentence_buffer += text_piece
+                ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+                for ready_chunk in ready_chunks:
+                    yield ready_chunk
 
-        generated_text = "".join(tokens).strip()
-        if not generated_text:
-            return "Generování bylo ukončeno nebo model nevrátil text."
-        return generated_text
+        # Vyprázdnění zbývajícího bufferu po skončení inference
+        final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
+        for ready_chunk in final_chunks:
+            yield ready_chunk
 
     except Exception as exc:
         logging.error("Chyba při generování: %s", exc)
-        return f"Omlouvám se, došlo k chybě: {exc}"
+        err_msg = f"Omlouvám se, došlo k chybě: {exc}"
+        if callback_on_token:
+            callback_on_token(err_msg)
+        yield err_msg
+
+
+def generate_response_text(llm: Llama, prompt: str, config: dict, **kwargs) -> str:
+    """Pomocná funkce, která vyčerpá stream a vrátí celou odpověď jako jeden řetězec."""
+    return " ".join(generate_response(llm, prompt, config, **kwargs)).strip()
+

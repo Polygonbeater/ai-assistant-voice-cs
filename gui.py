@@ -16,7 +16,7 @@ from document_service import DocumentService
 from history_repository import HistoryRepository
 from llama_module import ANALYTICAL_PRESETS, DEFAULT_ANALYTICAL_PRESET, DEFAULT_SYSTEM_PROMPT, load_analytical_prompt, DEFAULT_ANALYTICAL_PRESET, generate_response, initialize_llama
 from stt_module import initialize_whisper, transcribe_audio_np
-from tts_module import initialize_tts, speak_async
+from tts_module import initialize_tts, speak_async, TTSStreamPlayer
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ class AssistantGUI(tk.Tk):
         )
         self.voice_models: dict[str, object] = {}
         self.voice_tts_enabled = False
+        self.current_tts_player: TTSStreamPlayer | None = None
         self.sidebar_visible = True
         self.settings_visible = False
         self.session_search = tk.StringVar()
@@ -1107,19 +1108,34 @@ class AssistantGUI(tk.Tk):
             raw_history = self.history_repository.load_session(self.active_session_id) or []
             chat_history = raw_history[:-1][-6:] if len(raw_history) > 1 else []
 
-            response = generate_response(
+            # Příprava asynchronního TTS přehrávače, pokud je zapnut hlasový výstup
+            tts_player = None
+            if self.voice_tts_enabled:
+                if "tts" not in self.voice_models:
+                    self.token_queue.put(("auto_status", "● Inicializuji TTS model…"))
+                    self.voice_models["tts"] = initialize_tts(self.config)
+                tts_player = TTSStreamPlayer(self.voice_models["tts"], stop_event=self.stop_event)
+                self.current_tts_player = tts_player
+
+            response_sentences = []
+            for sentence_chunk in generate_response(
                 self.llm,
                 prompt,
                 self.config,
                 chat_history=chat_history,
                 callback_on_token=lambda token: self.token_queue.put(("token", token)),
                 stop_event=self.stop_event,
-            )
-            if self.voice_tts_enabled and "tts" not in self.voice_models:
-                self.voice_models["tts"] = initialize_tts(self.config)
-            if self.voice_tts_enabled:
-                asyncio.run(speak_async(self.voice_models["tts"], response))
-            self.token_queue.put(("complete", response))
+            ):
+                response_sentences.append(sentence_chunk)
+                if tts_player and not self.stop_event.is_set():
+                    tts_player.enqueue(sentence_chunk)
+
+            if tts_player:
+                tts_player.finish()
+                self.current_tts_player = None
+
+            full_response = " ".join(response_sentences).strip()
+            self.token_queue.put(("complete", full_response))
         except Exception:
             logger.exception("Generování odpovědi selhalo")
             self.token_queue.put(("error", "Generování odpovědi selhalo."))
@@ -1186,6 +1202,11 @@ class AssistantGUI(tk.Tk):
     def stop_generation(self):
         if self.request_in_progress:
             self.stop_event.set()
+            if hasattr(self, "current_tts_player") and self.current_tts_player:
+                try:
+                    self.current_tts_player.stop()
+                except Exception:
+                    pass
             self._set_status("● Zastavování…", self.COLORS["danger"])
             self.send_button.configure(state=tk.DISABLED)
 
