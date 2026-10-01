@@ -334,3 +334,201 @@ def request_scene_inspection(
             except Exception:
                 pass
 
+
+def _send_blender_request(
+    payload: dict[str, Any],
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 20.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Interní helper: odešle libovolný JSON payload do Blenderu a vrátí JSON odpověď.
+    Sdílená logika pro všechny speciální akce (audit, repair, …).
+    """
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+
+        raw_msg = json.dumps(payload) + "\n"
+        sock.sendall(raw_msg.encode("utf-8"))
+
+        response_bytes = b""
+        while not response_bytes.endswith(b"\n"):
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response_bytes += chunk
+
+        if not response_bytes:
+            msg = "Blender spojení uzavřel bez odpovědi."
+            err = {
+                "status": "error",
+                "error": "ConnectionClosedWithoutResponse",
+                "traceback": "",
+                "message": msg,
+                "detail": msg,
+            }
+            if raise_on_error:
+                raise BlenderExecutionError(msg, response=err)
+            return err
+
+        response: dict[str, Any] = json.loads(response_bytes.decode("utf-8"))
+        status = response.get("status", "unknown")
+        logger.info(
+            "Přijata odpověď od Blenderu (action=%s): status=%s",
+            payload.get("action"),
+            status,
+        )
+
+        if status == "error":
+            err_msg = response.get("error", "Neznámá chyba v Blenderu")
+            tb = response.get("traceback") or response.get("trace", "")
+            detailed_err = f"{err_msg}\n{tb}".strip() if tb else err_msg
+            response.setdefault("detail", detailed_err)
+            response.setdefault("message", err_msg)
+            logger.error(
+                "Chyba Blender akce '%s': %s\n%s", payload.get("action"), err_msg, tb
+            )
+            if raise_on_error:
+                raise BlenderExecutionError(
+                    detailed_err, error=err_msg, traceback_str=tb, response=response
+                )
+
+        return response
+
+    except (ConnectionRefusedError, ConnectionResetError):
+        logger.warning("Připojení k Blenderu na %s:%d bylo odmítnuto.", host, port)
+        msg = (
+            f"Nelze se spojit s Blenderem na {host}:{port}. "
+            "Ujistěte se, že Blender běží a v Text Editoru má spuštěný skript 'blender_receiver.py'."
+        )
+        res = {
+            "status": "error",
+            "error_type": "ConnectionRefused",
+            "error": "ConnectionRefused: Nelze se připojit k Blenderu",
+            "traceback": "",
+            "message": msg,
+            "detail": msg,
+        }
+        if raise_on_error:
+            raise BlenderExecutionError(msg, error="ConnectionRefused", response=res)
+        return res
+    except socket.timeout:
+        logger.error(
+            "Vypršel časový limit při akci '%s' v Blenderu.", payload.get("action")
+        )
+        msg = f"Vypršel časový limit ({timeout} s) při komunikaci s Blenderem."
+        res = {
+            "status": "error",
+            "error_type": "Timeout",
+            "error": "TimeoutError: Vypršel časový limit operace",
+            "traceback": "",
+            "message": msg,
+            "detail": msg,
+        }
+        if raise_on_error:
+            raise BlenderExecutionError(msg, error="Timeout", response=res)
+        return res
+    except BlenderExecutionError:
+        raise
+    except Exception as exc:
+        logger.exception("Chyba při komunikaci s Blenderem: %s", exc)
+        import traceback as _tb
+
+        tb = _tb.format_exc()
+        msg = f"Chyba při komunikaci s Blenderem: {exc}"
+        res = {
+            "status": "error",
+            "error_type": "CommunicationError",
+            "error": str(exc),
+            "traceback": tb,
+            "message": msg,
+            "detail": f"{msg}\n{tb}".strip(),
+        }
+        if raise_on_error:
+            raise BlenderExecutionError(
+                msg, error=str(exc), traceback_str=tb, response=res
+            )
+        return res
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+def request_mesh_audit(
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 20.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na audit topologie aktivního síťového objektu
+    (action: mesh_doctor_audit).
+
+    Vrací strukturovaný slovník s metrikami sítě:
+    {
+        "status": "success",
+        "action": "mesh_doctor_audit",
+        "audit": {
+            "object_name": str,
+            "mesh_name": str,
+            "total_vertices": int,
+            "total_edges": int,
+            "total_faces": int,
+            "triangles": int,
+            "ngons": int,
+            "non_manifold_edges": int,
+            "loose_vertices": int,
+            "loose_edges": int,
+            "boundary_edges_holes": int,
+            "potentially_flipped_faces": int,
+            "is_watertight": bool,
+            "print_ready": bool,
+        }
+    }
+    """
+    payload = {"action": "mesh_doctor_audit"}
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_mesh_repair(
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    merge_distance: float = 0.0001,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na automatickou opravu aktivního síťového objektu
+    (action: mesh_doctor_repair).
+
+    Opravy zahrnují:
+    1. Merge by distance (sloučení duplicitních vrcholů)
+    2. Delete loose geometry (smazání volných vrcholů a hran)
+    3. Recalculate Normals Outside (přepočet normál směrem ven)
+
+    Vrací stav úspěšnosti a statistiky sítě po opravě:
+    {
+        "status": "success",
+        "action": "mesh_doctor_repair",
+        "repairs_applied": [...],
+        "post_repair_stats": { ... }
+    }
+
+    Args:
+        merge_distance: Práh pro sloučení vrcholů v metrech.
+                        Výchozí: 0.0001 m (= 0.1 mm) – vhodné pro 3D tisk.
+    """
+    payload = {"action": "mesh_doctor_repair", "merge_distance": merge_distance}
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+

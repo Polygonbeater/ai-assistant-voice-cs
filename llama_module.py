@@ -1131,6 +1131,51 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "mesh_doctor_audit",
+            "description": (
+                "Audit topologie aktivního síťového objektu (MESH) v Blenderu pomocí bmesh. "
+                "Spočítá počet vrcholů, hran a polygonů, detekuje non-manifold hrany, volné prvky "
+                "(loose vertices/edges), díry (boundary edges), n-gony a potenciálně převrácené normály. "
+                "Použij při dotazech jako 'zkontroluj síť', 'je model printovatelný', 'analýza topologie', "
+                "'je model watertight' nebo 'zkontroluj geometrii'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mesh_doctor_repair",
+            "description": (
+                "Automatická oprava topologie aktivního síťového objektu (MESH) v Blenderu. "
+                "Provede: (1) Merge by distance — sloučí duplicitní vrcholy, "
+                "(2) Delete loose geometry — odstraní volné vrcholy a hrany, "
+                "(3) Recalculate Normals Outside — přepočítá normály směrem ven. "
+                "Použij při požadavcích jako 'oprav síť', 'vyčisti mesh', 'přepočítej normály', "
+                "'připrav model na 3D tisk' nebo 'oprav non-manifold chyby'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "merge_distance": {
+                        "type": "number",
+                        "description": (
+                            "Práh pro sloučení duplicitních vrcholů v metrech. "
+                            "Výchozí: 0.0001 (= 0.1 mm). Zvyšte na 0.001 pro hrubší modely, "
+                            "snižte na 0.00001 pro přesné inženýrské modely."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1139,6 +1184,8 @@ ALLOWED_TOOL_NAMES = {
     "query_memory_rag",
     "execute_blender_code",
     "inspect_blender_scene",
+    "mesh_doctor_audit",
+    "mesh_doctor_repair",
 }
 
 
@@ -1299,6 +1346,8 @@ class UnifiedToolDispatcher:
     - query_memory_rag(query)
     - execute_blender_code(code) (včetně Self-Healing smyčky)
     - inspect_blender_scene()
+    - mesh_doctor_audit()
+    - mesh_doctor_repair(merge_distance)
     """
 
     def __init__(
@@ -1341,6 +1390,11 @@ class UnifiedToolDispatcher:
             return self._execute_blender_code(code)
         elif tool_name == "inspect_blender_scene":
             return self._execute_inspect_blender_scene()
+        elif tool_name == "mesh_doctor_audit":
+            return self._execute_mesh_doctor_audit()
+        elif tool_name == "mesh_doctor_repair":
+            merge_distance = float(arguments.get("merge_distance", 0.0001))
+            return self._execute_mesh_doctor_repair(merge_distance=merge_distance)
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -1634,6 +1688,242 @@ class UnifiedToolDispatcher:
             "result": telemetry_text,
         }
 
+    # ------------------------------------------------------------------
+    # Mesh Doctor – audit a oprava topologie síťového objektu
+    # ------------------------------------------------------------------
+
+    _MESH_DOCTOR_SYSTEM_PROMPT = (
+        "Jsi expert na 3D topologii, přípravu modelů pro 3D tisk a analýzu síťové geometrie. "
+        "Analyzuješ výsledky bmesh auditu z Blenderu jako zkušený specialista na:\n"
+        "  • Manifold topologie (uzavřené povrchy bez non-manifold hran)\n"
+        "  • Watertight mesh (hermeticky uzavřená síť vhodná pro 3D tisk, Booleans, remesh)\n"
+        "  • N-gony a triangulace (dopad na subdivision, shading a 3D tisk)\n"
+        "  • Orientace normál (převrácené normály způsobují tmavé skvrny nebo selhání tisku)\n"
+        "  • Volná geometrie (loose verts/edges způsobující artefakty)\n"
+        "  • Díry v sítí (boundary edges = nespojené okraje polygonů)\n\n"
+        "Při interpretaci výsledků:\n"
+        "  1. Vysvětli každou nalezenou chybu jednoduše a srozumitelně\n"
+        "  2. Zhodnoť závažnost pro různé use-case (3D tisk, render, herní engine)\n"
+        "  3. Navrhni konkrétní opravné kroky v Blenderu (nástroje, klávesové zkratky)\n"
+        "  4. Závěrem jasně řekni, zda je model připraven pro 3D tisk nebo ne\n"
+    )
+
+    def _execute_mesh_doctor_audit(self) -> dict[str, Any]:
+        """Spustí Mesh Doctor AUDIT — bmesh analýzu topologie aktivního mesh objektu."""
+        from blender_connector import request_mesh_audit, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+
+        if self.status_callback:
+            self.status_callback("● 🩺 Spouštím Mesh Doctor AUDIT…")
+        if self.callback_on_token:
+            self.callback_on_token("\n🩺 *Volám nástroj:* `mesh_doctor_audit()`\n")
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {"status": "error", "tool": "mesh_doctor_audit", "error": "BlenderNotConnected", "result": warn}
+
+        try:
+            res = request_mesh_audit(host=host, port=port, timeout=20.0)
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba Mesh Doctor AUDIT.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Mesh Doctor AUDIT selhal:** `{err_msg}`\n")
+            return {"status": "error", "tool": "mesh_doctor_audit", "error": err_msg, "result": f"Audit selhal: {err_msg}"}
+
+        audit = res.get("audit", {})
+        obj_name = audit.get("object_name", "?")
+        mesh_name = audit.get("mesh_name", "?")
+        verts = audit.get("total_vertices", 0)
+        edges = audit.get("total_edges", 0)
+        faces = audit.get("total_faces", 0)
+        tris = audit.get("triangles", 0)
+        ngons = audit.get("ngons", 0)
+        non_manifold = audit.get("non_manifold_edges", 0)
+        loose_v = audit.get("loose_vertices", 0)
+        loose_e = audit.get("loose_edges", 0)
+        boundary = audit.get("boundary_edges_holes", 0)
+        flipped = audit.get("potentially_flipped_faces", 0)
+        watertight = audit.get("is_watertight", False)
+        print_ready = audit.get("print_ready", False)
+
+        def _icon(val, ok_val=0, warn_thresh=None):
+            """Vrátí emoji ikonu podle hodnoty: 0=✅, >0=⚠️ nebo ❌."""
+            if val == ok_val:
+                return "✅"
+            if warn_thresh is not None and val <= warn_thresh:
+                return "⚠️"
+            return "❌"
+
+        watertight_icon = "✅" if watertight else "❌"
+        print_icon = "✅" if print_ready else "❌"
+
+        # Formátovaný Markdown výstup pro UI
+        ui_report = (
+            f"\n\n🩺 **Mesh Doctor — Audit: `{obj_name}`** (mesh: `{mesh_name}`)\n\n"
+            f"| Metrika | Hodnota |\n"
+            f"|---|---|\n"
+            f"| Vrcholy | **{verts}** |\n"
+            f"| Hrany | **{edges}** |\n"
+            f"| Polygony | **{faces}** (trojúhelníky: {tris}, n-gony: {ngons}) |\n"
+            f"\n**Topologické problémy:**\n\n"
+            f"| Problém | Počet | Stav |\n"
+            f"|---|---|---|\n"
+            f"| Non-manifold hrany | {non_manifold} | {_icon(non_manifold)} |\n"
+            f"| Volné vrcholy | {loose_v} | {_icon(loose_v)} |\n"
+            f"| Volné hrany | {loose_e} | {_icon(loose_e)} |\n"
+            f"| Díry (boundary edges) | {boundary} | {_icon(boundary)} |\n"
+            f"| Potenciálně převrácené normály | {flipped} | {_icon(flipped, warn_thresh=5)} |\n"
+            f"| N-gony (>4 strany) | {ngons} | {_icon(ngons, warn_thresh=10)} |\n"
+            f"\n**Celkový verdikt:**\n\n"
+            f"| | |\n|---|---|\n"
+            f"| Watertight (uzavřená síť) | {watertight_icon} {'ANO' if watertight else 'NE'} |\n"
+            f"| Připraven pro 3D tisk | {print_icon} {'ANO' if print_ready else 'NE'} |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        # Textový souhrn pro LLM
+        result_text = (
+            f"MESH DOCTOR AUDIT — objekt: '{obj_name}' (mesh: '{mesh_name}')\n"
+            f"Geometrie: {verts} vrcholů, {edges} hran, {faces} polygonů "
+            f"(z toho {tris} trojúhelníků, {ngons} n-gonů).\n"
+            f"Topologické problémy:\n"
+            f"  - Non-manifold hrany: {non_manifold}\n"
+            f"  - Volné vrcholy: {loose_v}\n"
+            f"  - Volné hrany: {loose_e}\n"
+            f"  - Díry (boundary edges): {boundary}\n"
+            f"  - Potenciálně převrácené normály: {flipped}\n"
+            f"  - N-gony: {ngons}\n"
+            f"Watertight: {'ANO' if watertight else 'NE'} | "
+            f"Připraven pro 3D tisk: {'ANO' if print_ready else 'NE'}\n"
+        )
+
+        if self.status_callback:
+            verdict = "✅ model je watertight" if watertight else f"❌ nalezeny problémy ({non_manifold} non-manifold hran)"
+            self.status_callback(f"● 🩺 Mesh Doctor AUDIT dokončen — {verdict}")
+
+        return {
+            "status": "success",
+            "tool": "mesh_doctor_audit",
+            "audit": audit,
+            "result": result_text,
+            "_expert_system_prompt": self._MESH_DOCTOR_SYSTEM_PROMPT,
+        }
+
+    def _execute_mesh_doctor_repair(self, merge_distance: float = 0.0001) -> dict[str, Any]:
+        """Spustí Mesh Doctor REPAIR — automatickou opravu topologie aktivního mesh objektu."""
+        from blender_connector import request_mesh_repair, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+
+        if self.status_callback:
+            self.status_callback(f"● 🔧 Spouštím Mesh Doctor REPAIR (merge_distance={merge_distance} m)…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n🔧 *Volám nástroj:* `mesh_doctor_repair(merge_distance={merge_distance})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {"status": "error", "tool": "mesh_doctor_repair", "error": "BlenderNotConnected", "result": warn}
+
+        try:
+            res = request_mesh_repair(host=host, port=port, merge_distance=merge_distance, timeout=25.0)
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba Mesh Doctor REPAIR.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Mesh Doctor REPAIR selhal:** `{err_msg}`\n")
+            return {"status": "error", "tool": "mesh_doctor_repair", "error": err_msg, "result": f"Oprava selhala: {err_msg}"}
+
+        repairs = res.get("repairs_applied", [])
+        stats = res.get("post_repair_stats", {})
+        obj_name = stats.get("object_name", "?")
+        verts = stats.get("total_vertices", 0)
+        edges = stats.get("total_edges", 0)
+        faces = stats.get("total_faces", 0)
+        non_manifold = stats.get("non_manifold_edges", 0)
+        loose_v = stats.get("loose_vertices", 0)
+        loose_e = stats.get("loose_edges", 0)
+        boundary = stats.get("boundary_edges_holes", 0)
+        watertight = stats.get("is_watertight", False)
+        print_ready = stats.get("print_ready", False)
+
+        repairs_readable = {
+            "merge_by_distance": f"Merge by distance (práh: {merge_distance} m)",
+            "delete_loose_geometry": "Smazat volnou geometrii",
+            "recalculate_normals_outside": "Přepočítat normály směrem ven",
+        }
+        repairs_list = "\n".join(
+            f"  ✅ {repairs_readable.get(r, r)}" for r in repairs
+        )
+
+        watertight_icon = "✅" if watertight else "⚠️"
+        print_icon = "✅" if print_ready else "⚠️"
+
+        ui_report = (
+            f"\n\n🔧 **Mesh Doctor — Oprava dokončena: `{obj_name}`**\n\n"
+            f"**Provedené opravy:**\n{repairs_list}\n\n"
+            f"**Stav sítě po opravě:**\n\n"
+            f"| Metrika | Hodnota |\n|---|---|\n"
+            f"| Vrcholy | **{verts}** |\n"
+            f"| Hrany | **{edges}** |\n"
+            f"| Polygony | **{faces}** |\n"
+            f"| Non-manifold hrany | **{non_manifold}** |\n"
+            f"| Volné vrcholy | **{loose_v}** |\n"
+            f"| Volné hrany | **{loose_e}** |\n"
+            f"| Díry (boundary edges) | **{boundary}** |\n"
+            f"| Watertight | {watertight_icon} {'ANO' if watertight else 'STÁLE NE'} |\n"
+            f"| Připraven pro 3D tisk | {print_icon} {'ANO' if print_ready else 'STÁLE NE'} |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"MESH DOCTOR REPAIR dokončen — objekt: '{obj_name}'\n"
+            f"Provedené opravy: {', '.join(repairs)}\n"
+            f"Stav po opravě: {verts} vrcholů, {edges} hran, {faces} polygonů.\n"
+            f"Non-manifold: {non_manifold} | Volné vrcholy: {loose_v} | Volné hrany: {loose_e} | "
+            f"Díry: {boundary}\n"
+            f"Watertight: {'ANO' if watertight else 'NE'} | "
+            f"Připraven pro 3D tisk: {'ANO' if print_ready else 'NE'}\n"
+        )
+
+        if self.status_callback:
+            verdict = "✅ model je nyní watertight" if watertight else "⚠️ zbývají neopravitelné problémy"
+            self.status_callback(f"● 🔧 Mesh Doctor REPAIR dokončen — {verdict}")
+
+        return {
+            "status": "success",
+            "tool": "mesh_doctor_repair",
+            "repairs_applied": repairs,
+            "post_repair_stats": stats,
+            "result": result_text,
+            "_expert_system_prompt": self._MESH_DOCTOR_SYSTEM_PROMPT,
+        }
+
 
 def generate_response(
     llm: Llama,
@@ -1865,6 +2155,12 @@ def generate_response(
 
         if status_callback:
             status_callback("● Formuluji finální odpověď na základě výsledků…")
+
+        # Pokud nástroj vrátil expertní systémový prompt (např. Mesh Doctor),
+        # vložíme ho jako dočasnou instrukci pro Turn 2 syntézu
+        expert_sys = dispatch_res.get("_expert_system_prompt")
+        if expert_sys:
+            messages.append({"role": "system", "content": expert_sys})
 
         messages.append({
             "role": "assistant",

@@ -385,7 +385,252 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 2. Vykonání Python kódu (action == 'execute')
+        # 2. Mesh Doctor – audit sítě aktivního objektu
+        if action == "mesh_doctor_audit":
+            print("\n[AI-Blender] >>> Zahajuji Mesh Doctor AUDIT...")
+            try:
+                import bmesh  # noqa: F401 – ověř dostupnost
+
+                obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    obj = bpy.context.view_layer.objects.active
+                if not obj and hasattr(bpy.context, "active_object"):
+                    obj = bpy.context.active_object
+
+                if not obj or obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                # Vynutit object mode pro správný eval
+                prev_mode = obj.mode
+                if prev_mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                depsgraph = bpy.context.evaluated_depsgraph_get()
+                obj_eval = obj.evaluated_get(depsgraph)
+                mesh_eval = obj_eval.to_mesh()
+
+                bm = bmesh.new()
+                bm.from_mesh(mesh_eval)
+                bm.edges.ensure_lookup_table()
+                bm.verts.ensure_lookup_table()
+                bm.faces.ensure_lookup_table()
+
+                total_verts = len(bm.verts)
+                total_edges = len(bm.edges)
+                total_faces = len(bm.faces)
+
+                # Non-manifold hrany: propojeny s ≠ 2 stěnami
+                non_manifold_edges = [e for e in bm.edges if not e.is_manifold]
+
+                # Volné vrcholy: vrchol bez hran
+                loose_verts = [v for v in bm.verts if not v.link_edges]
+
+                # Volné hrany: hrana bez stěn
+                loose_edges = [e for e in bm.edges if not e.link_faces]
+
+                # Boundary hrany (okraje děr): propojeny s přesně 1 stěnou
+                boundary_edges = [e for e in bm.edges if e.is_boundary]
+
+                # Nejednotné normály: plochy s normálou mířící dovnitř
+                # (detekujeme přibližně jako plochy s negativní Z-ovou složkou normály
+                #  – uloží počet, skutečnou opravu dělá repair akce)
+                import mathutils  # noqa: F401
+                flipped_faces = []
+                for f in bm.faces:
+                    # heuristika: normála míří od středu scény ven?
+                    center_to_face = f.calc_center_median()
+                    dot = f.normal.dot(center_to_face)
+                    if dot < 0:
+                        flipped_faces.append(f.index)
+
+                # Plochy s více než 4 vrcholy (n-gony) – problém pro 3D tisk
+                ngons = [f for f in bm.faces if len(f.verts) > 4]
+                tris  = [f for f in bm.faces if len(f.verts) == 3]
+
+                is_watertight = (
+                    len(non_manifold_edges) == 0
+                    and len(loose_verts) == 0
+                    and len(loose_edges) == 0
+                    and len(boundary_edges) == 0
+                )
+
+                audit_result = {
+                    "object_name": obj.name,
+                    "mesh_name": obj.data.name,
+                    "total_vertices": total_verts,
+                    "total_edges": total_edges,
+                    "total_faces": total_faces,
+                    "triangles": len(tris),
+                    "ngons": len(ngons),
+                    "non_manifold_edges": len(non_manifold_edges),
+                    "loose_vertices": len(loose_verts),
+                    "loose_edges": len(loose_edges),
+                    "boundary_edges_holes": len(boundary_edges),
+                    "potentially_flipped_faces": len(flipped_faces),
+                    "is_watertight": is_watertight,
+                    "print_ready": is_watertight and len(ngons) == 0,
+                }
+
+                bm.free()
+                obj_eval.to_mesh_clear()
+
+                # Obnovit původní mode
+                if prev_mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode=prev_mode)
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "mesh_doctor_audit",
+                    "audit": audit_result,
+                }
+                print(f"✅ [AI-Blender] Mesh Doctor AUDIT dokončen: {audit_result}")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Mesh Doctor AUDIT: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 3. Mesh Doctor – automatická oprava sítě aktivního objektu
+        if action == "mesh_doctor_repair":
+            print("\n[AI-Blender] >>> Zahajuji Mesh Doctor REPAIR...")
+            try:
+                obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    obj = bpy.context.view_layer.objects.active
+                if not obj and hasattr(bpy.context, "active_object"):
+                    obj = bpy.context.active_object
+
+                if not obj or obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                merge_distance = float(message.get("merge_distance", 0.0001))
+
+                # Přepnout do Edit Mode pro operace
+                prev_mode = obj.mode
+                if prev_mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                # Zadat object jako aktivní a selectovat
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+
+                # 1) Merge by distance – odstraní duplikáty
+                bpy.ops.mesh.remove_doubles(threshold=merge_distance)
+
+                # 2) Smazat volnou geometrii (loose vertices + edges)
+                bpy.ops.mesh.delete_loose(use_verts=True, use_edges=True, use_faces=False)
+
+                # 3) Přepočítat normály (Recalculate Outside)
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.mesh.normals_make_consistent(inside=False)
+
+                # Zpět do Object Mode
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+                # Vynutit překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                # Post-repair audit pomocí bmesh pro statistiky
+                import bmesh  # noqa: F401
+
+                depsgraph = bpy.context.evaluated_depsgraph_get()
+                obj_eval = obj.evaluated_get(depsgraph)
+                mesh_eval = obj_eval.to_mesh()
+
+                bm = bmesh.new()
+                bm.from_mesh(mesh_eval)
+                bm.edges.ensure_lookup_table()
+                bm.verts.ensure_lookup_table()
+                bm.faces.ensure_lookup_table()
+
+                non_manifold_after = len([e for e in bm.edges if not e.is_manifold])
+                loose_verts_after  = len([v for v in bm.verts if not v.link_edges])
+                loose_edges_after  = len([e for e in bm.edges if not e.link_faces])
+                boundary_after     = len([e for e in bm.edges if e.is_boundary])
+                is_watertight_after = (
+                    non_manifold_after == 0
+                    and loose_verts_after == 0
+                    and loose_edges_after == 0
+                    and boundary_after == 0
+                )
+                post_stats = {
+                    "object_name": obj.name,
+                    "total_vertices": len(bm.verts),
+                    "total_edges": len(bm.edges),
+                    "total_faces": len(bm.faces),
+                    "non_manifold_edges": non_manifold_after,
+                    "loose_vertices": loose_verts_after,
+                    "loose_edges": loose_edges_after,
+                    "boundary_edges_holes": boundary_after,
+                    "is_watertight": is_watertight_after,
+                    "print_ready": is_watertight_after,
+                    "merge_distance_used": merge_distance,
+                }
+                bm.free()
+                obj_eval.to_mesh_clear()
+
+                if prev_mode not in ('OBJECT', 'EDIT'):
+                    try:
+                        bpy.ops.object.mode_set(mode=prev_mode)
+                    except Exception:
+                        pass
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "mesh_doctor_repair",
+                    "repairs_applied": [
+                        "merge_by_distance",
+                        "delete_loose_geometry",
+                        "recalculate_normals_outside",
+                    ],
+                    "post_repair_stats": post_stats,
+                }
+                print(f"✅ [AI-Blender] Mesh Doctor REPAIR dokončen: watertight={is_watertight_after}")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Mesh Doctor REPAIR: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 4. Vykonání Python kódu (action == 'execute')
         code = message.get("code", "")
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
