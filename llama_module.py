@@ -1407,6 +1407,107 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "apply_fcurve_animation",
+            "description": (
+                "Vytvoří animaci pomocí F-křivek a klíčových snímků (keyframes) pro vybranou vlastnost aktivního objektu v Blenderu "
+                "(např. 'location' pro pohyb, 'rotation' pro otáčení nebo 'scale' pro měřítko). "
+                "Nastaví typ interpolace křivky ('BEZIER', 'LINEAR', 'BOUNCE') a volitelně přidá F-Curve modifikátor: "
+                "'NOISE' (pro organické roztřesení kamery / camera shake) nebo 'CYCLES' (pro nekonečnou smyčku pohybu). "
+                "Použij při požadavcích jako 'animuj objekt', 'přidej klíčové snímky', 'rozhoupej kameru', 'přidej shake efekt modifikátorem noise', "
+                "'nastav nekonečnou smyčku cycles', 'nastav bounce interpolaci na skákání'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "property_name": {
+                        "type": "string",
+                        "enum": ["location", "rotation", "scale"],
+                        "description": "Vlastnost objektu k animaci: 'location' (pozice), 'rotation' (rotace), 'scale' (měřítko). Výchozí: 'location'.",
+                    },
+                    "interpolation": {
+                        "type": "string",
+                        "enum": ["BEZIER", "LINEAR", "BOUNCE"],
+                        "description": "Typ interpolace F-křivky: 'BEZIER' (hladké zrychlení/zpomalení), 'LINEAR' (konstantní rychlost), 'BOUNCE' (odrazový pružný efekt). Výchozí: 'BEZIER'.",
+                    },
+                    "modifier_type": {
+                        "type": "string",
+                        "enum": ["NOISE", "CYCLES", "NONE"],
+                        "description": "Volitelný F-Curve modifikátor: 'NOISE' (pro roztřesení a neklid), 'CYCLES' (pro nekonečné opakování smyčky), 'NONE' (žádný modifikátor).",
+                    },
+                    "keyframes": {
+                        "type": "array",
+                        "description": "Volitelný seznam klíčových snímků ve formátu [{'frame': 1, 'value': [0,0,0]}, {'frame': 60, 'value': [0,0,2]}]. Pokud není zadáno, vygeneruje se automaticky.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "frame": {"type": "integer"},
+                                "value": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                },
+                            },
+                            "required": ["frame", "value"],
+                        },
+                    },
+                    "start_frame": {
+                        "type": "integer",
+                        "description": "Výchozí startovní snímek animace (např. 1).",
+                    },
+                    "end_frame": {
+                        "type": "integer",
+                        "description": "Výchozí koncový snímek animace (např. 60).",
+                    },
+                },
+                "required": ["property_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_motion_node_setup",
+            "description": (
+                "Vygeneruje procedurální matematickou animaci bez nutnosti manuálních klíčových snímků v Blenderu. "
+                "Podporuje dva přístupy: "
+                "1) 'geometry_nodes' (přidá Geometry Nodes strom se zapojením Scene Time -> Math Multiply -> Transform Geometry pro nekonečný plynulý pohyb v čase), "
+                "2) 'driver' (vytvoří Python driver na rotaci či pozici s matematickým výrazem jako '#frame * speed'). "
+                "Použij při požadavcích jako 'procedurální animace', 'nekonečná rotace', 'roztoč objekt pomocí driveru nebo geometry nodes', "
+                "'přidej scene time animaci', 'animuj bez keyframů', 'udělej rotaci přes geometry nodes strom'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "motion_type": {
+                        "type": "string",
+                        "enum": ["geometry_nodes", "driver"],
+                        "description": "Režim procedurální animace: 'geometry_nodes' (přes modifikátor a Scene Time uzel) nebo 'driver' (přes Python scripted driver). Výchozí: 'geometry_nodes'.",
+                    },
+                    "target_property": {
+                        "type": "string",
+                        "enum": ["rotation", "location"],
+                        "description": "Animovaná vlastnost: 'rotation' (otáčení) nebo 'location' (posun). Výchozí: 'rotation'.",
+                    },
+                    "axis": {
+                        "type": "string",
+                        "enum": ["X", "Y", "Z", "ALL"],
+                        "description": "Osa pohybu: 'X', 'Y', 'Z' nebo 'ALL' (všechny osy). Výchozí: 'Z'.",
+                    },
+                    "speed": {
+                        "type": "number",
+                        "description": "Rychlost pohybu / časový násobič (např. 1.0 pro Geometry Nodes nebo 0.05 pro Driver).",
+                    },
+                    "expression": {
+                        "type": "string",
+                        "description": "Volitelný matematický výraz pro driver (např. 'frame * 0.05' nebo 'sin(frame * 0.05) * 2.0').",
+                    },
+                },
+                "required": ["motion_type"],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1424,6 +1525,8 @@ ALLOWED_TOOL_NAMES = {
     "generate_parametric_model",
     "apply_modifier_stack",
     "create_geometry_nodes_bridge",
+    "apply_fcurve_animation",
+    "create_motion_node_setup",
 }
 
 
@@ -1593,6 +1696,8 @@ class UnifiedToolDispatcher:
     - generate_parametric_model(model_type, dimensions)
     - apply_modifier_stack(stack_type, params, apply_immediately)
     - create_geometry_nodes_bridge(setup_type, node_group_name)
+    - apply_fcurve_animation(property_name, interpolation, modifier_type, keyframes, start_frame, end_frame)
+    - create_motion_node_setup(motion_type, target_property, axis, speed, expression)
     """
 
     def __init__(
@@ -1676,6 +1781,34 @@ class UnifiedToolDispatcher:
             s_type = str(arguments.get("setup_type", "point_scatter")).strip()
             g_name = arguments.get("node_group_name")
             return self._execute_create_geometry_nodes_bridge(setup_type=s_type, node_group_name=g_name)
+        elif tool_name == "apply_fcurve_animation":
+            prop_n = str(arguments.get("property_name", "location")).strip()
+            interp = str(arguments.get("interpolation", "BEZIER")).strip()
+            mod_t = arguments.get("modifier_type")
+            kframes = arguments.get("keyframes")
+            s_f = int(arguments.get("start_frame", 1))
+            e_f = int(arguments.get("end_frame", 60))
+            return self._execute_apply_fcurve_animation(
+                property_name=prop_n,
+                interpolation=interp,
+                modifier_type=mod_t,
+                keyframes=kframes,
+                start_frame=s_f,
+                end_frame=e_f,
+            )
+        elif tool_name == "create_motion_node_setup":
+            m_type = str(arguments.get("motion_type", "geometry_nodes")).strip()
+            t_prop = str(arguments.get("target_property", "rotation")).strip()
+            ax = str(arguments.get("axis", "Z")).strip()
+            spd = float(arguments.get("speed", 1.0 if m_type == "geometry_nodes" else 0.05))
+            expr = arguments.get("expression")
+            return self._execute_create_motion_node_setup(
+                motion_type=m_type,
+                target_property=t_prop,
+                axis=ax,
+                speed=spd,
+                expression=expr,
+            )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -3071,6 +3204,289 @@ class UnifiedToolDispatcher:
             "nodes": nodes_list,
             "result": result_text,
             "_expert_system_prompt": self._GEOMETRY_NODES_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Advanced Animation & Motion Nodes Engine
+    # ------------------------------------------------------------------
+
+    _ANIMATION_MOTION_SYSTEM_PROMPT = (
+        "Jsi uznávaný Lead 3D Animátor, Technical Director (TD) a Motion Designér specializovaný na animaci v Blenderu. "
+        "Odborně, plynule a s technickým vhledem komentuješ provedenou animaci či pohybový setup s důrazem na:\n"
+        "  • Principy animace a plynulost křivek (Graph Editor, tangenty, easing: ease-in / ease-out, tlumení a overshoot u BOUNCE interpolace)\n"
+        "  • F-Curve modifikátory (organická nepravidelnost přes NOISE pro camera shake a handheld pocit vs matematicky periodické opakování přes CYCLES)\n"
+        "  • Procedurální řízení času a framerate (využití Scene Time / frame proměnných pro synchronizaci s časovou osou nezávisle na FPS scény)\n"
+        "  • Nedestruktivní pohybové uzly (Geometry Nodes Transform vs Drivers v závislosti na požadavcích scény a deformacích)\n"
+        "  • Praktická doporučení pro animátora (úprava frekvence a amplitudy Noise, nastavení easing rukojetí v Graph Editoru, Motion Blur při finálním renderu).\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť zvolený animační přístup (klíčové snímky s F-křivkami vs procedurální motion nodes / drivery)\n"
+        "  2. Popiš chování pohybu (druh interpolace, periodičnost, rychlost a rozsah)\n"
+        "  3. Doporuč 1-2 praktické kroky pro doladění výsledku (např. úprava v Graph Editoru, Motion Blur, doladění rychlosti/amplitudy).\n"
+    )
+
+    def _execute_apply_fcurve_animation(
+        self,
+        property_name: str = "location",
+        interpolation: str = "BEZIER",
+        modifier_type: str | None = None,
+        keyframes: list[dict[str, Any]] | None = None,
+        start_frame: int = 1,
+        end_frame: int = 60,
+    ) -> dict[str, Any]:
+        """Aplikuje klíčové snímky a F-křivky na aktivní objekt v Blenderu."""
+        from blender_connector import request_fcurve_animation, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_prop = (property_name or "location").lower().strip()
+        clean_interp = (interpolation or "BEZIER").upper().strip()
+        clean_mod = (modifier_type or "").upper().strip() if modifier_type else None
+        if clean_mod in ("NONE", "NULL", ""):
+            clean_mod = None
+
+        if self.status_callback:
+            self.status_callback(f"● 🎬 Vytvářím F-Curve animaci ({clean_prop}, {clean_interp})…")
+        if self.callback_on_token:
+            mod_disp = f", modifier='{clean_mod}'" if clean_mod else ""
+            self.callback_on_token(
+                f"\n🎬 *Volám nástroj:* `apply_fcurve_animation(property='{clean_prop}', interpolation='{clean_interp}'{mod_disp})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "apply_fcurve_animation",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_fcurve_animation(
+                property_name=clean_prop,
+                interpolation=clean_interp,
+                modifier_type=clean_mod,
+                keyframes=keyframes,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření animace.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **F-Curve animace selhala:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "apply_fcurve_animation",
+                "error": err_msg,
+                "result": f"F-Curve animace selhala: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        d_path = res.get("data_path", clean_prop)
+        interp_res = res.get("interpolation", clean_interp)
+        mod_res = res.get("modifier_type") or "Žádný"
+        f_count = res.get("fcurves_count", 0)
+        kf_count = res.get("keyframes_count", 0)
+        f_range = res.get("frame_range", [start_frame, end_frame])
+
+        ui_report = (
+            f"\n\n🎬 **F-Curve Animation Studio — `{obj_name}`**\n"
+            f"*Animace vlastnosti `{d_path}` s interpolací `{interp_res}`*\n\n"
+            f"---\n\n"
+            f"| Parametr animace | Hodnota |\n|---|---|\n"
+            f"| Cílový objekt | `{obj_name}` |\n"
+            f"| Vlastnost (Data Path) | `{d_path}` |\n"
+            f"| Typ interpolace | **{interp_res}** |\n"
+            f"| F-Curve Modifikátor | **{mod_res}** |\n"
+            f"| Počet F-křivek | {f_count} |\n"
+            f"| Počet klíčových bodů | {kf_count} |\n"
+            f"| Rozsah snímků (Timeline) | {f_range[0]} – {f_range[1]} |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"F-CURVE ANIMACE aplikována na objekt '{obj_name}':\n"
+            f"  - Vlastnost: '{d_path}', Interpolace: '{interp_res}'\n"
+            f"  - F-Curve Modifikátor: '{mod_res}'\n"
+            f"  - F-křivky: {f_count}, Klíče: {kf_count}\n"
+            f"  - Snímky: {f_range[0]} až {f_range[1]}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Animace '{clean_prop}' ({interp_res}) vytvořena pro '{obj_name}'"
+            )
+
+        return {
+            "status": "success",
+            "tool": "apply_fcurve_animation",
+            "object_name": obj_name,
+            "property_name": clean_prop,
+            "data_path": d_path,
+            "interpolation": interp_res,
+            "modifier_type": res.get("modifier_type"),
+            "fcurves_count": f_count,
+            "keyframes_count": kf_count,
+            "frame_range": f_range,
+            "result": result_text,
+            "_expert_system_prompt": self._ANIMATION_MOTION_SYSTEM_PROMPT,
+        }
+
+    def _execute_create_motion_node_setup(
+        self,
+        motion_type: str = "geometry_nodes",
+        target_property: str = "rotation",
+        axis: str = "Z",
+        speed: float = 1.0,
+        expression: str | None = None,
+    ) -> dict[str, Any]:
+        """Vytvoří procedurální animaci pomocí Geometry Nodes nebo Driveru bez keyframů."""
+        from blender_connector import request_motion_nodes, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_motion = (motion_type or "geometry_nodes").lower().strip()
+        clean_prop = (target_property or "rotation").lower().strip()
+        clean_axis = (axis or "Z").upper().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● ⚙️ Sestavuji procedurální motion setup ({clean_motion}, osa {clean_axis})…")
+        if self.callback_on_token:
+            expr_disp = f", expr='{expression}'" if expression else f", speed={speed}"
+            self.callback_on_token(
+                f"\n⚙️ *Volám nástroj:* `create_motion_node_setup(motion_type='{clean_motion}', property='{clean_prop}', axis='{clean_axis}'{expr_disp})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "create_motion_node_setup",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_motion_nodes(
+                motion_type=clean_motion,
+                target_property=clean_prop,
+                axis=clean_axis,
+                speed=speed,
+                expression=expression,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření motion setupu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Motion setup selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "create_motion_node_setup",
+                "error": err_msg,
+                "result": f"Motion setup selhal: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        m_type = res.get("motion_type", clean_motion)
+
+        if m_type == "driver":
+            expr_res = res.get("expression", f"frame * {speed}")
+            d_count = res.get("drivers_count", 1)
+            ui_report = (
+                f"\n\n⚙️ **Procedural Motion Driver — `{obj_name}`**\n"
+                f"*Nekonečný procedurální pohyb řízený Python výrazem*\n\n"
+                f"---\n\n"
+                f"| Parametr Driveru | Hodnota |\n|---|---|\n"
+                f"| Cílový objekt | `{obj_name}` |\n"
+                f"| Typ setupu | Python Scripted Driver |\n"
+                f"| Cílová vlastnost | `{res.get('target_property', clean_prop)}` (osa `{clean_axis}`) |\n"
+                f"| Matematický výraz | `#{expr_res}` |\n"
+                f"| Počet driver kanálů | {d_count} |\n\n"
+                f"---\n\n"
+            )
+            result_text = (
+                f"PROCEDURAL DRIVER aplikován na objekt '{obj_name}':\n"
+                f"  - Typ: Driver, Osa: {clean_axis}\n"
+                f"  - Výraz: #{expr_res}\n"
+                f"  - Počet kanálů: {d_count}\n"
+            )
+        else:
+            mod_name = res.get("modifier_name", "MotionNodes")
+            group_name = res.get("node_group_name", "ProceduralMotion")
+            n_count = res.get("node_count", 0)
+            l_count = res.get("link_count", 0)
+            nodes_list = res.get("nodes", [])
+            nodes_md = "\n".join(
+                f"  • `{n.get('name', '?')}` ({n.get('type', '?')})"
+                for n in nodes_list
+            )
+            ui_report = (
+                f"\n\n⚙️ **Motion Nodes Setup — `{group_name}`**\n"
+                f"*Nekonečný procedurální pohyb řízený uzlovým stromem Scene Time*\n\n"
+                f"---\n\n"
+                f"| Parametr Motion Nodes | Hodnota |\n|---|---|\n"
+                f"| Cílový objekt | `{obj_name}` |\n"
+                f"| Modifikátor | `{mod_name}` |\n"
+                f"| Uzlová skupina | `{group_name}` |\n"
+                f"| Vlastnost a osa | `{clean_prop}` (osa `{clean_axis}`) |\n"
+                f"| Rychlost (Speed) | `{speed}` |\n"
+                f"| Počet uzlů (Nodes) | **{n_count}** |\n"
+                f"| Počet spojení (Links) | **{l_count}** |\n\n"
+                f"**Architektura Motion Nodes grafu:**\n"
+                f"{nodes_md}\n\n"
+                f"---\n\n"
+            )
+            result_text = (
+                f"MOTION NODES SETUP vytvořen pro objekt '{obj_name}':\n"
+                f"  - Modifikátor: '{mod_name}', Node Group: '{group_name}'\n"
+                f"  - Vlastnost: {clean_prop}, Osa: {clean_axis}, Rychlost: {speed}\n"
+                f"  - Uzly ({n_count}): Scene Time -> Math -> Combine XYZ -> Transform -> Group Output\n"
+                f"  - Spojení: {l_count} propojení\n"
+            )
+
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Procedurální pohyb '{clean_motion}' aplikován na '{obj_name}'"
+            )
+
+        return {
+            "status": "success",
+            "tool": "create_motion_node_setup",
+            "object_name": obj_name,
+            "motion_type": m_type,
+            "target_property": clean_prop,
+            "axis": clean_axis,
+            "speed": speed,
+            "result": result_text,
+            "_expert_system_prompt": self._ANIMATION_MOTION_SYSTEM_PROMPT,
         }
 
 

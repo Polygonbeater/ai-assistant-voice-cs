@@ -2041,7 +2041,355 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 11. Vykonání Python kódu (action == 'execute')
+        # 11. Pokročilá animace a F-křivky (action == 'apply_fcurve_animation')
+        if action == "apply_fcurve_animation":
+            try:
+                active_obj = bpy.context.active_object or (
+                    bpy.context.selected_objects[0] if bpy.context.selected_objects else None
+                )
+                if not active_obj:
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "V Blenderu není vybrán žádný aktivní objekt pro animaci.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                prop_name = str(message.get("property_name", "location")).lower().strip()
+                interp_mode = str(message.get("interpolation", "BEZIER")).upper().strip()
+                mod_type = str(message.get("modifier_type", "")).upper().strip()
+                if mod_type in ("", "NONE", "NULL"):
+                    mod_type = None
+
+                valid_interps = {"BEZIER", "LINEAR", "BOUNCE", "CONSTANT", "BACK", "ELASTIC"}
+                if interp_mode not in valid_interps:
+                    interp_mode = "BEZIER"
+
+                # Mapování data_path v Blenderu
+                if prop_name in ("rotation", "rot", "rotation_euler"):
+                    data_path = "rotation_euler"
+                elif prop_name in ("scale", "scaling"):
+                    data_path = "scale"
+                else:
+                    data_path = "location"
+
+                # Příprava klíčových snímků
+                raw_keyframes = message.get("keyframes")
+                keyframes_to_set = []
+
+                if isinstance(raw_keyframes, list) and len(raw_keyframes) > 0:
+                    for k in raw_keyframes:
+                        f = int(k.get("frame", 1))
+                        val = k.get("value", [0.0, 0.0, 0.0])
+                        if isinstance(val, (int, float)):
+                            val = [float(val), float(val), float(val)]
+                        keyframes_to_set.append({"frame": f, "value": val})
+                else:
+                    start_f = int(message.get("start_frame", 1))
+                    end_f = int(message.get("end_frame", 60))
+                    if data_path == "rotation_euler":
+                        # Plynulá rotace o 360° (2*pi rad) kolem osy Z
+                        cur = list(getattr(active_obj, data_path))
+                        keyframes_to_set = [
+                            {"frame": start_f, "value": [cur[0], cur[1], cur[2]]},
+                            {"frame": end_f, "value": [cur[0], cur[1], cur[2] + 6.283185]},
+                        ]
+                    elif data_path == "scale":
+                        cur = list(getattr(active_obj, data_path))
+                        keyframes_to_set = [
+                            {"frame": start_f, "value": [cur[0], cur[1], cur[2]]},
+                            {"frame": end_f, "value": [cur[0] * 1.5, cur[1] * 1.5, cur[2] * 1.5]},
+                        ]
+                    else:  # location
+                        cur = list(getattr(active_obj, data_path))
+                        keyframes_to_set = [
+                            {"frame": start_f, "value": [cur[0], cur[1], cur[2]]},
+                            {"frame": end_f, "value": [cur[0], cur[1], cur[2] + 2.0]},
+                        ]
+
+                # Ujistíme se o existenci animation_data
+                if not active_obj.animation_data:
+                    active_obj.animation_data_create()
+
+                # Vložení klíčů
+                for item in keyframes_to_set:
+                    frame_num = item["frame"]
+                    val = item["value"]
+                    setattr(active_obj, data_path, val)
+                    active_obj.keyframe_insert(data_path=data_path, frame=frame_num)
+
+                # Nastavení interpolace a případných F-Curve modifikátorů
+                applied_modifiers = []
+                total_keyframe_points = 0
+                matching_fcurves = []
+
+                if active_obj.animation_data and active_obj.animation_data.action:
+                    for fc in active_obj.animation_data.action.fcurves:
+                        if fc.data_path == data_path:
+                            matching_fcurves.append(fc)
+                            for kp in fc.keyframe_points:
+                                kp.interpolation = interp_mode
+                                total_keyframe_points += 1
+
+                            if mod_type:
+                                if mod_type == "NOISE":
+                                    for m in list(fc.modifiers):
+                                        if m.type == 'NOISE':
+                                            fc.modifiers.remove(m)
+                                    m_noise = fc.modifiers.new(type='NOISE')
+                                    m_noise.scale = 10.0
+                                    m_noise.strength = 0.35
+                                    if "NOISE" not in applied_modifiers:
+                                        applied_modifiers.append("NOISE")
+                                elif mod_type == "CYCLES":
+                                    for m in list(fc.modifiers):
+                                        if m.type == 'CYCLES':
+                                            fc.modifiers.remove(m)
+                                    m_cycles = fc.modifiers.new(type='CYCLES')
+                                    if data_path == "rotation_euler":
+                                        m_cycles.mode_after = 'REPEAT_OFFSET'
+                                        m_cycles.mode_before = 'REPEAT_OFFSET'
+                                    else:
+                                        m_cycles.mode_after = 'REPEAT'
+                                        m_cycles.mode_before = 'REPEAT'
+                                    if "CYCLES" not in applied_modifiers:
+                                        applied_modifiers.append("CYCLES")
+                            fc.update()
+
+                frames_list = [k["frame"] for k in keyframes_to_set]
+                min_f = min(frames_list) if frames_list else 1
+                max_f = max(frames_list) if frames_list else 60
+                bpy.context.scene.frame_start = min(bpy.context.scene.frame_start, min_f)
+                bpy.context.scene.frame_end = max(bpy.context.scene.frame_end, max_f)
+                bpy.context.scene.frame_current = min_f
+
+                # Překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "apply_fcurve_animation",
+                    "object_name": active_obj.name,
+                    "property_name": prop_name,
+                    "data_path": data_path,
+                    "interpolation": interp_mode,
+                    "modifier_type": mod_type,
+                    "applied_modifiers": applied_modifiers,
+                    "fcurves_count": len(matching_fcurves),
+                    "keyframes_count": total_keyframe_points,
+                    "frame_range": [min_f, max_f],
+                }
+                print(f"✅ [AI-Blender] F-Curve animace aplikována na '{active_obj.name}' (prop: {data_path}, interp: {interp_mode}, mod: {mod_type}).")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při apply_fcurve_animation: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 12. Procedurální animace a Motion Nodes (action == 'create_motion_node_setup')
+        if action == "create_motion_node_setup":
+            try:
+                active_obj = bpy.context.active_object or (
+                    bpy.context.selected_objects[0] if bpy.context.selected_objects else None
+                )
+                if not active_obj:
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "V Blenderu není vybrán žádný aktivní objekt pro motion setup.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                motion_type = str(message.get("motion_type", "geometry_nodes")).lower().strip()
+                target_property = str(message.get("target_property", "rotation")).lower().strip()
+                axis = str(message.get("axis", "Z")).upper().strip()
+                speed = float(message.get("speed", 1.0 if motion_type == "geometry_nodes" else 0.05))
+                custom_expr = message.get("expression")
+
+                # Režim Driver
+                if motion_type == "driver":
+                    prop_path = "rotation_euler" if target_property in ("rotation", "rot", "rotation_euler") else "location"
+                    if axis == "X":
+                        indices = [0]
+                    elif axis == "Y":
+                        indices = [1]
+                    elif axis == "Z":
+                        indices = [2]
+                    elif axis in ("ALL", "XYZ"):
+                        indices = [0, 1, 2]
+                    else:
+                        indices = [2]
+
+                    if custom_expr and str(custom_expr).strip():
+                        expr_clean = str(custom_expr).lstrip("#").strip()
+                    else:
+                        expr_clean = f"frame * {speed}"
+
+                    applied_drivers = []
+                    for idx in indices:
+                        try:
+                            active_obj.driver_remove(prop_path, idx)
+                        except Exception:
+                            pass
+                        drv = active_obj.driver_add(prop_path, idx)
+                        drv.driver.type = 'SCRIPTED'
+                        drv.driver.expression = expr_clean
+                        applied_drivers.append({"property": prop_path, "index": idx, "expression": expr_clean})
+
+                    active_obj.update_tag()
+
+                    result_container["response"] = {
+                        "status": "success",
+                        "action": "create_motion_node_setup",
+                        "motion_type": "driver",
+                        "object_name": active_obj.name,
+                        "target_property": prop_path,
+                        "axis": axis,
+                        "speed": speed,
+                        "expression": expr_clean,
+                        "drivers_count": len(applied_drivers),
+                        "drivers": applied_drivers,
+                    }
+                    print(f"✅ [AI-Blender] Driver animace aplikována na '{active_obj.name}' (expr: '{expr_clean}').")
+
+                # Režim Geometry Nodes
+                else:
+                    if active_obj.type != 'MESH':
+                        if not hasattr(active_obj, "modifiers"):
+                            result_container["response"] = {
+                                "status": "error",
+                                "error": f"Objekt '{active_obj.name}' typu {active_obj.type} nepodporuje Geometry Nodes modifikátor.",
+                            }
+                            completion_event.set()
+                            _RECEIVER_INSTANCE.request_queue.task_done()
+                            continue
+
+                    mod = active_obj.modifiers.new(name="MotionNodes", type='NODES')
+                    group_name = f"ProceduralMotion_{target_property.capitalize()}"
+                    node_group = bpy.data.node_groups.new(name=group_name, type='GeometryNodeTree')
+                    mod.node_group = node_group
+
+                    # Sockety pro Blender 4.0+ vs 3.x
+                    if hasattr(node_group, "interface"):
+                        node_group.interface.new_socket(name="Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+                        node_group.interface.new_socket(name="Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+                    else:
+                        node_group.inputs.new('NodeSocketGeometry', 'Geometry')
+                        node_group.outputs.new('NodeSocketGeometry', 'Geometry')
+
+                    nodes = node_group.nodes
+                    links = node_group.links
+                    nodes.clear()
+
+                    group_in = nodes.new('NodeGroupInput')
+                    group_in.location = (-400, 0)
+
+                    group_out = nodes.new('NodeGroupOutput')
+                    group_out.location = (400, 0)
+
+                    time_node = nodes.new('GeometryNodeInputSceneTime')
+                    time_node.location = (-400, -220)
+
+                    math_node = nodes.new('ShaderNodeMath')
+                    math_node.location = (-180, -220)
+                    math_node.operation = 'MULTIPLY'
+                    try:
+                        math_node.inputs[1].default_value = float(speed)
+                    except Exception:
+                        pass
+
+                    combine_xyz = nodes.new('ShaderNodeCombineXYZ')
+                    combine_xyz.location = (40, -220)
+
+                    try:
+                        transform_node = nodes.new('GeometryNodeTransformGeometry')
+                    except Exception:
+                        transform_node = nodes.new('GeometryNodeTransform')
+                    transform_node.location = (220, 0)
+
+                    # Propojení
+                    links.new(group_in.outputs['Geometry'], transform_node.inputs['Geometry'])
+                    # Propojení času do násobiče rychlosti
+                    time_out = time_node.outputs.get('Seconds') or time_node.outputs.get('Frame') or time_node.outputs[0]
+                    links.new(time_out, math_node.inputs[0])
+
+                    # Zapojení do combine_xyz
+                    val_out = math_node.outputs['Value']
+                    if axis == "X":
+                        links.new(val_out, combine_xyz.inputs['X'])
+                    elif axis == "Y":
+                        links.new(val_out, combine_xyz.inputs['Y'])
+                    elif axis in ("ALL", "XYZ"):
+                        links.new(val_out, combine_xyz.inputs['X'])
+                        links.new(val_out, combine_xyz.inputs['Y'])
+                        links.new(val_out, combine_xyz.inputs['Z'])
+                    else:  # Z
+                        links.new(val_out, combine_xyz.inputs['Z'])
+
+                    # Zapojení do transform_node
+                    if target_property in ("location", "pos", "position", "translation"):
+                        links.new(combine_xyz.outputs['Vector'], transform_node.inputs['Translation'])
+                    else:  # rotation
+                        links.new(combine_xyz.outputs['Vector'], transform_node.inputs['Rotation'])
+
+                    links.new(transform_node.outputs['Geometry'], group_out.inputs['Geometry'])
+
+                    created_nodes_summary = [
+                        {"name": n.name, "type": n.type, "label": getattr(n, "label", "") or n.name}
+                        for n in nodes
+                    ]
+
+                    result_container["response"] = {
+                        "status": "success",
+                        "action": "create_motion_node_setup",
+                        "motion_type": "geometry_nodes",
+                        "object_name": active_obj.name,
+                        "modifier_name": mod.name,
+                        "node_group_name": node_group.name,
+                        "target_property": target_property,
+                        "axis": axis,
+                        "speed": speed,
+                        "node_count": len(created_nodes_summary),
+                        "link_count": len(links),
+                        "nodes": created_nodes_summary,
+                    }
+                    print(f"✅ [AI-Blender] Motion Nodes strom '{node_group.name}' aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
+
+                # Překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při create_motion_node_setup: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 13. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

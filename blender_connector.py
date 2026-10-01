@@ -833,3 +833,123 @@ def request_geometry_nodes_bridge(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_fcurve_animation(
+    property_name: str = "location",
+    interpolation: str = "BEZIER",
+    modifier_type: str | None = None,
+    keyframes: list[dict[str, Any]] | None = None,
+    start_frame: int = 1,
+    end_frame: int = 60,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vytvoření F-Curve animace aktivního objektu
+    (action: apply_fcurve_animation).
+
+    Args:
+        property_name: Vlastnost pro animaci ("location", "rotation", "scale").
+        interpolation: Typ interpolace křivek ("BEZIER", "LINEAR", "BOUNCE").
+        modifier_type: Volitelný F-Curve modifikátor ("NOISE" pro roztřesení, "CYCLES" pro smyčku).
+        keyframes: Volitelný seznam klíčových bodů [{"frame": 1, "value": [0,0,0]}, ...].
+        start_frame: Počáteční snímek (pokud nejsou zadány keyframes).
+        end_frame: Koncový snímek (pokud nejsou zadány keyframes).
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "apply_fcurve_animation",
+        "object_name": str,
+        "property_name": str,
+        "data_path": str,
+        "interpolation": str,
+        "modifier_type": str | None,
+        "applied_modifiers": list[str],
+        "fcurves_count": int,
+        "keyframes_count": int,
+        "frame_range": list[int],
+    }
+    """
+    clean_prop = (property_name or "location").lower().strip()
+    clean_interp = (interpolation or "BEZIER").upper().strip()
+    clean_mod = (modifier_type or "").upper().strip() if modifier_type else None
+    if clean_mod in ("NONE", "NULL", ""):
+        clean_mod = None
+
+    payload: dict[str, Any] = {
+        "action": "apply_fcurve_animation",
+        "property_name": clean_prop,
+        "interpolation": clean_interp,
+        "start_frame": int(start_frame),
+        "end_frame": int(end_frame),
+    }
+    if clean_mod:
+        payload["modifier_type"] = clean_mod
+    if keyframes and isinstance(keyframes, list):
+        payload["keyframes"] = keyframes
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_motion_nodes(
+    motion_type: str = "geometry_nodes",
+    target_property: str = "rotation",
+    axis: str = "Z",
+    speed: float = 1.0,
+    expression: str | None = None,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vytvoření procedurální animace bez klíčových snímků
+    pomocí Geometry Nodes (Scene Time -> Math -> Transform) nebo Driverů (action: create_motion_node_setup).
+
+    Args:
+        motion_type: Režim animace: "geometry_nodes" (uzlový graf) nebo "driver" (Python driver).
+        target_property: Animovaná vlastnost: "rotation" nebo "location".
+        axis: Osa pohybu: "X", "Y", "Z" nebo "ALL".
+        speed: Rychlost pohybu / násobič času (default 1.0 pro GN, 0.05 pro driver).
+        expression: Volitelný vlastní výraz pro driver (např. "frame * 0.05").
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "create_motion_node_setup",
+        "motion_type": str,
+        "object_name": str,
+        ...
+    }
+    """
+    clean_motion = (motion_type or "geometry_nodes").lower().strip()
+    clean_prop = (target_property or "rotation").lower().strip()
+    clean_axis = (axis or "Z").upper().strip()
+
+    payload: dict[str, Any] = {
+        "action": "create_motion_node_setup",
+        "motion_type": clean_motion,
+        "target_property": clean_prop,
+        "axis": clean_axis,
+        "speed": float(speed),
+    }
+    if expression and str(expression).strip():
+        payload["expression"] = str(expression).strip()
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
