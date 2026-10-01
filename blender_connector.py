@@ -1122,3 +1122,69 @@ def request_compositor_setup(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_local_ai_mesh(
+    image_path: str,
+    production_ready: bool = True,
+    target_faces: int = 10000,
+    texture_size: int = 2048,
+    voxel_size: float = 0.02,
+    object_name: str = "AI_Mesh_Production",
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 60.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na spuštění produkční lokální Image-to-3D pipeline
+    (action: generate_local_ai_mesh).
+
+    Args:
+        image_path: Cesta ke zdrojovému 2D obrázku.
+        production_ready: Pokud je True, spustí Auto-Retopology (Voxel Remesh + QuadriFlow),
+                          Smart UV unwrapping a pečení Vertex Colors do PBR textury.
+        target_faces: Cílový počet polygonů pro retopologii (např. 10 000).
+        texture_size: Rozlišení upečené PBR difúzní textury (např. 2048).
+        voxel_size: Velikost voxelu pro sjednocení děr a uzavření topologie.
+        object_name: Název výsledného 3D objektu.
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách (výchozí 60s pro výpočetně náročnější operace).
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "generate_local_ai_mesh",
+        "object_name": str,
+        "production_ready": bool,
+        "raw_vertex_count": int,
+        "raw_face_count": int,
+        "retopo_vertex_count": int,
+        "retopo_face_count": int,
+        "quad_percentage": float,
+        "triangle_percentage": float,
+        "reduction_ratio": float,
+        "texture_name": str,
+        "texture_resolution": list[int],
+        "material_name": str,
+        "uv_unwrapped": bool,
+        "pbr_ready": bool,
+        "retopology_method": str,
+    }
+    """
+    payload: dict[str, Any] = {
+        "action": "generate_local_ai_mesh",
+        "image_path": str(image_path),
+        "production_ready": bool(production_ready),
+        "target_faces": int(target_faces),
+        "texture_size": int(texture_size),
+        "voxel_size": float(voxel_size),
+        "object_name": str(object_name),
+    }
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+

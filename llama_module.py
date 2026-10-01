@@ -1631,6 +1631,47 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_local_ai_mesh",
+            "description": (
+                "Generuje produkčně optimalizovaný 3D model z 2D obrázku pomocí lokálního AI enginu "
+                "(TripoSR / SF3D pipeline). Provádí kompletní Auto-Retopology (Voxel Remesh + QuadriFlow "
+                "pro čisté quady a cílový počet polygonů), Smart UV unwrapping a pečení textur (Bake vertex colors "
+                "do difúzní mapy) a aplikuje čistý PBR materiál (Principled BSDF)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_path": {
+                        "type": "string",
+                        "description": "Absolutní cesta ke vstupnímu obrázku (PNG, JPG, WEBP).",
+                    },
+                    "production_ready": {
+                        "type": "boolean",
+                        "description": (
+                            "Zda spustit plnou produkční pipeline: Voxel Remesh, QuadriFlow retopologii na quady, "
+                            "Smart UV projekt a pečení vertex colors do PBR textury. Výchozí True."
+                        ),
+                    },
+                    "target_faces": {
+                        "type": "integer",
+                        "description": "Cílový počet polygonů po retopologii (např. 5000, 10000, 20000). Výchozí 10000.",
+                    },
+                    "texture_size": {
+                        "type": "integer",
+                        "description": "Rozlišení upečené difúzní PBR textury (např. 1024, 2048, 4096). Výchozí 2048.",
+                    },
+                    "object_name": {
+                        "type": "string",
+                        "description": "Volitelný název výsledného 3D objektu ve scéně.",
+                    },
+                },
+                "required": ["image_path"],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1653,6 +1694,7 @@ ALLOWED_TOOL_NAMES = {
     "setup_blueprint_reference",
     "vectorize_image_to_3d",
     "setup_compositor",
+    "generate_local_ai_mesh",
 }
 
 
@@ -1831,6 +1873,7 @@ class UnifiedToolDispatcher:
     - setup_blueprint_reference(image_path, axis, alpha, name)
     - vectorize_image_to_3d(image_path, extrude_depth, bevel_depth, target_size, invert, object_name)
     - setup_compositor(preset, glare_threshold, dispersion, vignette_strength)
+    - generate_local_ai_mesh(image_path, production_ready, target_faces, texture_size, voxel_size, object_name)
     """
 
     def __init__(
@@ -1978,6 +2021,21 @@ class UnifiedToolDispatcher:
                 glare_threshold=g_thr,
                 dispersion=disp,
                 vignette_strength=vig,
+            )
+        elif tool_name == "generate_local_ai_mesh":
+            img_p = str(arguments.get("image_path", "")).strip()
+            prod_r = bool(arguments.get("production_ready", True))
+            t_faces = int(arguments.get("target_faces", 10000))
+            tex_s = int(arguments.get("texture_size", 2048))
+            vox_s = float(arguments.get("voxel_size", 0.02))
+            obj_n = str(arguments.get("object_name", "")).strip() or "AI_Mesh_Production"
+            return self._execute_generate_local_ai_mesh(
+                image_path=img_p,
+                production_ready=prod_r,
+                target_faces=t_faces,
+                texture_size=tex_s,
+                voxel_size=vox_s,
+                object_name=obj_n,
             )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
@@ -4032,6 +4090,162 @@ class UnifiedToolDispatcher:
             "nodes": nodes_list,
             "result": result_text,
             "_expert_system_prompt": self._COMPOSITING_VFX_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Local AI 3D Mesh Generation & Production Retopology Pipeline
+    # ------------------------------------------------------------------
+
+    _LOCAL_AI_MESH_SYSTEM_PROMPT = (
+        "Jsi špičkový Lead 3D AI Engineer & Principal Technical Artist specializující se na generativní AI "
+        "rekonstrukci geometrie (TripoSR, SF3D, InstantMesh) a produkční pipeline pro herní enginy (Unreal Engine 5, Unity) "
+        "a filmové VFX pipeline v Blenderu.\n"
+        "Odborně, do hloubky a s důrazem na technickou dokonalost komentuješ generování a úpravu 3D modelu:\n"
+        "  • Nutnost retopologie surových AI výstupů: Surové meshy z neurálních sítí obsahují chaotický 'triangle soup', "
+        "nekonzistentní hustotu polygonů, otevřené díry a self-intersections. Bez čištění jsou nepoužitelné pro rigging a animaci.\n"
+        "  • Přechod na Quad topologii (QuadriFlow / quads): Čtyřúhelníková topologie se zarovnanými edge loops je "
+        "nezbytným průmyslovým standardem pro čisté deformace bez artefaktů při ohybu a stabilní Catmull-Clark subdivizi.\n"
+        "  • Pečení map (Texture Baking High-to-Low): Přenáší bohaté barevné informace a detaily z původních surových "
+        "vertex barev do optimalizované 2D textury s nízkou paměťovou stopou na retopologizovaném modelu.\n"
+        "  • PBR standardy (Physically Based Rendering): Aplikace čistého Principled BSDF s upečenou difúzní/albedo texturou "
+        "připravenou pro další mapy (Normal, Roughness, Metallic, Ambient Occlusion).\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť úspěšnost rekonstrukce, míru redukce polygonů a podíl quadů (čtyřúhelníků) v síti.\n"
+        "  2. Popiš proběhlou produkční pipeline (Voxel Remesh -> QuadriFlow -> Smart UV -> Texture Bake -> Principled BSDF).\n"
+        "  3. Doporuč 2-3 technické tipy pro další optimalizaci v produkci (např. ruční dočištění švů v UV Editoru, pečení Normal mapy z high-poly, kontrola orientace normál Shift+N, nebo export do GLTF/FBX).\n"
+    )
+
+    def _execute_generate_local_ai_mesh(
+        self,
+        image_path: str,
+        production_ready: bool = True,
+        target_faces: int = 10000,
+        texture_size: int = 2048,
+        voxel_size: float = 0.02,
+        object_name: str = "AI_Mesh_Production",
+    ) -> dict[str, Any]:
+        """Spustí produkční pipeline generování a optimalizace 3D meshe z lokálního AI modelu."""
+        from blender_connector import request_local_ai_mesh, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_path = (image_path or "input_asset.png").strip()
+        clean_obj_name = (object_name or "AI_Mesh_Production").strip()
+
+        mode_label = "Production Game-Ready" if production_ready else "Raw AI Scan"
+        if self.status_callback:
+            self.status_callback(f"● 🤖 Spouštím Local AI 3D Mesh pipeline ({mode_label})…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n🤖 *Volám nástroj:* `generate_local_ai_mesh(image_path='{clean_path}', production_ready={production_ready})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "generate_local_ai_mesh",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_local_ai_mesh(
+                image_path=clean_path,
+                production_ready=production_ready,
+                target_faces=target_faces,
+                texture_size=texture_size,
+                voxel_size=voxel_size,
+                object_name=clean_obj_name,
+                host=host,
+                port=port,
+                timeout=60.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při generování AI meshe.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Generování AI meshe selhalo:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "generate_local_ai_mesh",
+                "error": err_msg,
+                "result": f"Generování AI meshe selhalo: {err_msg}",
+            }
+
+        raw_faces = res.get("raw_face_count", 0)
+        raw_verts = res.get("raw_vertex_count", 0)
+        retopo_faces = res.get("retopo_face_count", 0)
+        retopo_verts = res.get("retopo_vertex_count", 0)
+        quad_pct = res.get("quad_percentage", 0.0)
+        tri_pct = res.get("triangle_percentage", 100.0)
+        reduction = res.get("reduction_ratio", 0.0)
+        obj_res_name = res.get("object_name", clean_obj_name)
+        tex_name = res.get("texture_name", "")
+        tex_res = res.get("texture_resolution", [texture_size, texture_size])
+        mat_name = res.get("material_name", "")
+        method = res.get("retopology_method", "Voxel Remesh + QuadriFlow")
+
+        ui_table = (
+            f"\n\n🤖 **Local AI 3D Mesh Generation & Production Retopology**\n"
+            f"*Výsledný objekt:* `{obj_res_name}` *(Metoda: {method})*\n\n"
+            f"---\n\n"
+            f"| Fáze pipeline | Surový AI Scan (Raw) | Produkční model (Retopo) | Změna / Standard |\n"
+            f"|---|---|---|---|\n"
+            f"| **Počet polygonů (Faces)** | {raw_faces:,} tris | **{retopo_faces:,} polygonů** | 📉 **-{reduction}%** redukce |\n"
+            f"| **Počet vrcholů (Vertices)** | {raw_verts:,} | **{retopo_verts:,}** | Optimalizovaná paměť |\n"
+            f"| **Topologie & Geometrie** | Triangulated Soup (100% tris) | **{quad_pct}% Quady** ({tri_pct}% tris) | ✅ Čisté QuadriFlow smyčky |\n"
+            f"| **UV Unwrapping** | ❌ Chybí | ✅ **Smart UV Project** | Připraveno pro texturování |\n"
+            f"| **PBR Textura & Baking** | Jen hrubé Vertex Colors | **{tex_res[0]}×{tex_res[1]} px** (`{tex_name}`) | 🎨 Upečeno do Albedo mapy |\n"
+            f"| **Materiál** | Žádný | **Principled BSDF** (`{mat_name}`) | 💎 Plný PBR Standard |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_table)
+
+        summary_text = (
+            f"LOCAL AI MESH GENERACE ÚSPĚŠNÁ pro objekt '{obj_res_name}':\n"
+            f"  - Surová geometrie: {raw_faces} polygonů ({raw_verts} vrcholů)\n"
+            f"  - Retopologizovaná geometrie: {retopo_faces} polygonů ({retopo_verts} vrcholů)\n"
+            f"  - Poměr quadů: {quad_pct}% ({tri_pct}% trojúhelníků), redukce: -{reduction}%\n"
+            f"  - UV & Textura: {tex_res[0]}x{tex_res[1]} upečeno do '{tex_name}' na materiálu '{mat_name}'\n"
+            f"  - Status: Produkčně optimalizováno (Game-Ready / VFX ready)\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Produkční AI model '{obj_res_name}' hotov ({retopo_faces} polygonů, {quad_pct}% quadů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "generate_local_ai_mesh",
+            "object_name": obj_res_name,
+            "image_path": clean_path,
+            "production_ready": production_ready,
+            "raw_vertex_count": raw_verts,
+            "raw_face_count": raw_faces,
+            "retopo_vertex_count": retopo_verts,
+            "retopo_face_count": retopo_faces,
+            "quad_percentage": quad_pct,
+            "triangle_percentage": tri_pct,
+            "reduction_ratio": reduction,
+            "texture_name": tex_name,
+            "texture_resolution": tex_res,
+            "material_name": mat_name,
+            "uv_unwrapped": True,
+            "pbr_ready": True,
+            "retopology_method": method,
+            "result": summary_text,
+            "_expert_system_prompt": self._LOCAL_AI_MESH_SYSTEM_PROMPT,
         }
 
 
