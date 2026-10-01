@@ -2389,7 +2389,326 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 13. Vykonání Python kódu (action == 'execute')
+        # 13. Nastavení referenčního blueprint obrázku (action == 'setup_blueprint_reference')
+        if action == "setup_blueprint_reference":
+            try:
+                img_path = str(message.get("image_path", "")).strip()
+                if not img_path:
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "Cesta k referenčnímu obrázku (image_path) nebyla zadána.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                if not os.path.exists(img_path):
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": f"Soubor referenčního obrázku nebyl nalezen: '{img_path}'.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                axis_in = str(message.get("axis", "FRONT")).upper().strip()
+                alpha_val = float(message.get("alpha", 0.5))
+                obj_name_req = message.get("name") or f"Blueprint_{axis_in}"
+
+                # 1. Načtení obrázku do Blenderu
+                bl_img = bpy.data.images.load(img_path, check_existing=True)
+
+                # 2. Vytvoření EMPTY objektu typu IMAGE
+                empty_obj = bpy.data.objects.new(name=obj_name_req, object_data=None)
+                empty_obj.empty_display_type = 'IMAGE'
+                empty_obj.data = bl_img
+
+                # 3. Zarovnání podle osy / pohledu a offset do pozadí
+                half_pi = 1.5707963267948966
+                offset_dist = 0.05
+
+                if axis_in in ("FRONT", "FRONT_VIEW", "PŘEDNÍ"):
+                    empty_obj.rotation_euler = (half_pi, 0.0, 0.0)
+                    empty_obj.location = (0.0, offset_dist, 0.0)
+                    axis_clean = "FRONT"
+                elif axis_in in ("TOP", "TOP_VIEW", "HORNÍ"):
+                    empty_obj.rotation_euler = (0.0, 0.0, 0.0)
+                    empty_obj.location = (0.0, 0.0, -offset_dist)
+                    axis_clean = "TOP"
+                elif axis_in in ("RIGHT", "SIDE", "PRAVÝ", "BOČNÍ"):
+                    empty_obj.rotation_euler = (half_pi, 0.0, half_pi)
+                    empty_obj.location = (-offset_dist, 0.0, 0.0)
+                    axis_clean = "RIGHT"
+                elif axis_in in ("BACK", "ZADNÍ"):
+                    empty_obj.rotation_euler = (half_pi, 0.0, 3.14159265)
+                    empty_obj.location = (0.0, -offset_dist, 0.0)
+                    axis_clean = "BACK"
+                else:
+                    empty_obj.rotation_euler = (half_pi, 0.0, 0.0)
+                    empty_obj.location = (0.0, offset_dist, 0.0)
+                    axis_clean = "FRONT"
+
+                # 4. Poloprůhlednost (50 % alpha)
+                try:
+                    empty_obj.use_empty_image_alpha = True
+                    empty_obj.color[3] = alpha_val
+                except Exception:
+                    pass
+                if hasattr(empty_obj, "empty_image_opacity"):
+                    try:
+                        empty_obj.empty_image_opacity = alpha_val
+                    except Exception:
+                        pass
+
+                # Zobrazení z obou stran
+                if hasattr(empty_obj, "empty_image_side"):
+                    try:
+                        empty_obj.empty_image_side = 'DOUBLE'
+                    except Exception:
+                        pass
+
+                # 5. Uzamknout objekt proti nechtěnému označení / kliknutí
+                empty_obj.hide_select = True
+
+                # 6. Propojení se scénou
+                bpy.context.collection.objects.link(empty_obj)
+
+                # Překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "setup_blueprint_reference",
+                    "object_name": empty_obj.name,
+                    "image_path": img_path,
+                    "axis": axis_clean,
+                    "alpha": alpha_val,
+                    "location": [round(c, 4) for c in empty_obj.location],
+                    "rotation_euler": [round(c, 4) for c in empty_obj.rotation_euler],
+                    "hide_select": True,
+                }
+                print(f"✅ [AI-Blender] Referenční blueprint '{empty_obj.name}' ({axis_clean}) vytvořen z '{img_path}'.")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při setup_blueprint_reference: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 14. Vektorizace 2D obrázku na 3D MESH (action == 'vectorize_image_to_3d')
+        if action == "vectorize_image_to_3d":
+            try:
+                img_path = str(message.get("image_path", "")).strip()
+                if not img_path:
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "Cesta k 2D obrázku (image_path) nebyla zadána.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                if not os.path.exists(img_path):
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": f"Soubor obrázku nebyl nalezen: '{img_path}'.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                extrude_d = float(message.get("extrude_depth", 0.02))
+                bevel_d = float(message.get("bevel_depth", 0.002))
+                target_sz = float(message.get("target_size", 1.0))
+                invert_flag = bool(message.get("invert", False))
+                obj_name_req = message.get("object_name") or "Vectorized_3D_Model"
+
+                # 1. Extrakce kontur z obrázku
+                polygons = []
+                img_w, img_h = 100, 100
+
+                # Zkusíme nejprve OpenCV (cv2)
+                has_cv2 = False
+                try:
+                    import cv2
+                    has_cv2 = True
+                    cv_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                    if cv_img is not None:
+                        img_h, img_w = cv_img.shape
+                        mode = cv2.THRESH_BINARY if invert_flag else cv2.THRESH_BINARY_INV
+                        _, thresh = cv2.threshold(cv_img, 0, 255, mode + cv2.THRESH_OTSU)
+                        contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                        for cnt in contours:
+                            if cv2.contourArea(cnt) >= 16:
+                                eps = 0.005 * cv2.arcLength(cnt, True)
+                                approx = cv2.approxPolyDP(cnt, eps, closed=True)
+                                pts = [(float(pt[0][0]), float(pt[0][1])) for pt in approx]
+                                if len(pts) >= 3:
+                                    polygons.append(pts)
+                except Exception:
+                    has_cv2 = False
+
+                # Fallback: PIL + numpy trasování
+                if not polygons:
+                    try:
+                        from PIL import Image
+                        import numpy as np
+                        pil_img = Image.open(img_path).convert('L')
+                        img_w, img_h = pil_img.size
+                        arr = np.array(pil_img)
+                        mid = float(np.mean(arr))
+                        bin_mask = (arr < mid) if not invert_flag else (arr >= mid)
+
+                        h, w = bin_mask.shape
+                        visited = np.zeros_like(bin_mask, dtype=bool)
+                        neighbors = [
+                            (-1, 0), (-1, 1), (0, 1), (1, 1),
+                            (1, 0), (1, -1), (0, -1), (-1, -1)
+                        ]
+
+                        for r in range(1, h - 1, 2):
+                            for c in range(1, w - 1, 2):
+                                if bin_mask[r, c] and not visited[r, c]:
+                                    if not (bin_mask[r-1, c] and bin_mask[r+1, c] and bin_mask[r, c-1] and bin_mask[r, c+1]):
+                                        start = (r, c)
+                                        curr = start
+                                        b_dir = 6
+                                        loop = [start]
+                                        visited[r, c] = True
+                                        steps = 0
+                                        while steps < 2000:
+                                            steps += 1
+                                            found = False
+                                            for i in range(8):
+                                                idx = (b_dir + 1 + i) % 8
+                                                nr = curr[0] + neighbors[idx][0]
+                                                nc = curr[1] + neighbors[idx][1]
+                                                if 0 <= nr < h and 0 <= nc < w and bin_mask[nr, nc]:
+                                                    curr = (nr, nc)
+                                                    b_dir = (idx + 4) % 8
+                                                    visited[curr[0], curr[1]] = True
+                                                    found = True
+                                                    break
+                                            if not found or curr == start:
+                                                break
+                                            loop.append(curr)
+
+                                        if len(loop) >= 12:
+                                            step_s = max(1, len(loop) // 60)
+                                            sampled = [(float(pt[1]), float(pt[0])) for pt in loop[::step_s]]
+                                            if len(sampled) >= 3:
+                                                polygons.append(sampled)
+                    except Exception as exc_pil:
+                        print(f"⚠️ [AI-Blender] PIL fallback contour tracing varování: {exc_pil}")
+
+                if not polygons:
+                    polygons = [[
+                        (0.0, 0.0), (float(img_w), 0.0),
+                        (float(img_w), float(img_h)), (0.0, float(img_h))
+                    ]]
+
+                # 2. Vygenerování SVG dočasného souboru
+                svg_lines = [
+                    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {img_w} {img_h}">'
+                ]
+                for poly in polygons:
+                    d_path_str = f"M {poly[0][0]:.2f} {poly[0][1]:.2f} " + " ".join(
+                        f"L {p[0]:.2f} {p[1]:.2f}" for p in poly[1:]
+                    ) + " Z"
+                    svg_lines.append(f'  <path d="{d_path_str}" fill="black" />')
+                svg_lines.append('</svg>')
+                svg_content = "\n".join(svg_lines)
+
+                import tempfile
+                svg_temp = os.path.join(tempfile.gettempdir(), f"vectorized_{os.path.basename(img_path)}.svg")
+                try:
+                    with open(svg_temp, "w", encoding="utf-8") as f_svg:
+                        f_svg.write(svg_content)
+                except Exception:
+                    svg_temp = "/tmp/vectorized_3d_temp.svg"
+
+                # 3. Vytvoření CURVE objektu v Blenderu
+                curve_data = bpy.data.curves.new(name=f"{obj_name_req}_Curve", type='CURVE')
+                curve_data.dimensions = '2D'
+                curve_data.extrude = extrude_d
+                curve_data.bevel_depth = bevel_d
+                curve_data.bevel_resolution = 2
+
+                max_dim = max(img_w, img_h, 1.0)
+                scale_f = target_sz / max_dim
+
+                for poly in polygons:
+                    spline = curve_data.splines.new('POLY')
+                    spline.points.add(len(poly) - 1)
+                    for i, (px, py) in enumerate(poly):
+                        bx = (px - img_w / 2.0) * scale_f
+                        by = -(py - img_h / 2.0) * scale_f
+                        spline.points[i].co = (bx, by, 0.0, 1.0)
+                    spline.use_cyclic_u = True
+
+                curve_obj = bpy.data.objects.new(obj_name_req, curve_data)
+                bpy.context.collection.objects.link(curve_obj)
+
+                # 4. Označení objektu a převod CURVE -> MESH
+                for o in bpy.context.selected_objects:
+                    o.select_set(False)
+                bpy.context.view_layer.objects.active = curve_obj
+                curve_obj.select_set(True)
+
+                bpy.ops.object.convert(target='MESH')
+
+                mesh_data = curve_obj.data
+                v_count = len(mesh_data.vertices) if mesh_data else 0
+                p_count = len(mesh_data.polygons) if mesh_data else 0
+                dims = [round(curve_obj.dimensions.x, 4), round(curve_obj.dimensions.y, 4), round(curve_obj.dimensions.z, 4)]
+
+                # Překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "vectorize_image_to_3d",
+                    "object_name": curve_obj.name,
+                    "image_path": img_path,
+                    "svg_path": svg_temp,
+                    "contours_count": len(polygons),
+                    "vertex_count": v_count,
+                    "polygon_count": p_count,
+                    "extrude_depth": extrude_d,
+                    "bevel_depth": bevel_d,
+                    "dimensions": dims,
+                }
+                print(f"✅ [AI-Blender] Vektorizace '{img_path}' na 3D MESH '{curve_obj.name}' úspěšná ({v_count} vrcholů, {p_count} polygonů).")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při vectorize_image_to_3d: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 15. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

@@ -953,3 +953,117 @@ def request_motion_nodes(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_blueprint_setup(
+    image_path: str,
+    axis: str = "FRONT",
+    alpha: float = 0.5,
+    name: str | None = None,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na nastavení referenčního blueprint obrázku
+    ve zvoleném pohledu (action: setup_blueprint_reference).
+
+    Args:
+        image_path: Cesta k referenčnímu obrázku (PNG, JPG apod.).
+        axis: Pohled/osa pro zarovnání ("FRONT", "TOP", "RIGHT", "BACK").
+        alpha: Průhlednost (0.0 až 1.0, výchozí 0.5).
+        name: Volitelný název Empty objektu.
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "setup_blueprint_reference",
+        "object_name": str,
+        "image_path": str,
+        "axis": str,
+        "alpha": float,
+        "location": list[float],
+        "rotation_euler": list[float],
+        "hide_select": True,
+    }
+    """
+    clean_path = str(image_path or "").strip()
+    clean_axis = (axis or "FRONT").upper().strip()
+
+    payload: dict[str, Any] = {
+        "action": "setup_blueprint_reference",
+        "image_path": clean_path,
+        "axis": clean_axis,
+        "alpha": float(alpha),
+    }
+    if name and str(name).strip():
+        payload["name"] = str(name).strip()
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_vectorize_to_3d(
+    image_path: str,
+    extrude_depth: float = 0.02,
+    bevel_depth: float = 0.002,
+    target_size: float = 1.0,
+    invert: bool = False,
+    object_name: str | None = None,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vektorizaci 2D obrázku (loga, ikony, siluety)
+    a jeho převedení na plnohodnotný 3D MESH s extruzí a zkosením (action: vectorize_image_to_3d).
+
+    Args:
+        image_path: Cesta k 2D obrázku.
+        extrude_depth: Hloubka vytažení / tloušťka v metrech (výchozí 0.02 = 20 mm).
+        bevel_depth: Hloubka sražení hran v metrech (výchozí 0.002 = 2 mm).
+        target_size: Cílová maximální velikost modelu v metrech (výchozí 1.0 m).
+        invert: Zda invertovat popředí/pozadí.
+        object_name: Volitelný název výsledného objektu.
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "vectorize_image_to_3d",
+        "object_name": str,
+        "image_path": str,
+        "svg_path": str,
+        "contours_count": int,
+        "vertex_count": int,
+        "polygon_count": int,
+        "extrude_depth": float,
+        "bevel_depth": float,
+        "dimensions": list[float],
+    }
+    """
+    clean_path = str(image_path or "").strip()
+    payload: dict[str, Any] = {
+        "action": "vectorize_image_to_3d",
+        "image_path": clean_path,
+        "extrude_depth": float(extrude_depth),
+        "bevel_depth": float(bevel_depth),
+        "target_size": float(target_size),
+        "invert": bool(invert),
+    }
+    if object_name and str(object_name).strip():
+        payload["object_name"] = str(object_name).strip()
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )

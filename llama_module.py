@@ -22,8 +22,12 @@ ANALYTICAL_PRESETS = {
 
 DEFAULT_ANALYTICAL_PRESET = "Vypnuto (Standardní chat)"
 DEFAULT_SYSTEM_PROMPT = (
-    "Jsi užitečná a zdvořilá AI asistentka. "
-    "Odpovídej stručně a k věci v češtině."
+    "Jsi užitečná a zdvořilá AI asistentka s expertními schopnostmi v 3D grafice a CAD modelování. "
+    "Odpovídej stručně a k věci v češtině.\n"
+    "KOGNITIVNÍ PARAMETRIZACE (VISION AI):\n"
+    "Pokud uživatel pošle fotku mechanického dílu (např. krabičky, krytu, ozubeného kola) s požadavkem na vymodelování, "
+    "vizuálně obrázek zanalyzuj, odhadni poměry a reálné rozměry v mm, a následně rovnou zavolej náš existující nástroj "
+    "generate_parametric_model s těmito odhadnutými parametry."
 )
 
 
@@ -1508,6 +1512,86 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "setup_blueprint_reference",
+            "description": (
+                "Nastaví referenční technický nákres nebo blueprint obrázek do 3D viewportu Blenderu. "
+                "Vytvoří Empty objekt (typ Image), načte obrázek, zarovná ho do zvoleného pohledu "
+                "('FRONT', 'TOP', 'RIGHT', 'BACK'), posune mírně do pozadí, nastaví 50% průhlednost "
+                "a uzamkne proti nechtěnému kliknutí (hide_select=True). "
+                "Použij při požadavcích jako 'nastav blueprint', 'vlož referenční obrázek', "
+                "'připrav podklad pro modelování', 'vlož nákres zepředu/shora', 'setup blueprint reference'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_path": {
+                        "type": "string",
+                        "description": "Cesta k souboru referenčního obrázku (PNG, JPG apod.).",
+                    },
+                    "axis": {
+                        "type": "string",
+                        "enum": ["FRONT", "TOP", "RIGHT", "BACK"],
+                        "description": "Pohled pro zarovnání: 'FRONT' (přední), 'TOP' (shora), 'RIGHT' (zprava), 'BACK' (zadní). Výchozí: 'FRONT'.",
+                    },
+                    "alpha": {
+                        "type": "number",
+                        "description": "Průhlednost obrázku v rozsahu 0.0 až 1.0 (výchozí 0.5 = 50 %).",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Volitelný název pro vytvořený referenční objekt v Blenderu.",
+                    },
+                },
+                "required": ["image_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vectorize_image_to_3d",
+            "description": (
+                "Automaticky vektorizuje 2D obrázek (např. logo, ikonu, siluetu, emblém) na 3D MESH geometrii v Blenderu. "
+                "Detekuje kontury tvaru, vygeneruje vektorovou křivku (CURVE), aplikuje vytažení do prostoru (Extrude) "
+                "a sražení hran (Bevel) a převede finální výsledek na editovatelný MESH objekt. "
+                "Použij při požadavcích jako 'převeď logo do 3D', 'vytvoř 3D nápis nebo ikonu z obrázku', "
+                "'vektorizuj obrázek', 'udělej z 2D obrázku 3D model', 'extruduj logo z PNG'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_path": {
+                        "type": "string",
+                        "description": "Cesta k 2D obrázku s logem nebo symbolem (PNG, JPG, BMP).",
+                    },
+                    "extrude_depth": {
+                        "type": "number",
+                        "description": "Hloubka vytažení / tloušťka 3D modelu v metrech (např. 0.02 = 20 mm). Výchozí: 0.02.",
+                    },
+                    "bevel_depth": {
+                        "type": "number",
+                        "description": "Hloubka zkosení hran (Bevel) v metrech (např. 0.002 = 2 mm). Výchozí: 0.002.",
+                    },
+                    "target_size": {
+                        "type": "number",
+                        "description": "Cílová maximální velikost modelu v metrech (výchozí: 1.0 m).",
+                    },
+                    "invert": {
+                        "type": "boolean",
+                        "description": "Zda invertovat detekci popředí a pozadí (True = světlý motiv na tmavém pozadí). Výchozí: False.",
+                    },
+                    "object_name": {
+                        "type": "string",
+                        "description": "Volitelný název pro výsledný 3D mesh objekt.",
+                    },
+                },
+                "required": ["image_path"],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1527,6 +1611,8 @@ ALLOWED_TOOL_NAMES = {
     "create_geometry_nodes_bridge",
     "apply_fcurve_animation",
     "create_motion_node_setup",
+    "setup_blueprint_reference",
+    "vectorize_image_to_3d",
 }
 
 
@@ -1564,6 +1650,10 @@ def build_tool_use_prompt(tools: list[dict[str, Any]] | None = None) -> str:
         "3. Pokud dotaz uživatele NEVYŽADUJE žádný nástroj (běžný rozhovor, obecné vysvětlení teorie, "
         "pozdrav, matematika, psaní textu bez externích dat), odpověz PŘÍMO přirozeným jazykem bez jakéhokoliv JSONu.\n"
         "4. Pokud voláš nástroj, odpověz VÝHRADNĚ JSON objektem pro volání nástroje a nepřidávej žádný zbytečný úvodní ani závěrečný text.\n"
+        "5. KOGNITIVNÍ VIZUÁLNÍ PARAMETRIZACE (Image-to-3D Vision):\n"
+        "Pokud uživatel pošle fotku mechanického dílu (např. krabičky, krytu, ozubeného kola) s požadavkem na vymodelování, "
+        "vizuálně obrázek zanalyzuj, odhadni poměry a reálné rozměry v mm, a následně rovnou zavolej náš existující nástroj "
+        "generate_parametric_model s těmito odhadnutými parametry.\n"
     )
 
 
@@ -1698,6 +1788,8 @@ class UnifiedToolDispatcher:
     - create_geometry_nodes_bridge(setup_type, node_group_name)
     - apply_fcurve_animation(property_name, interpolation, modifier_type, keyframes, start_frame, end_frame)
     - create_motion_node_setup(motion_type, target_property, axis, speed, expression)
+    - setup_blueprint_reference(image_path, axis, alpha, name)
+    - vectorize_image_to_3d(image_path, extrude_depth, bevel_depth, target_size, invert, object_name)
     """
 
     def __init__(
@@ -1808,6 +1900,32 @@ class UnifiedToolDispatcher:
                 axis=ax,
                 speed=spd,
                 expression=expr,
+            )
+        elif tool_name == "setup_blueprint_reference":
+            img_p = str(arguments.get("image_path", "")).strip()
+            ax = str(arguments.get("axis", "FRONT")).strip()
+            al = float(arguments.get("alpha", 0.5))
+            nm = arguments.get("name")
+            return self._execute_setup_blueprint_reference(
+                image_path=img_p,
+                axis=ax,
+                alpha=al,
+                name=nm,
+            )
+        elif tool_name == "vectorize_image_to_3d":
+            img_p = str(arguments.get("image_path", "")).strip()
+            ext = float(arguments.get("extrude_depth", 0.02))
+            bev = float(arguments.get("bevel_depth", 0.002))
+            t_sz = float(arguments.get("target_size", 1.0))
+            inv = bool(arguments.get("invert", False))
+            obj_n = arguments.get("object_name")
+            return self._execute_vectorize_image_to_3d(
+                image_path=img_p,
+                extrude_depth=ext,
+                bevel_depth=bev,
+                target_size=t_sz,
+                invert=inv,
+                object_name=obj_n,
             )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
@@ -3487,6 +3605,248 @@ class UnifiedToolDispatcher:
             "speed": speed,
             "result": result_text,
             "_expert_system_prompt": self._ANIMATION_MOTION_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Image-to-3D Bridge
+    # ------------------------------------------------------------------
+
+    _IMAGE_TO_3D_SYSTEM_PROMPT = (
+        "Jsi špičkový 3D Concept Artist, Technical Modeler a expert na CAD rekonstrukci z 2D podkladů v Blenderu. "
+        "Odborně, technicky a s citem pro přesnost komentuješ import a vektorizaci 2D podkladů s důrazem na:\n"
+        "  • Práci s technickými výkresy a blueprinty (význam ortografických pohledů FRONT/TOP/RIGHT, poloprůhlednost pro tracing, uzamčení vrstvy proti náhodnému posunu)\n"
+        "  • Vektorizaci křivek a 3D geometrii (převod rastrových kontur na beziérové/poly křivky, tloušťka extruze, sražení hran / Bevel pro realistické odlesky světla)\n"
+        "  • Topologickou čistotu (převod z 2D Curve na 3D Mesh, kontrola hustoty n-gonů na lícních plochách, následný remesh nebo quadify pro subsurf modelování)\n"
+        "  • Kognitivní parametrizaci (odhad reálných rozměrů z poměrů stran, měřítko a příprava pro 3D tisk nebo animaci).\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť výsledek (nastavený blueprint v pohledu nebo vygenerovaný 3D mesh z loga/obrázku)\n"
+        "  2. Uveď klíčové rozměry a parametry (extrude, bevel, počet polygonů/vrcholů)\n"
+        "  3. Doporuč další krok (např. přepnutí do ortografického pohledu Numpad 1/7/3 pro obkreslování, nebo aplikaci materiálů/Remesh modifikátoru).\n"
+    )
+
+    def _execute_setup_blueprint_reference(
+        self,
+        image_path: str,
+        axis: str = "FRONT",
+        alpha: float = 0.5,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Nastaví referenční blueprint obrázek do 3D scény v Blenderu."""
+        from blender_connector import request_blueprint_setup, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_path = str(image_path or "").strip()
+        clean_axis = (axis or "FRONT").upper().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● 📐 Vkládám blueprint referenci ({clean_axis})…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n📐 *Volám nástroj:* `setup_blueprint_reference(path='{clean_path}', axis='{clean_axis}', alpha={alpha})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "setup_blueprint_reference",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_blueprint_setup(
+                image_path=clean_path,
+                axis=clean_axis,
+                alpha=alpha,
+                name=name,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vkládání blueprintu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Vložení blueprintu selhalo:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "setup_blueprint_reference",
+                "error": err_msg,
+                "result": f"Vložení blueprintu selhalo: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        loc = res.get("location", [0, 0, 0])
+        rot = res.get("rotation_euler", [0, 0, 0])
+        alpha_res = res.get("alpha", alpha)
+
+        ui_report = (
+            f"\n\n📐 **Blueprint Reference Setup — `{obj_name}`**\n"
+            f"*Referenční technická podložka v pohledu `{clean_axis}`*\n\n"
+            f"---\n\n"
+            f"| Parametr blueprintu | Hodnota |\n|---|---|\n"
+            f"| Název objektu | `{obj_name}` (Empty Image) |\n"
+            f"| Orientace / Pohled | **{clean_axis}** |\n"
+            f"| Průhlednost (Alpha) | **{int(alpha_res * 100)} %** |\n"
+            f"| Ochrana proti kliknutí | 🔒 `hide_select = True` (uzamčeno) |\n"
+            f"| Pozice (Location) | `[{loc[0]}, {loc[1]}, {loc[2]}]` |\n"
+            f"| Soubor obrázku | `{clean_path}` |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"BLUEPRINT REFERENCE '{obj_name}' vytvořena pro pohled {clean_axis}:\n"
+            f"  - Soubor: '{clean_path}'\n"
+            f"  - Průhlednost: {int(alpha_res * 100)}%\n"
+            f"  - Uzamčeno: Ano (chráněno proti nechtěnému označení)\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Blueprint '{clean_axis}' vložen do scény jako '{obj_name}'"
+            )
+
+        return {
+            "status": "success",
+            "tool": "setup_blueprint_reference",
+            "object_name": obj_name,
+            "image_path": clean_path,
+            "axis": clean_axis,
+            "alpha": alpha_res,
+            "location": loc,
+            "rotation_euler": rot,
+            "result": result_text,
+            "_expert_system_prompt": self._IMAGE_TO_3D_SYSTEM_PROMPT,
+        }
+
+    def _execute_vectorize_image_to_3d(
+        self,
+        image_path: str,
+        extrude_depth: float = 0.02,
+        bevel_depth: float = 0.002,
+        target_size: float = 1.0,
+        invert: bool = False,
+        object_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Vektorizuje 2D obrázek a vytvoří plnohodnotný 3D mesh v Blenderu."""
+        from blender_connector import request_vectorize_to_3d, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_path = str(image_path or "").strip()
+
+        if self.status_callback:
+            self.status_callback(f"● 🖼️ Vektorizuji obrázek do 3D MESH…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n🖼️ *Volám nástroj:* `vectorize_image_to_3d(path='{clean_path}', extrude={extrude_depth}, bevel={bevel_depth})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "vectorize_image_to_3d",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_vectorize_to_3d(
+                image_path=clean_path,
+                extrude_depth=extrude_depth,
+                bevel_depth=bevel_depth,
+                target_size=target_size,
+                invert=invert,
+                object_name=object_name,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vektorizaci obrázku.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Vektorizace do 3D selhala:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "vectorize_image_to_3d",
+                "error": err_msg,
+                "result": f"Vektorizace do 3D selhala: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        v_count = res.get("vertex_count", 0)
+        p_count = res.get("polygon_count", 0)
+        c_count = res.get("contours_count", 1)
+        dims = res.get("dimensions", [0, 0, 0])
+        svg_p = res.get("svg_path", "")
+
+        ui_report = (
+            f"\n\n🖼️ **Image-to-3D Vectorizer — `{obj_name}`**\n"
+            f"*Automatický převod 2D rastru na 3D MESH geometrii*\n\n"
+            f"---\n\n"
+            f"| Vlastnost modelu | Hodnota |\n|---|---|\n"
+            f"| Vytvořený MESH | `{obj_name}` |\n"
+            f"| Počet kontur / profilů | {c_count} |\n"
+            f"| Počet vrcholů (Vertices) | **{v_count}** |\n"
+            f"| Počet polygonů (Faces) | **{p_count}** |\n"
+            f"| Vytažení (Extrude) | {round(extrude_depth * 1000, 1)} mm |\n"
+            f"| Zkosení hran (Bevel) | {round(bevel_depth * 1000, 1)} mm |\n"
+            f"| Rozměry modelu (X, Y, Z) | {dims[0]} × {dims[1]} × {dims[2]} m |\n"
+            f"| Exportované SVG | `{svg_p}` |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"IMAGE-TO-3D VEKTORIZACE dokončena pro '{obj_name}':\n"
+            f"  - Geometrie: {v_count} vrcholů, {p_count} polygonů ({c_count} kontur)\n"
+            f"  - Extrude: {extrude_depth} m, Bevel: {bevel_depth} m\n"
+            f"  - Rozměry: {dims[0]} x {dims[1]} x {dims[2]} m\n"
+            f"  - Dočasné SVG uloženo: {svg_p}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ 3D MESH '{obj_name}' vytvořen z obrázku ({p_count} polygonů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "vectorize_image_to_3d",
+            "object_name": obj_name,
+            "image_path": clean_path,
+            "svg_path": svg_p,
+            "contours_count": c_count,
+            "vertex_count": v_count,
+            "polygon_count": p_count,
+            "extrude_depth": extrude_depth,
+            "bevel_depth": bevel_depth,
+            "dimensions": dims,
+            "result": result_text,
+            "_expert_system_prompt": self._IMAGE_TO_3D_SYSTEM_PROMPT,
         }
 
 
