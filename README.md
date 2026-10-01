@@ -224,7 +224,19 @@ OK (100% pass rate — 0 errors, 0 failures)
 
 ## 🚀 Quick Start & Setup
 
-### 1. Clone & Prepare Virtual Environment
+### Option A: Automated One-Line Setup (Recommended for Linux)
+```bash
+git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
+cd ai-assistant-voice-cs
+
+chmod +x install.sh
+./install.sh
+```
+*(Add `--with-tripo` to automatically compile TripoSR and torchmcubes for local GPU 3D reconstruction)*.
+
+### Option B: Manual Step-by-Step Setup
+
+#### 1. Clone & Prepare Virtual Environment
 ```bash
 git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
 cd ai-assistant-voice-cs

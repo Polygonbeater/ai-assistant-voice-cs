@@ -239,7 +239,19 @@ Pokryté oblasti testů:
 
 ## 🚀 Rychlý start
 
-### 1. Klonování a příprava virtuálního prostředí
+### Možnost A: Automatická instalace jedním skriptem (Doporučeno pro Linux)
+```bash
+git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
+cd ai-assistant-voice-cs
+
+chmod +x install.sh
+./install.sh
+```
+*(Volitelně přidejte `--with-tripo` pro automatickou kompilaci TripoSR a torchmcubes ze zdrojových kódů)*.
+
+### Možnost B: Manuální instalace krok za krokem
+
+#### 1. Klonování a příprava virtuálního prostředí
 ```bash
 git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
 cd ai-assistant-voice-cs
