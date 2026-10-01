@@ -1153,7 +1153,10 @@ class AssistantGUI(tk.Tk):
                 elif event_type == "voice_transcript":
                     self.send_message(value)
                 elif event_type == "auto_status":
-                    self._set_status(value, "#fbbf24")
+                    if any(k in value.lower() for k in ("web", "zdroj", "internet", "hledám")):
+                        self._set_status(value, "#38bdf8")
+                    else:
+                        self._set_status(value, "#fbbf24")
                 elif event_type == "auto_switched":
                     if hasattr(self, "analytical_preset_combo"):
                         self.analytical_preset_combo.set(value)

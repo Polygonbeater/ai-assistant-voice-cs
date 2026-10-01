@@ -447,6 +447,66 @@ def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_to
         yield err
 
 
+SEARCH_INTENT_SYSTEM_PROMPT = (
+    "Jsi bleskový klasifikátor záměru vyhledávání. Rozhodni, zda dotaz vyžaduje aktuální informace z internetu "
+    "(např. čerstvé zprávy, dnešní události, konkrétní ceny, kurzy, počasí, nové verze a release notes po roce 2024), "
+    "nebo zda si vystačí s obecnými vnitřními znalostmi (programování, teorie, matematika, definice, kód, skripty pro Blender, běžný rozhovor).\n"
+    "Odpověz VÝHRADNĚ jedním slovem: ONLINE nebo OFFLINE."
+)
+
+
+def classify_search_intent(
+    llm: Llama,
+    prompt: str,
+    chat_history: list | None = None
+) -> bool:
+    """
+    Bleskový Search Intent Router (5-10 tokenů).
+    Vyhodnotí, zda uživatelský dotaz reálně vyžaduje čerstvá internetová data (ONLINE),
+    nebo si vystačí s interními váhami modelu (OFFLINE).
+    """
+    p = prompt.strip().lower()
+
+    # 1. Rychlé pravidlové zkratky (rychlost 0 ms)
+    explicit_online = (
+        "vyhledej", "najdi na webu", "vygoogli", "hledej online",
+        "dnešní zprávy", "čt24", "aktuální zprávy", "co je dnes nového",
+        "dnešní kurz", "předpověď počasí", "jaké je dnes počasí"
+    )
+    if any(k in p for k in explicit_online):
+        logging.info("Search Intent Router: Explicitní online klíčové slovo detekováno -> ONLINE.")
+        return True
+
+    # Běžné konverzační fráze a jednoduchá matematika nepotřebují internet
+    if p in ("ahoj", "dobrý den", "čau", "zdravím", "nazdar", "díky", "děkuji", "děkuju", "jak se máš"):
+        logging.info("Search Intent Router: Běžná konverzační fráze -> OFFLINE.")
+        return False
+
+    # 2. Blesková klasifikace pomocí LLM (max 6 tokenů, greedy decoding)
+    messages = [
+        {"role": "system", "content": SEARCH_INTENT_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Dotaz: {prompt}\nRozhodnutí:"}
+    ]
+
+    try:
+        resp = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=6,
+            temperature=0.0,
+            stream=False
+        )
+        decision = resp["choices"][0]["message"].get("content", "").strip().upper()
+        is_online = "ONLINE" in decision
+        logging.info(
+            "Search Intent Router: dotaz='%s' -> vyhodnocení=%s (raw='%s')",
+            prompt[:60], "ONLINE" if is_online else "OFFLINE", decision
+        )
+        return is_online
+    except Exception as exc:
+        logging.warning("Search Intent Router selhal při klasifikaci: %s. Výchozí: ONLINE", exc)
+        return True
+
+
 def generate_search_queries(
     llm: Llama,
     user_prompt: str,
@@ -560,37 +620,46 @@ def generate_response(
             system_prompt = analytical_prompt
 
         user_content = prompt
+        web_search_executed = False
+
         if llama_config.get("online_mode"):
             try:
-                from web_search import search_web_multi_source
+                # Bleskový Search Intent Router vyhodnotí, zda je internet skutečně potřeba
+                needs_online = classify_search_intent(llm, prompt, chat_history=chat_history)
 
-                if status_callback:
-                    status_callback("● Analyzuji dotaz a navrhuji vyhledávací fráze…")
+                if needs_online:
+                    from web_search import search_web_multi_source
 
-                # 1. Vygenerovat 2-3 optimalizované fráze pro vyhledávač
-                search_queries = generate_search_queries(
-                    llm,
-                    prompt,
-                    chat_history=chat_history,
-                    max_queries=3
-                )
-                logging.info("Multi-Source RAG fráze: %s", search_queries)
+                    if status_callback:
+                        status_callback("● Analyzuji dotaz a navrhuji vyhledávací fráze…")
 
-                if status_callback:
-                    queries_preview = ", ".join(f"„{q}“" for q in search_queries[:2])
-                    status_callback(f"● Prohledávám web a stahuji zdroje ({queries_preview})…")
+                    # 1. Vygenerovat 2-3 optimalizované fráze pro vyhledávač
+                    search_queries = generate_search_queries(
+                        llm,
+                        prompt,
+                        chat_history=chat_history,
+                        max_queries=3
+                    )
+                    logging.info("Multi-Source RAG fráze: %s", search_queries)
 
-                # 2. Asynchronně vyhledat a stáhnout top 3 relevantní zdroje přes aiohttp + trafilatura
-                web_context = search_web_multi_source(
-                    search_queries,
-                    max_sources=3,
-                    max_total_chars=3600
-                )
+                    if status_callback:
+                        queries_preview = ", ".join(f"„{q}“" for q in search_queries[:2])
+                        status_callback(f"● Prohledávám web a stahuji zdroje ({queries_preview})…")
 
-                if status_callback:
-                    status_callback("● Syntetizuji odpověď z více webových zdrojů…")
+                    # 2. Asynchronně vyhledat a stáhnout top 3 relevantní zdroje přes aiohttp + trafilatura
+                    web_context = search_web_multi_source(
+                        search_queries,
+                        max_sources=3,
+                        max_total_chars=3600
+                    )
 
-                user_content = f"{web_context}\n\nDOTAZ UŽIVATELE K ZPRACOVÁNÍ:\n{prompt}"
+                    if status_callback:
+                        status_callback("● Syntetizuji odpověď z více webových zdrojů…")
+
+                    user_content = f"{web_context}\n\nDOTAZ UŽIVATELE K ZPRACOVÁNÍ:\n{prompt}"
+                    web_search_executed = True
+                else:
+                    logging.info("Search Intent Router: dotaz nevyžaduje internet, odpovídám přímo z lokálních vah.")
             except Exception:
                 logging.exception("Multi-Source online kontext se nepodařilo načíst.")
 
@@ -622,7 +691,7 @@ def generate_response(
         )
         system_prompt = f"{system_prompt}{cas_info}"
 
-        if llama_config.get("online_mode"):
+        if web_search_executed:
             multi_rag_rules = (
                 "\n\nPRAVIDLA PRO MULTI-SOURCE SYNTÉZU:\n"
                 "- Odpověď musí komplexně syntetizovat fakta ze všech poskytnutých webových zdrojů do uceleného a srozumitelného textu.\n"
