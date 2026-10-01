@@ -10,26 +10,30 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
+🌍 **[Česká verze (Czech Version)](#česká-verze)** • **[README.cs.md](README.cs.md)**
+
 **Lead Architect & Author:** Vítězslav Koneval (*Polygon Beater*)  
 **Repository:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
 ---
 
 ### 🌐 Quick Navigation / Rychlá navigace
-* 🇬🇧 [English Version (Documentation & Architecture)](#-english-version)
+* 🇬🇧 [English Version](#-english-version)
   * [Core Philosophy](#-core-philosophy-fully-local-voice-controlled-assistant)
   * [Section 1: Cognitive & Voice Module](#-section-1-cognitive--voice-module)
   * [Section 2: The Blender Pro Toolkit (20 Tools)](#-section-2-the-blender-pro-toolkit-20-production-tools)
   * [Section 3: Generative AI (Image-to-3D Bridge)](#-section-3-generative-ai-image-to-3d-bridge--explicit-3d-production)
   * [Testing & Production Stability](#-testing--production-stability-176-unit-tests-100-pass)
   * [Quick Start & Setup](#-quick-start--setup)
-* 🇨🇿 [Česká Verze (Dokumentace a Architektura)](#-česká-verze)
-  * [Hlavní myšlenka: Plně lokální asistent](#-hlavní-myšlenka-plně-lokální-hlasem-ovládaný-asistent)
-  * [Sekce 1: Jádro asistenta (Kognitivní a Hlasový modul)](#-sekce-1-jádro-asistenta-kognitivní-a-hlasový-modul)
+  * [License](#-license)
+* 🇨🇿 [Česká Verze](#česká-verze)
+  * [Hlavní myšlenka](#-hlavní-myšlenka-plně-lokální-hlasem-ovládaný-asistent)
+  * [Sekce 1: Jádro asistenta](#-sekce-1-jádro-asistenta-kognitivní-a-hlasový-modul)
   * [Sekce 2: The Blender Pro Toolkit (20 Nástrojů)](#-sekce-2-the-blender-pro-toolkit-20-produkčních-nástrojů)
   * [Sekce 3: Generativní AI (Image-to-3D Bridge)](#-sekce-3-generativní-ai-image-to-3d-bridge-s-auto-retopologií)
   * [Testování a stabilita](#-testování-a-produkční-stabilita-176-unit-testů-100-úspěšnost)
   * [Rychlý start](#-rychlý-start)
+  * [Licence](#-licence)
 
 ---
 
@@ -98,7 +102,7 @@ The assistant's cognitive core synchronizes three tightly integrated pillars: he
 
 ## 🎨 Section 2: The Blender Pro Toolkit (20 Production Tools)
 
-The assistant is not merely a conversational bot — it functions as your **autonomous 3D Technical Director**. It connects via a non-blocking TCP socket (`127.0.0.1:9876`) directly into a live instance of **Blender 4.2.1 LTS**. The host script `blender_receiver.py` leverages `bpy.app.timers` to safely execute all manipulations inside Blender's main GUI thread, preventing memory collisions or driver crashes.
+The assistant connects via a non-blocking TCP socket (`127.0.0.1:9876`) directly into a live instance of **Blender 4.2.1 LTS**. The host script `blender_receiver.py` leverages `bpy.app.timers` to safely execute all manipulations inside Blender's main GUI thread, preventing memory collisions or driver crashes.
 
 ### Comprehensive Overview of the 20 Registered Tools:
 
@@ -123,7 +127,7 @@ The assistant is not merely a conversational bot — it functions as your **auto
 
 ### Our Philosophy: Explicit 3D Geometry vs. Implicit Pixel Hallucination
 
-Current generative video models (e.g., Sora, Runway) merely hallucinate shifting RGB pixels on a 2D screen. The output cannot be imported into a physics simulator, cannot be rigged, cannot be manufactured, and camera angles cannot be altered in real-time.
+Current generative video models merely hallucinate shifting RGB pixels on a 2D screen. The output cannot be imported into a physics simulator, cannot be rigged, cannot be manufactured, and camera angles cannot be altered in real-time.
 
 **Our 20th tool — `generate_local_ai_mesh` — transforms 2D input into explicit, manufacturing-ready 3D production data:**
 
@@ -187,21 +191,6 @@ Ran 176 tests in 20.885s
 OK (100% pass rate — 0 errors, 0 failures)
 ```
 
-**Key Test Coverage Modules:**
-1. `test_local_ai_mesh.py` — TripoSR neural wrapper, OBJ/PLY generation, mock & real GPU execution, QuadriFlow retopology.
-2. `test_compositor_pipeline.py` — Node-based compositor presets (`product_pop`, `cinematic`, `denoise_only`).
-3. `test_image_to_3d_bridge.py` — Blueprint reference alignments, vector contour extraction, and vision bridge.
-4. `test_animation_motion_nodes.py` — F-Curve keyframing, bounce/bezier interpolation, and procedural animation drivers.
-5. `test_geometry_nodes_bridge.py` — Dynamic geometry node groups for point scattering and procedural panels.
-6. `test_parametric_modeling.py` — CAD parametric enclosures, gears, brackets, and hard-surface modifier stacks.
-7. `test_uv_pipeline.py` — Texel density auditing, island overlaps, and smart UV packing.
-8. `test_procedural_shader.py` — Node-based PBR materials (metals, polymers, rust, glass).
-9. `test_product_studio.py` — Cyclorama background, 3-point lighting rigs, and 85mm portrait camera setup.
-10. `test_mesh_doctor.py` — BMesh non-manifold audits, zero-face cleaning, and automated mesh healing.
-11. `test_semantic_memory.py` — FAISS vector storage, chunking, and session continuity.
-12. `test_blender_inspection.py` & `test_blender_self_healing.py` — Telemetry and autonomous code self-healing.
-13. `test_function_calling.py` — Dispatcher validation across all 20 production tools and tool schema compliance.
-
 ---
 
 ## 🚀 Quick Start & Setup
@@ -243,14 +232,27 @@ pip install git+https://github.com/tatsy/torchmcubes.git
 ```bash
 python gui.py
 ```
-Interact by voice or chat:
-* *"Audit the active mesh with Mesh Doctor and fix any non-manifold errors."*
-* *"Set up a product studio with an 85mm camera and create a brushed metal shader."*
-* *"Take this robot sketch and convert it to a game-ready quad mesh with baked PBR textures."*
+
+---
+
+## 👨‍💻 Author
+
+* **Author:** **Vítězslav Koneval** (*Polygon Beater*)
+* **Specialization:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
+* **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+
+---
+
+## 📄 License
+
+This project is open-source and released under the **MIT License** — you are free to use, modify, study, and distribute this software for personal, academic, or commercial projects.
+
+Copyright (c) 2026 Vítězslav Koneval (*Polygon Beater*). All rights reserved.
 
 ---
 <br/>
 
+<a id="česká-verze"></a>
 # 🇨🇿 Česká Verze
 
 ## 🔒 Hlavní myšlenka: Plně lokální, hlasem ovládaný asistent
@@ -258,7 +260,7 @@ Interact by voice or chat:
 **AI Assistant Voice CS** je postaven na nekompromisním principu **suverenity dat a nulové závislosti na cloudu**:
 * **Žádné API klíče, žádné předplatné, žádné odesílání hlasu na servery třetích stran.** Vaše konverzace ani soukromé 3D modely nikdy neopustí vaši pracovní stanici.
 * **Maximální offline výpočetní síla:** Architektura je optimalizována pro moderní vícejádrové procesory (automatická detekce fyzických jader přes `psutil`) i dedikované grafické karty NVIDIA (CUDA / PyTorch).
-* **Přirozený dialog v českém jazyce:** Bezchybná česká fonetika, okamžitá hlasová syntéza a schopnost řídit profesionální 3D produkční software.
+* **Přirozený dialog v českém jazyce:** Bezchybná česká fonetika, okamžitá hlasová syntéza a schopnost řídit profesionální 3D software.
 
 ---
 
@@ -360,10 +362,16 @@ OK (100% pass rate — 0 chyb, 0 selhání)
 
 ---
 
-## 👨‍💻 Autor & Licence
-
-Tento projekt je vyvíjen a licencován pod licencí **MIT**.
+## 👨‍💻 Autor
 
 * **Autor:** **Vítězslav Koneval** (*Polygon Beater*)
 * **Specializace:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
 * **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+
+---
+
+## 📄 Licence
+
+Tento projekt je vydán jako Open-Source pod licencí **MIT** — je volně k použití, modifikaci a šíření pro osobní, komerční i výzkumné účely.
+
+Copyright (c) 2026 Vítězslav Koneval (*Polygon Beater*).

@@ -10,6 +10,8 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
+🌍 **[English Version (Anglická verze)](README.md)**
+
 **Hlavní architekt & autor:** Vítězslav Koneval (*Polygon Beater*)  
 **Projektový repozitář:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
@@ -17,10 +19,10 @@
 
 ## 🔒 Hlavní myšlenka: Plně lokální, hlasem ovládaný asistent
 
-**AI Assistant Voice CS** je postaven na nekompromisním principu **suverenity dat a nulové závislosti na cloudu**. Veškeré zpracování probíhá výhradně na vašem vlastním stroji:
-* **Žádné API klíče, žádné předplatné, žádné odesílání hlasu na servery třetích stran.**
-* Optimalizováno pro špičkový výkon na moderních vícejádrových procesorech (CPU-first architektura s detekcí fyzických jader přes `psutil`) i dedikovaných GPU.
-* Plynulý přirozený dialog v **českém jazyce** doplněný o okamžitou hlasovou syntézu a schopnost ovládat profesionální 3D software.
+**AI Assistant Voice CS** je postaven na nekompromisním principu **suverenity dat a nulové závislosti na cloudu**:
+* **Žádné API klíče, žádné předplatné, žádné odesílání hlasu na servery třetích stran.** Vaše konverzace ani soukromé 3D modely nikdy neopustí vaši pracovní stanici.
+* **Maximální offline výpočetní síla:** Architektura je optimalizována pro moderní vícejádrové procesory (automatická detekce fyzických jader přes `psutil`) i dedikované grafické karty NVIDIA (CUDA / PyTorch).
+* **Přirozený dialog v českém jazyce:** Bezchybná česká fonetika, okamžitá hlasová syntéza a schopnost řídit profesionální 3D software.
 
 ---
 
@@ -62,8 +64,8 @@ Jádro systému tvoří tři dokonale synchronizované pilíře, které určují
 
 ### 👂 Jak asistent slyší (Whisper)
 * **Faster-Whisper (CTranslate2 int8):** Místo standardního pomalého Whisperu využíváme 8bitovou kvantizaci a optimalizovaný C++ engine. Přepis češtiny probíhá až 4× rychleji při zachování maximální přesnosti bez halucinací.
-* **Hands-Free aktivace (openWakeWord):** Asistent běží neustále na pozadí. Po vyslovení aktivačního hesla (*"Hey Jarvis"*) zazní jemný tón a asistent okamžitě naslouchá.
-* **Silero VAD:** Pokročilá neuronová detekce hlasu přesně odfiltruje klikání klávesnice a hluk okolí, a ukončí záznam přesně ve chvíli, kdy domluvíte.
+* **Hands-Free aktivace (`openWakeWord`):** Asistent běží neustále na pozadí s minimální zátěží CPU. Po vyslovení aktivačního hesla (*"Hey Jarvis"*) zazní jemný tón a asistent okamžitě naslouchá.
+* **Detekce hlasu (`Silero VAD`):** Pokročilá neuronová detekce hlasu přesně odfiltruje klikání klávesnice a hluk okolí, a ukončí záznam přesně ve chvíli, kdy domluvíte.
 
 ### 🗣️ Jak asistent mluví (Gruut & Coqui TTS)
 * **Gruut fonetická pipeline:** Český jazyk má specifickou výslovnost, spodobu znělosti a skloňování číslovek. Modul `gruut` zajišťuje bezchybnou fonetickou transkripci a převod čísel na česká slova přes `num2words`.
@@ -80,7 +82,7 @@ Jádro systému tvoří tři dokonale synchronizované pilíře, které určují
 
 Asistent není jen pasivní chatbot – je to váš **virtuální 3D Technical Director**. Přes lokální neblokující TCP socket (`127.0.0.1:9876`) se napojuje přímo do běžící instance **Blenderu 4.2.1 LTS**. Skript `blender_receiver.py` využívá nativní časovač `bpy.app.timers`, takže veškeré operace probíhají bezpečně v hlavním grafickém vlákně bez pádů GPU či kolizí paměti.
 
-### Přehled klíčových 3D schopností z našich 20 nástrojů:
+### Přehled 20 integrovaných nástrojů:
 
 | Modul | Nástroje | Co asistent reálně udělá v Blenderu |
 |---|---|---|
@@ -94,6 +96,8 @@ Asistent není jen pasivní chatbot – je to váš **virtuální 3D Technical D
 | **Compositing & Post-Processing** | `setup_compositor` | Zapne nodový kompozitor a sestaví postprodukční pipeline (preset `product_pop` s Fog Glow odlesky a kontrastem, `cinematic` s chromatickou aberací a vinětací, nebo `denoise_only`). |
 | **Self-Healing Kód & Telemetrie** | `execute_blender_code`<br>`inspect_blender_scene` | Umožňuje spustit libovolný Python kód se **samoopravnou smyčkou** (při chybě zachytí traceback a nechá LLM kód opravit) a pořídit telemetrický snímek scény z viewportu. |
 | **Image-to-3D Blueprint** | `setup_blueprint_reference`<br>`vectorize_image_to_3d` | Umístí výkres do ortografického pohledu (FRONT/TOP/RIGHT) s 50% průhledností, nebo vektorizuje 2D logo na křivku a polygonální 3D mesh. |
+| **Generativní AI 3D Mesh** | `generate_local_ai_mesh` | Provede neuronovou rekonstrukci 3D meshe z 2D obrázku, QuadriFlow retopologii, UV unwrap a upečení barev do PBR textury. |
+| **Kognitivní & Znalosti** | `query_local_rag`<br>`query_memory_rag`<br>`search_web` | Vyhledávání v lokálních PDF skriptech, sémantické paměti a na webu. |
 
 ---
 
@@ -138,9 +142,9 @@ Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obraz
 └────────────────────────────────────────────────────────┘
 ```
 
-### Výsledný report z chatu:
+### Porovnání fází pipeline:
 
-| Fáze pipeline | Surový AI Scan (Raw) | Produkční model (Retopo) | Změna / Standard |
+| Fáze pipeline | Surový AI Scan (TripoSR) | Produkční model (Retopo) | Změna / Standard |
 |---|---|---|---|
 | **Počet polygonů (Faces)** | 56,890 tris | **10,000 polygonů** | 📉 **-82.4%** redukce |
 | **Počet vrcholů (Vertices)** | 28,450 | **10,042** | Optimalizovaná paměť |
@@ -151,16 +155,16 @@ Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obraz
 
 ---
 
-## 🧪 Testování: 176 Unit Testů se 100% Úspěšností
+## 🧪 Testování a produkční stabilita: 176 Unit Testů (100% Úspěšnost)
 
-Stabilita celého ekosystému je doložena rozsáhlým testovacím balíkem. Žádné nefunkční endpointy, žádné rozpadlé formáty JSONu:
+Stabilita celého ekosystému je doložena rozsáhlým testovacím balíkem pokrývajícím všech 20 nástrojů, socketový protokol, parser i sémantickou paměť:
 
 ```bash
 PYTHONPATH=. ./venv/bin/python -m unittest discover -s scratch/ -p "test_*.py"
 ```
 
 ```text
-Ran 176 tests in 18.719s
+Ran 176 tests in 20.885s
 
 OK (100% pass rate — 0 chyb, 0 selhání)
 ```
@@ -193,7 +197,7 @@ Pokryté oblasti testů:
 
 ---
 
-## 🚀 Rychlý Start
+## 🚀 Rychlý start
 
 ### 1. Klonování a příprava virtuálního prostředí
 ```bash
@@ -204,7 +208,7 @@ python3.11 -m venv venv
 source venv/bin/activate
 ```
 
-### 2. Instalace systémových knihoven (Ubuntu / Debian / Linux Mint)
+### 2. Instalace systémových knihoven (Linux)
 ```bash
 sudo apt update
 sudo apt install -y python3-dev portaudio19-dev ffmpeg
@@ -239,10 +243,16 @@ Můžete ihned mluvit do mikrofonu nebo psát do chatu:
 
 ---
 
-## 👨‍💻 Autor & Licence
-
-Tento projekt je vyvíjen a licencován pod otevřenou licencí **MIT**.
+## 👨‍💻 Autor
 
 * **Autor:** **Vítězslav Koneval** (*Polygon Beater*)
 * **Specializace:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
 * **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+
+---
+
+## 📄 Licence
+
+Tento projekt je vydán jako Open-Source pod licencí **MIT** — je volně k použití, modifikaci a šíření pro osobní, komerční i výzkumné účely.
+
+Copyright (c) 2026 Vítězslav Koneval (*Polygon Beater*).
