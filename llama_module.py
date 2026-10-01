@@ -8,11 +8,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 ANALYTICAL_PRESETS = {
     "⚡ Auto (Doporučit)": "AUTO",
-    "Vypnuto (Standardní chat)": None,
+    "🎬 Auteur & Vizuální analýza (Mise-en-scène)": "prompts/frameworks/auteur_visual_analysis.md",
+    "📐 First Principles (Kód & 3D dekonstrukce)": "prompts/frameworks/first_principles_technical.md",
+    "🛡️ Red Team & Oponentura hypotéz": "prompts/frameworks/advanced_assumption_audit.md",
     "Hloubková analýza v3.1": "prompts/Advanced-Analytical-Prompts-main/Enhanced_Analysis_Prompts_v3.1_CZ.md",
     "Audit předpokladů (Standard)": "prompts/assumption-audit-main/CZ/Assumption_Audit.md",
     "Audit předpokladů (Krizový režim)": "prompts/assumption-audit-main/CZ/Assumption_Audit_Crisis.md",
     "Meta-analýza (Plná šablona)": "prompts/assumption-audit-main/templates/meta_full_CZ.txt",
+    "Vypnuto (Standardní chat)": None,
 }
 
 DEFAULT_ANALYTICAL_PRESET = "Vypnuto (Standardní chat)"
@@ -20,6 +23,96 @@ DEFAULT_SYSTEM_PROMPT = (
     "Jsi užitečná a zdvořilá AI asistentka. "
     "Odpovídej stručně a k věci v češtině."
 )
+
+
+ANALYSIS_MODE_PATTERNS = {
+    "🎬 Auteur & Vizuální analýza (Mise-en-scène)": [
+        r"\b(filmov[a-ž]+\s+(vědec|teoretik|analytik|věda|teorie|analýz[a-ž]*|dekonstrukc[a-ž]*|jazyk))\b",
+        r"\b(mise[- ]en[- ]sc[èe]ne|mizanscén[a-ž]*)\b",
+        r"\b(auteur|autorsk[a-ž]+\s+rukopis|režijn[a-ž]+\s+styl)\b",
+        r"\b(chiaroscuro|šerosvit|tenebrism[a-ž]*)\b",
+        r"\b(německ[a-ž]+\s+expresionism[a-ž]*|fritz\s+lang|metropolis)\b",
+        r"\b(kompozic[a-ž]+\s+záběr[a-ž]*|vizuáln[a-ž]+\s+rytm[a-ž]*|střihov[a-ž]+\s+skladb[a-ž]*|montážn[a-ž]+\s+skladb[a-ž]*)\b",
+        r"\b(malířsk[a-ž]+\s+ikonografi[a-ž]*|ikonografick[a-ž]*|vizuáln[a-ž]+\s+dekonstrukc[a-ž]*)\b",
+        r"\b(analyzuj\s+.*filmov[a-ž]+(\s+věd[a-ž]+)?)\b",
+    ],
+    "📐 First Principles (Kód & 3D dekonstrukce)": [
+        r"\b(prvn[ií][a-ž]*\s+princip[a-ž]*|first\s+principles)\b",
+        r"\b(rozeber\s+.*(od|ze)\s+základ[a-ž]*|od\s+(úpln[a-ž]+|fyzikáln[a-ž]+|matematick[a-ž]+)\s+základ[a-ž]*)\b",
+        r"\b(technick[a-ž]+\s+dekonstrukc[a-ž]*|dekonstrukc[a-ž]+\s+kód[a-ž]*|dekonstruuj\s+(kód|problém|systém|architektur[a-ž]*))\b",
+        r"\b(bez\s+zkratek|žádn[a-ž]+\s+zkratk[a-ž]*|rigorózn[a-ž]+\s+řešen[a-ž]*)\b",
+        r"\b(blender\s+.*od\s+základ[a-ž]*|3d\s+matematik[a-ž]*|geometrick[a-ž]+\s+dekonstrukc[a-ž]*)\b",
+        r"\b(invariant[a-ž]*|stavov[a-ž]+\s+prostor\s+bez\s+zkratek)\b",
+    ],
+    "🛡️ Red Team & Oponentura hypotéz": [
+        r"\b(kritick[a-ž]*\s+oponentur[a-ž]*|udělej\s+oponentur[a-ž]*|oponentur[a-ž]*\s+(hypotéz[a-ž]*|návrh[a-ž]*|kód[a-ž]*))\b",
+        r"\b(red\s+team|red\s+teaming|red\s+team\s+critique|zátěžov[a-ž]+\s+test\s+hypotéz[a-ž]*)\b",
+        r"\b(audit\s+předpoklad[a-ž]*|audit\s+samozřejmost[a-ž]*|assumption\s+audit)\b",
+        r"\b(prověř\s+předpoklad[a-ž]*|zpochybni\s+předpoklad[a-ž]*|slep[aá][a-ž]*\s+míst[a-ž]*)\b",
+        r"\b(kde\s+to\s+selže|jak\s+to\s+může\s+selhat|najdi\s+slab[a-ž]+\s+míst[a-ž]*|najdi\s+logick[a-ž]+\s+chyb[a-ž]*)\b",
+        r"\b(vyvrať\s+mi\s+to|falsifikuj|popperovsk[a-ž]+\s+falsifikac[a-ž]*|falsifikačn[a-ž]+\s+kritéri[a-ž]*)\b",
+    ],
+}
+
+ANALYTICAL_ROUTER_SYSTEM_PROMPT = (
+    "Jsi bleskový router analytických metodik. Rozhodni, zda dotaz vyžaduje jeden ze 3 expertních frameworků:\n"
+    "1. AUTEUR - filmová dekonstrukce, mise-en-scène, režie, kompozice záběru, malířská ikonografie, Fritz Lang apod.\n"
+    "2. FIRST_PRINCIPLES - myšlení v prvních principech, složitý kód/architektura, 3D matematika, Blender API od základů.\n"
+    "3. RED_TEAM - kritická oponentura hypotéz, hledání slepých míst, audit předpokladů a analýza selhání.\n"
+    "4. STANDARD - běžný dotaz, konverzace, obecná otázka.\n"
+    "Odpověz POUZE jedním slovem: AUTEUR, FIRST_PRINCIPLES, RED_TEAM nebo STANDARD."
+)
+
+
+def detect_analytical_mode(
+    prompt: str,
+    llm: Llama | None = None,
+    allow_llm_classifier: bool = False,
+) -> str | None:
+    """
+    Automaticky rozpozná, zda uživatel v dotazu požaduje hluboký analytický režim:
+    - 🎬 Auteur & Vizuální analýza (Mise-en-scène)
+    - 📐 First Principles (Kód & 3D dekonstrukce)
+    - 🛡️ Red Team & Oponentura hypotéz
+
+    1. Fáze: Rychlá pravidlová detekce klíčových frází (0 ms latence).
+    2. Fáze: Pokud je povoleno a pravidla nenašla shodu (např. v režimu Auto), blesková LLM klasifikace.
+    """
+    clean_p = prompt.strip().lower()
+    if not clean_p:
+        return None
+
+    # 1. Pravidlová detekce podle regexů
+    for mode, regexes in ANALYSIS_MODE_PATTERNS.items():
+        for pattern in regexes:
+            if re.search(pattern, clean_p, re.IGNORECASE):
+                logging.info("Analytický router: Pravidlová detekce -> %s", mode)
+                return mode
+
+    # 2. Blesková klasifikace modelem (pokud je explicitně vyžádána v režimu Auto)
+    if allow_llm_classifier and llm is not None:
+        try:
+            resp = llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": ANALYTICAL_ROUTER_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Dotaz: {prompt[:300]}\nFramework:"}
+                ],
+                max_tokens=6,
+                temperature=0.0,
+                stream=False
+            )
+            decision = resp["choices"][0]["message"].get("content", "").strip().upper()
+            logging.info("Analytický router LLM vyhodnocení: '%s'", decision)
+            if "AUTEUR" in decision:
+                return "🎬 Auteur & Vizuální analýza (Mise-en-scène)"
+            if "FIRST_PRINCIPLES" in decision:
+                return "📐 First Principles (Kód & 3D dekonstrukce)"
+            if "RED_TEAM" in decision:
+                return "🛡️ Red Team & Oponentura hypotéz"
+        except Exception as exc:
+            logging.warning("Analytický router LLM selhal: %s", exc)
+
+    return None
 
 
 def load_analytical_prompt(
@@ -610,11 +703,35 @@ def generate_response(
         system_prompt = llama_config.get("system_prompt", DEFAULT_SYSTEM_PROMPT).strip()
         preset_name = llama_config.get("analytical_preset", DEFAULT_ANALYTICAL_PRESET)
 
-        try:
-            analytical_prompt = load_analytical_prompt(preset_name)
-        except Exception as exc:
-            logging.error("Analytickou metodiku se nepodařilo použít: %s", exc)
-            analytical_prompt = None
+        # 1. Zkusíme načíst staticky zvolenou metodiku (pokud není Auto či Vypnuto)
+        analytical_prompt = None
+        if preset_name and preset_name not in ("⚡ Auto (Doporučit)", "Vypnuto (Standardní chat)"):
+            try:
+                analytical_prompt = load_analytical_prompt(preset_name)
+            except Exception as exc:
+                logging.error("Analytickou metodiku se nepodařilo použít: %s", exc)
+                analytical_prompt = None
+
+        # 2. Automatické rozpoznání hlubokého analytického režimu z dotazu uživatele
+        auto_requested = (preset_name == "⚡ Auto (Doporučit)")
+        detected_mode = detect_analytical_mode(
+            prompt,
+            llm=llm,
+            allow_llm_classifier=auto_requested,
+        )
+
+        if detected_mode and (auto_requested or not analytical_prompt or preset_name == "Vypnuto (Standardní chat)"):
+            try:
+                detected_prompt = load_analytical_prompt(detected_mode)
+                if detected_prompt:
+                    analytical_prompt = detected_prompt
+                    preset_name = detected_mode
+                    mode_clean = detected_mode.split("(")[0].strip()
+                    logging.info("Dynamicky aktivována analytická metodika: %s", detected_mode)
+                    if status_callback:
+                        status_callback(f"● Aktivována metodika: {mode_clean}…")
+            except Exception as exc:
+                logging.error("Chyba při načítání detekované analytické metodiky: %s", exc)
 
         if analytical_prompt:
             system_prompt = analytical_prompt

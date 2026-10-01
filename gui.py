@@ -14,7 +14,15 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from audio import initialize_vad, record_with_vad, WakeWordListener
 from document_service import DocumentService
 from history_repository import HistoryRepository
-from llama_module import ANALYTICAL_PRESETS, DEFAULT_ANALYTICAL_PRESET, DEFAULT_SYSTEM_PROMPT, load_analytical_prompt, DEFAULT_ANALYTICAL_PRESET, generate_response, initialize_llama
+from llama_module import (
+    ANALYTICAL_PRESETS,
+    DEFAULT_ANALYTICAL_PRESET,
+    DEFAULT_SYSTEM_PROMPT,
+    load_analytical_prompt,
+    detect_analytical_mode,
+    generate_response,
+    initialize_llama,
+)
 from stt_module import initialize_whisper, transcribe_audio_np
 from tts_module import initialize_tts, speak_async, TTSStreamPlayer
 
