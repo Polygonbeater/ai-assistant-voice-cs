@@ -896,9 +896,326 @@ def process_blender_queue_timer():
             finally:
                 completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
+        # 5. Procedural Shader & Node Tree Generator – tvorba procedurálních materiálů
+        if action == "create_procedural_shader":
+            print("\n[AI-Blender] >>> Zahajuji Procedural Shader Generator...")
+            try:
+                shader_type = message.get("shader_type", "brushed_metal").lower().strip()
+                requested_name = message.get("material_name")
+                material_name = requested_name if requested_name and requested_name.strip() else f"Procedural_{shader_type.title()}"
+
+                # Vytvoření nebo znovupoužití materiálu
+                if material_name in bpy.data.materials:
+                    mat = bpy.data.materials[material_name]
+                else:
+                    mat = bpy.data.materials.new(name=material_name)
+
+                mat.use_nodes = True
+                nodes = mat.node_tree.nodes
+                links = mat.node_tree.links
+                nodes.clear()
+
+                def _set_bsdf(bsdf_node, name_list, val):
+                    for n in name_list:
+                        if n in bsdf_node.inputs:
+                            bsdf_node.inputs[n].default_value = val
+                            return True
+                    return False
+
+                def _get_bsdf_sock(bsdf_node, name_list):
+                    for n in name_list:
+                        if n in bsdf_node.inputs:
+                            return bsdf_node.inputs[n]
+                    return None
+
+                # 1. Základní výstup a Principled BSDF
+                out_node = nodes.new(type='ShaderNodeOutputMaterial')
+                out_node.location = (450, 0)
+
+                bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+                bsdf.location = (100, 0)
+                links.new(bsdf.outputs['BSDF'], out_node.inputs['Surface'])
+
+                # 2. Vytvoření uzlů podle typu materiálu
+                key_params = {"shader_type": shader_type}
+
+                if shader_type == "brushed_metal":
+                    # Anizotropní / kartáčovaný kov (hliník/ocel)
+                    tex_coord = nodes.new('ShaderNodeTexCoord')
+                    tex_coord.location = (-850, 0)
+
+                    mapping = nodes.new('ShaderNodeMapping')
+                    mapping.location = (-650, 0)
+                    try:
+                        mapping.inputs['Scale'].default_value[0] = 1.0
+                        mapping.inputs['Scale'].default_value[1] = 60.0  # Protažení pro kartáčovaný vzor
+                        mapping.inputs['Scale'].default_value[2] = 1.0
+                    except Exception:
+                        pass
+
+                    noise = nodes.new('ShaderNodeTexNoise')
+                    noise.location = (-450, 0)
+                    if 'Scale' in noise.inputs:
+                        noise.inputs['Scale'].default_value = 30.0
+                    if 'Detail' in noise.inputs:
+                        noise.inputs['Detail'].default_value = 6.0
+                    if 'Roughness' in noise.inputs:
+                        noise.inputs['Roughness'].default_value = 0.7
+
+                    ramp = nodes.new('ShaderNodeValToRGB')
+                    ramp.location = (-250, 0)
+                    if hasattr(ramp, "color_ramp"):
+                        ramp.color_ramp.elements[0].position = 0.2
+                        ramp.color_ramp.elements[0].color = (0.2, 0.2, 0.2, 1.0)
+                        ramp.color_ramp.elements[1].position = 0.8
+                        ramp.color_ramp.elements[1].color = (0.55, 0.55, 0.55, 1.0)
+
+                    bump = nodes.new('ShaderNodeBump')
+                    bump.location = (-50, -200)
+                    bump.inputs['Strength'].default_value = 0.08
+                    bump.inputs['Distance'].default_value = 0.05
+
+                    # Propojení
+                    links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
+                    links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
+                    links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
+                    links.new(ramp.outputs['Color'], bump.inputs['Height'])
+                    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    # BSDF vstupy
+                    _set_bsdf(bsdf, ['Metallic'], 1.0)
+                    _set_bsdf(bsdf, ['Base Color'], (0.78, 0.79, 0.82, 1.0))
+                    _set_bsdf(bsdf, ['Roughness'], 0.25)
+                    _set_bsdf(bsdf, ['Anisotropic', 'Anisotropic Rotation'], 0.6)
+
+                    rough_sock = _get_bsdf_sock(bsdf, ['Roughness'])
+                    if rough_sock:
+                        links.new(ramp.outputs['Color'], rough_sock)
+
+                    key_params.update({"metallic": 1.0, "base_color": "Silver/Alloy", "roughness": "0.2-0.35 (mapped)"})
+
+                elif shader_type == "matte_plastic":
+                    # Prémiový matný plast / polymer s jemným mikroskopickým šumem
+                    tex_coord = nodes.new('ShaderNodeTexCoord')
+                    tex_coord.location = (-750, 0)
+
+                    mapping = nodes.new('ShaderNodeMapping')
+                    mapping.location = (-550, 0)
+
+                    noise = nodes.new('ShaderNodeTexNoise')
+                    noise.location = (-350, 0)
+                    if 'Scale' in noise.inputs:
+                        noise.inputs['Scale'].default_value = 50.0
+                    if 'Detail' in noise.inputs:
+                        noise.inputs['Detail'].default_value = 4.0
+                    if 'Roughness' in noise.inputs:
+                        noise.inputs['Roughness'].default_value = 0.5
+
+                    ramp = nodes.new('ShaderNodeValToRGB')
+                    ramp.location = (-150, 100)
+                    if hasattr(ramp, "color_ramp"):
+                        ramp.color_ramp.elements[0].position = 0.0
+                        ramp.color_ramp.elements[0].color = (0.4, 0.4, 0.4, 1.0)
+                        ramp.color_ramp.elements[1].position = 1.0
+                        ramp.color_ramp.elements[1].color = (0.55, 0.55, 0.55, 1.0)
+
+                    bump = nodes.new('ShaderNodeBump')
+                    bump.location = (-150, -200)
+                    bump.inputs['Strength'].default_value = 0.02
+                    bump.inputs['Distance'].default_value = 0.02
+
+                    # Propojení
+                    links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
+                    links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
+                    links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
+                    links.new(noise.outputs['Fac'], bump.inputs['Height'])
+                    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    rough_sock = _get_bsdf_sock(bsdf, ['Roughness'])
+                    if rough_sock:
+                        links.new(ramp.outputs['Color'], rough_sock)
+
+                    # BSDF vstupy
+                    _set_bsdf(bsdf, ['Metallic'], 0.0)
+                    _set_bsdf(bsdf, ['Base Color'], (0.12, 0.45, 0.88, 1.0))  # Prémiový modrý polymer
+                    _set_bsdf(bsdf, ['Specular IOR Level', 'Specular'], 0.5)
+
+                    key_params.update({"metallic": 0.0, "base_color": "Royal Blue Matte", "roughness": "0.4-0.55 (procedural)"})
+
+                elif shader_type == "rusted_iron":
+                    # Zkorodované surové železo s procedurální mapou rzi
+                    tex_coord = nodes.new('ShaderNodeTexCoord')
+                    tex_coord.location = (-950, 0)
+
+                    mapping = nodes.new('ShaderNodeMapping')
+                    mapping.location = (-750, 0)
+
+                    noise = nodes.new('ShaderNodeTexNoise')
+                    noise.location = (-550, 0)
+                    if 'Scale' in noise.inputs:
+                        noise.inputs['Scale'].default_value = 4.5
+                    if 'Detail' in noise.inputs:
+                        noise.inputs['Detail'].default_value = 8.0
+                    if 'Distortion' in noise.inputs:
+                        noise.inputs['Distortion'].default_value = 0.5
+
+                    # ColorRamp pro Base Color (železo vs rez)
+                    ramp_color = nodes.new('ShaderNodeValToRGB')
+                    ramp_color.location = (-300, 150)
+                    if hasattr(ramp_color, "color_ramp"):
+                        ramp_color.color_ramp.elements[0].position = 0.35
+                        ramp_color.color_ramp.elements[0].color = (0.2, 0.21, 0.22, 1.0)  # Tmavé surové železo
+                        ramp_color.color_ramp.elements[1].position = 0.65
+                        ramp_color.color_ramp.elements[1].color = (0.55, 0.16, 0.04, 1.0)  # Rez
+
+                    # ColorRamp pro Roughness (kov = hladší, rez = velmi drsná)
+                    ramp_rough = nodes.new('ShaderNodeValToRGB')
+                    ramp_rough.location = (-300, -100)
+                    if hasattr(ramp_rough, "color_ramp"):
+                        ramp_rough.color_ramp.elements[0].position = 0.35
+                        ramp_rough.color_ramp.elements[0].color = (0.35, 0.35, 0.35, 1.0)
+                        ramp_rough.color_ramp.elements[1].position = 0.65
+                        ramp_rough.color_ramp.elements[1].color = (0.9, 0.9, 0.9, 1.0)
+
+                    bump = nodes.new('ShaderNodeBump')
+                    bump.location = (-100, -250)
+                    bump.inputs['Strength'].default_value = 0.25
+                    bump.inputs['Distance'].default_value = 0.1
+
+                    # Propojení
+                    links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
+                    links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
+                    links.new(noise.outputs['Fac'], ramp_color.inputs['Fac'])
+                    links.new(noise.outputs['Fac'], ramp_rough.inputs['Fac'])
+                    links.new(noise.outputs['Fac'], bump.inputs['Height'])
+
+                    color_sock = _get_bsdf_sock(bsdf, ['Base Color'])
+                    if color_sock:
+                        links.new(ramp_color.outputs['Color'], color_sock)
+
+                    rough_sock = _get_bsdf_sock(bsdf, ['Roughness'])
+                    if rough_sock:
+                        links.new(ramp_rough.outputs['Color'], rough_sock)
+
+                    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    _set_bsdf(bsdf, ['Metallic'], 0.65)
+                    key_params.update({"metallic": "0.65 base", "base_color": "Procedural Iron & Rust", "roughness": "0.35-0.9 (mapped)"})
+
+                elif shader_type == "glossy_glass":
+                    # Opticky čisté sklo s mikroskopickou nerovností povrchu
+                    tex_coord = nodes.new('ShaderNodeTexCoord')
+                    tex_coord.location = (-700, 0)
+
+                    mapping = nodes.new('ShaderNodeMapping')
+                    mapping.location = (-500, 0)
+
+                    noise = nodes.new('ShaderNodeTexNoise')
+                    noise.location = (-300, 0)
+                    if 'Scale' in noise.inputs:
+                        noise.inputs['Scale'].default_value = 10.0
+                    if 'Detail' in noise.inputs:
+                        noise.inputs['Detail'].default_value = 2.0
+
+                    bump = nodes.new('ShaderNodeBump')
+                    bump.location = (-100, -200)
+                    bump.inputs['Strength'].default_value = 0.005  # Velmi subtilní lom
+                    bump.inputs['Distance'].default_value = 0.05
+
+                    links.new(tex_coord.outputs['Object'], mapping.inputs['Vector'])
+                    links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
+                    links.new(noise.outputs['Fac'], bump.inputs['Height'])
+                    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    _set_bsdf(bsdf, ['Transmission Weight', 'Transmission'], 1.0)
+                    _set_bsdf(bsdf, ['Roughness'], 0.02)
+                    _set_bsdf(bsdf, ['IOR'], 1.52)
+                    _set_bsdf(bsdf, ['Base Color'], (0.97, 0.98, 1.0, 1.0))
+
+                    try:
+                        mat.blend_method = 'BLEND'
+                        mat.shadow_method = 'HASHED'
+                    except Exception:
+                        pass
+
+                    key_params.update({"transmission": 1.0, "ior": 1.52, "roughness": 0.02, "base_color": "Clear Glass"})
+
+                else:
+                    # Univerzální procedurální shader
+                    tex_coord = nodes.new('ShaderNodeTexCoord')
+                    tex_coord.location = (-600, 0)
+                    noise = nodes.new('ShaderNodeTexNoise')
+                    noise.location = (-350, 0)
+                    bump = nodes.new('ShaderNodeBump')
+                    bump.location = (-100, -150)
+                    bump.inputs['Strength'].default_value = 0.05
+
+                    links.new(tex_coord.outputs['Object'], noise.inputs['Vector'])
+                    links.new(noise.outputs['Fac'], bump.inputs['Height'])
+                    links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    _set_bsdf(bsdf, ['Metallic'], 0.2)
+                    _set_bsdf(bsdf, ['Roughness'], 0.3)
+                    key_params.update({"metallic": 0.2, "roughness": 0.3})
+
+                # 3. Přiřazení k aktivnímu MESH objektu
+                active_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    active_obj = bpy.context.view_layer.objects.active
+                if not active_obj and hasattr(bpy.context, "active_object"):
+                    active_obj = bpy.context.active_object
+
+                assigned_to = None
+                if active_obj and active_obj.type == 'MESH':
+                    if active_obj.data.materials:
+                        active_obj.data.materials[0] = mat
+                    else:
+                        active_obj.data.materials.append(mat)
+                    assigned_to = active_obj.name
+
+                # Překreslení 3D viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                created_nodes_summary = [
+                    {"name": n.name, "type": n.type, "label": getattr(n, "label", "") or n.name}
+                    for n in nodes
+                ]
+
+                shader_result = {
+                    "material_name": mat.name,
+                    "shader_type": shader_type,
+                    "assigned_to_object": assigned_to,
+                    "node_count": len(created_nodes_summary),
+                    "link_count": len(links),
+                    "nodes": created_nodes_summary,
+                    "key_parameters": key_params,
+                }
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "create_procedural_shader",
+                    "shader": shader_result,
+                }
+                print(f"✅ [AI-Blender] Procedural Shader '{mat.name}' ({shader_type}) vytvořen s {len(created_nodes_summary)} uzly.")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Procedural Shader: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 5. Vykonání Python kódu (action == 'execute')
+        # 6. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

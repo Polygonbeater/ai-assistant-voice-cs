@@ -565,3 +565,58 @@ def request_product_studio(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_procedural_shader(
+    material_name: str | None = None,
+    shader_type: str = "brushed_metal",
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na programové vygenerování procedurálního materiálu
+    (action: create_procedural_shader).
+
+    Vytvoří kompletní node tree s Principled BSDF, procedurálními texturami (Noise, Bump, ColorRamp, Mapping)
+    a přiřadí materiál k aktivnímu MESH objektu.
+
+    Args:
+        material_name: Vlastní název materiálu (volitelný, např. 'Titanium_Brushed').
+        shader_type: Typ procedurálního materiálu:
+                     - "brushed_metal"  -- Kartáčovaný kov (anizotropní šum, metallic=1.0)
+                     - "matte_plastic"  -- Matný prémiový polymer (mikrotextura bump, roughness=0.45)
+                     - "rusted_iron"    -- Zkorodované železo (kombinace kovu a texturované rzi)
+                     - "glossy_glass"   -- Optické čiré sklo (transmission=1.0, ior=1.52)
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "create_procedural_shader",
+        "shader": {
+            "material_name": str,
+            "shader_type": str,
+            "assigned_to_object": str | None,
+            "node_count": int,
+            "link_count": int,
+            "nodes": list[dict],
+            "key_parameters": dict,
+        }
+    }
+    """
+    valid_types = ("brushed_metal", "matte_plastic", "rusted_iron", "glossy_glass")
+    clean_type = shader_type.lower().strip() if shader_type else "brushed_metal"
+    if clean_type not in valid_types:
+        clean_type = "brushed_metal"
+
+    payload: dict[str, Any] = {
+        "action": "create_procedural_shader",
+        "shader_type": clean_type,
+    }
+    if material_name and material_name.strip():
+        payload["material_name"] = material_name.strip()
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )

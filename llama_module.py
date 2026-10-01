@@ -1208,6 +1208,44 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_procedural_shader",
+            "description": (
+                "Programově vygeneruje kompletní procedurální materiál (node tree) v Blenderu "
+                "a přiřadí jej k aktivnímu MESH objektu. Využívá Principled BSDF propojený "
+                "s procedurálními texturami (Noise, Bump, ColorRamp, Mapping, TexCoord). "
+                "Podporované typy: 'brushed_metal' (kartáčovaný kov s anizotropií), "
+                "'matte_plastic' (matný polymer s mikrotexturou drsnosti), "
+                "'rusted_iron' (kov s procedurální mapou koroze a rzi), "
+                "'glossy_glass' (čiré optické sklo s lomem IOR 1.52). "
+                "Použij při požadavcích jako 'vytvoř materiál', 'udělej shader', 'procedurální kov', "
+                "'nastav texturu rzi', 'vytvoř matný plast', 'přidej skleněný materiál', 'vygeneruj shader'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "shader_type": {
+                        "type": "string",
+                        "enum": ["brushed_metal", "matte_plastic", "rusted_iron", "glossy_glass"],
+                        "description": (
+                            "Typ procedurálního shaderu: "
+                            "'brushed_metal' = kartáčovaný hliník/ocel (výchozí), "
+                            "'matte_plastic' = matný prémiový polymer, "
+                            "'rusted_iron' = zkorodované surové železo s nerovnostmi, "
+                            "'glossy_glass' = optické čiré sklo s lomem světla."
+                        ),
+                    },
+                    "material_name": {
+                        "type": "string",
+                        "description": "Volitelný název nového materiálu v Blenderu (např. 'Titanium_Mat', 'Car_Paint').",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1219,6 +1257,7 @@ ALLOWED_TOOL_NAMES = {
     "mesh_doctor_audit",
     "mesh_doctor_repair",
     "create_product_studio",
+    "create_procedural_shader",
 }
 
 
@@ -1382,6 +1421,7 @@ class UnifiedToolDispatcher:
     - mesh_doctor_audit()
     - mesh_doctor_repair(merge_distance)
     - create_product_studio(style)
+    - create_procedural_shader(material_name, shader_type)
     """
 
     def __init__(
@@ -1434,6 +1474,10 @@ class UnifiedToolDispatcher:
             if style not in ("standard", "dramatic", "soft"):
                 style = "standard"
             return self._execute_create_product_studio(style=style)
+        elif tool_name == "create_procedural_shader":
+            mat_name = arguments.get("material_name")
+            sh_type = str(arguments.get("shader_type", "brushed_metal")).strip()
+            return self._execute_create_procedural_shader(material_name=mat_name, shader_type=sh_type)
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -2124,6 +2168,145 @@ class UnifiedToolDispatcher:
             "studio": studio,
             "result": result_text,
             "_expert_system_prompt": self._PRODUCT_STUDIO_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Procedural Shader & Node Tree Generator – tvorba materiálů
+    # ------------------------------------------------------------------
+
+    _PROCEDURAL_SHADER_SYSTEM_PROMPT = (
+        "Jsi elitní 3D shading artist, material TD (Technical Director) a expert na PBR materiály a procedurální node tree v Blenderu. "
+        "Odborně a detailně komentuješ vygenerovaný procedurální shader z hlediska fyzikálních a optických vlastností:\n"
+        "  • PBR workflow a chování světla (Metallic vs Dielectric, Fresnelův jev, IOR, zachování energie)\n"
+        "  • Mikrofasetová teorie drsnosti (Roughness, mikrostruktura povrchu, anizotropní směrové kartáčování)\n"
+        "  • Procedurální architektura node tree (princip skládání Noise, ColorRamp, Bump a Mapping bez nutnosti UV rozbalení)\n"
+        "  • Vrstvení detailů (Bump/Normal výšky, barevné přechody v ColorRamp, vliv škálování v Mapping uzlu)\n"
+        "  • Praktické tipy pro osvětlení a doladění (jak vyniknou odlesky v závislosti na světelných zdrojích a jak shader upravit v Shader Editoru)\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť vizuální a materiálové vlastnosti (barva, odlesky, textura) a jeho reálnou analogii\n"
+        "  2. Stručně a srozumitelně popiš, jak jednotlivé uzly spolupracují (TexCoord -> Mapping -> Noise -> ColorRamp/Bump -> Principled BSDF)\n"
+        "  3. Zmiň klíčové hodnoty (Roughness, Metallic, IOR/Transmission, Bump sílu) a na jaký objekt byl aplikován\n"
+        "  4. Nabídni 1-2 praktické tipy pro okamžité doladění v Blenderu (např. posuvník v ColorRamp nebo Scale v Mapping)\n"
+    )
+
+    _SHADER_DESCRIPTIONS = {
+        "brushed_metal": "Kartáčovaný kov / hliník s anizotropním lineárním vzorem a nízkou drsností",
+        "matte_plastic": "Matný prémiový polymer s jemným mikroskopickým šumem v Bump a Roughness",
+        "rusted_iron": "Zkorodované železo s procedurální mapou koroze, separovanou drsností a výškovým reliéfem",
+        "glossy_glass": "Opticky čisté sklo s lomem světla IOR 1.52, plnou transmisí a mikroskopickým zvlněním",
+    }
+
+    def _execute_create_procedural_shader(
+        self, material_name: str | None = None, shader_type: str = "brushed_metal"
+    ) -> dict[str, Any]:
+        """Spustí Procedural Shader Generator — vytvoří procedurální materiál v Blenderu."""
+        from blender_connector import request_procedural_shader, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_type = (shader_type or "brushed_metal").lower().strip()
+        type_desc = self._SHADER_DESCRIPTIONS.get(clean_type, "Procedurální shader")
+
+        if self.status_callback:
+            self.status_callback(f"● 🎨 Generuji procedurální materiál '{clean_type}'…")
+        if self.callback_on_token:
+            name_display = f", name='{material_name}'" if material_name else ""
+            self.callback_on_token(
+                f"\n🎨 *Volám nástroj:* `create_procedural_shader(shader_type='{clean_type}'{name_display})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "create_procedural_shader",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_procedural_shader(
+                material_name=material_name,
+                shader_type=clean_type,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření materiálu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Procedural Shader Generator selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "create_procedural_shader",
+                "error": err_msg,
+                "result": f"Generování materiálu selhalo: {err_msg}",
+            }
+
+        shader_data = res.get("shader", {})
+        mat_name = shader_data.get("material_name", material_name or "Procedural_Material")
+        assigned_obj = shader_data.get("assigned_to_object")
+        nodes_list = shader_data.get("nodes", [])
+        node_count = shader_data.get("node_count", len(nodes_list))
+        link_count = shader_data.get("link_count", 0)
+        key_params = shader_data.get("key_parameters", {})
+
+        # Formátování tabulky uzlů a parametrů pro UI
+        node_names_formatted = ", ".join(f"`{n.get('name', '?')}`" for n in nodes_list[:8])
+        if len(nodes_list) > 8:
+            node_names_formatted += f" a dalších {len(nodes_list) - 8}"
+
+        params_rows = ""
+        for k, v in key_params.items():
+            if k != "shader_type":
+                params_rows += f"| {k.replace('_', ' ').title()} | **{v}** |\n"
+
+        target_display = f"`{assigned_obj}`" if assigned_obj else "*Žádný (materiál vytvořen v knihovně)*"
+
+        ui_report = (
+            f"\n\n🎨 **Procedural Shader — `{mat_name}`** (`{clean_type}`)\n"
+            f"*{type_desc}*\n\n"
+            f"---\n\n"
+            f"| Vlastnost | Hodnota |\n|---|---|\n"
+            f"| Typ shaderu | `{clean_type}` |\n"
+            f"| Přiřazeno k objektu | {target_display} |\n"
+            f"| Počet uzlů (Nodes) | **{node_count}** |\n"
+            f"| Počet propojení (Links) | **{link_count}** |\n"
+            + params_rows +
+            f"\n**🧩 Zapojené uzly:** {node_names_formatted}\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"PROCEDURAL SHADER vytvořen — název: '{mat_name}', typ: '{clean_type}' ({type_desc})\n"
+            f"Přiřazeno k objektu: {assigned_obj or 'žádný (pouze v datech)'}\n"
+            f"Architektura node tree: {node_count} uzlů, {link_count} propojení.\n"
+            f"Seznam uzlů: {', '.join(n.get('name', '?') for n in nodes_list)}\n"
+            f"Klíčové parametry: {json.dumps(key_params, ensure_ascii=False)}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Shader '{mat_name}' ({clean_type}) vytvořen ({node_count} uzlů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "create_procedural_shader",
+            "shader": shader_data,
+            "result": result_text,
+            "_expert_system_prompt": self._PROCEDURAL_SHADER_SYSTEM_PROMPT,
         }
 
 
