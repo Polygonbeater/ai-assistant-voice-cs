@@ -1,5 +1,9 @@
 # 🤖 Polygon Beater AI Assistant
 
+[🇬🇧 English](README.md) | 🇨🇿 **Česky**
+
+---
+
 Moderní, vysoce výkonný a **100% lokální hlasový AI asistent** optimalizovaný pro **český jazyk**, soukromí, nízkou latenci na vícejádrových procesorech (CPU) a přímou **automatizaci 3D modelování v aplikaci Blender**.
 
 Projekt integruje offline inferenci velkých jazykových modelů (GGUF), špičkový modul pro přepis řeči (**Faster-Whisper** s int8 kvantizací), plynulou syntézu hlasu v reálném čase (**Pipelined Streaming TTS**), neblokující **Hands-free detekci klíčového slova** (openWakeWord) a obousměrný TCP můstek do Blender API (`bpy`).
