@@ -702,3 +702,134 @@ def request_uv_pack(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_parametric_model(
+    model_type: str = "enclosure",
+    dimensions: dict[str, Any] | None = None,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vytvoření parametrického modelu (action: generate_parametric_model).
+
+    Args:
+        model_type: Typ parametrického tvaru ("enclosure", "gear", "bracket").
+        dimensions: Volitelný slovník rozměrů (v metrech nebo počtech prvků):
+                    - enclosure: width, depth, height, wall_thickness
+                    - gear: teeth_count, radius, tooth_depth, thickness, bore_radius
+                    - bracket: width, leg1_length, leg2_length, thickness, hole_radius
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "generate_parametric_model",
+        "model": {
+            "object_name": str,
+            "model_type": str,
+            "dimensions": dict,
+            "vertex_count": int,
+            "polygon_count": int,
+            "modifiers": list[str],
+        }
+    }
+    """
+    clean_type = (model_type or "enclosure").lower().strip()
+    payload = {
+        "action": "generate_parametric_model",
+        "model_type": clean_type,
+        "dimensions": dimensions or {},
+    }
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_modifier_stack(
+    stack_type: str = "hard_surface",
+    params: dict[str, Any] | None = None,
+    apply_immediately: bool = False,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na aplikaci profesionálního řetězce modifikátorů
+    na aktivní objekt (action: apply_modifier_stack).
+
+    Args:
+        stack_type: Typ řetězce modifikátorů:
+                    - "hard_surface": Bevel (úhlové omezení) + Weighted Normal pro dokonalý shading
+                    - "clean_solidify": Solidify s rovnoměrnou tloušťkou + sražení hran
+                    - "subdivision_bevel": Bevel + Subsurf pro hi-poly modelování
+        params: Volitelné parametry modifikátorů (např. bevel_width, bevel_segments, thickness).
+        apply_immediately: Zda modifikátory okamžitě zapsat (apply) do geometrie (výchozí: False).
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "apply_modifier_stack",
+        "object_name": str,
+        "stack_type": str,
+        "applied_immediately": bool,
+        "modifiers_count": int,
+        "modifiers": list[dict],
+    }
+    """
+    clean_type = (stack_type or "hard_surface").lower().strip()
+    payload = {
+        "action": "apply_modifier_stack",
+        "stack_type": clean_type,
+        "params": params or {},
+        "apply_immediately": apply_immediately,
+    }
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_geometry_nodes_bridge(
+    setup_type: str = "point_scatter",
+    node_group_name: str | None = None,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vytvoření a aplikaci procedurálního Geometry Nodes systému
+    na aktivní objekt (action: create_geometry_nodes_bridge).
+
+    Args:
+        setup_type: Typ přednastaveného Geometry Nodes stromu:
+                    - "point_scatter": Distribuce bodů po povrchu a instancování geometrie
+                    - "extrude_panel": Procedurální extrudování a panelizace stěn se spárami
+        node_group_name: Volitelný vlastní název nové skupiny uzlů (např. "GN_Panels").
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "create_geometry_nodes_bridge",
+        "object_name": str,
+        "modifier_name": str,
+        "node_group_name": str,
+        "setup_type": str,
+        "node_count": int,
+        "link_count": int,
+        "nodes": list[dict],
+    }
+    """
+    clean_type = (setup_type or "point_scatter").lower().strip()
+    payload: dict[str, Any] = {
+        "action": "create_geometry_nodes_bridge",
+        "setup_type": clean_type,
+    }
+    if node_group_name and node_group_name.strip():
+        payload["node_group_name"] = node_group_name.strip()
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )

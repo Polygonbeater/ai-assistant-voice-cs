@@ -1309,6 +1309,104 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_parametric_model",
+            "description": (
+                "Vygeneruje funkční parametrický 3D CAD/model v Blenderu s přesnými rozměry a konstrukčními prvky. "
+                "Podporované typy: 'enclosure' (krabička/pouzdro na elektroniku s volitelnou tloušťkou stěny), "
+                "'gear' (ozubené kolo s definovaným počtem zubů, poloměrem, tloušťkou a středovou dírou), "
+                "'bracket' (L-konzole/držák s montážními otvory). "
+                "Použij při požadavcích jako 'vytvoř krabičku na elektroniku', 'vygeneruj ozubené kolo', "
+                "'vymodeluj L-držák', 'parametrický model', 'vytvoř CAD díl'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "model_type": {
+                        "type": "string",
+                        "enum": ["enclosure", "gear", "bracket"],
+                        "description": "Typ parametrického modelu: 'enclosure' (krabička), 'gear' (ozubené kolo), 'bracket' (L-držák).",
+                    },
+                    "dimensions": {
+                        "type": "object",
+                        "description": (
+                            "Volitelný slovník rozměrů v metrech: "
+                            "enclosure: width, depth, height, wall_thickness; "
+                            "gear: teeth_count, radius, tooth_depth, thickness, bore_radius; "
+                            "bracket: width, leg1_length, leg2_length, thickness, hole_radius."
+                        ),
+                    },
+                },
+                "required": ["model_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "apply_modifier_stack",
+            "description": (
+                "Aplikuje na aktivní mesh objekt v Blenderu profesionální nedestruktivní řetězec modifikátorů "
+                "pro dokonalý hard-surface a CAD shading bez artefaktů. "
+                "Podporované stacky: 'hard_surface' (Bevel s úhlovým omezením + Weighted Normal se split normálami), "
+                "'clean_solidify' (Solidify s rovnoměrnou tloušťkou + sražení hran), "
+                "'subdivision_bevel' (Bevel + Subsurf pro hi-poly baking). "
+                "Použij při požadavcích jako 'aplikuj hard-surface modifikátory', 'přidej weighted normal a bevel', "
+                "'nastav zkosení hran', 'přidej solidify a sražení', 'vyhlaď stínování modifikátory'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stack_type": {
+                        "type": "string",
+                        "enum": ["hard_surface", "clean_solidify", "subdivision_bevel"],
+                        "description": "Typ řetězce modifikátorů: 'hard_surface' (Bevel + Weighted Normal), 'clean_solidify' (Solidify + Bevel), 'subdivision_bevel' (Bevel + Subsurf).",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Volitelné parametry: bevel_width (např. 0.002), bevel_segments (3), thickness (0.004), angle_limit (35.0), subdiv_levels (2).",
+                    },
+                    "apply_immediately": {
+                        "type": "boolean",
+                        "description": "Zda aplikovat modifikátory trvale do geometrie (True) nebo ponechat nedestruktivní ve stacku (False, doporučeno). Výchozí: False.",
+                    },
+                },
+                "required": ["stack_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_geometry_nodes_bridge",
+            "description": (
+                "Vytvoří a aplikuje na aktivní 3D mesh objekt v Blenderu procedurální Geometry Nodes systém "
+                "s propojeným NodeGroup stromem. "
+                "Podporované presety: 'point_scatter' (náhodná distribuce bodů po povrchu stěn a instancování prvků), "
+                "'extrude_panel' (procedurální vysunutí stěn a panelizace s mezerami/spárami). "
+                "Použij při požadavcích jako 'vytvoř geometry nodes', 'aplikuj point scatter', "
+                "'udělej procedurální panelizaci', 'nastav uzlový systém', 'instancuj objekty na povrch', "
+                "'procedurální extrude panelů'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "setup_type": {
+                        "type": "string",
+                        "enum": ["point_scatter", "extrude_panel"],
+                        "description": "Typ Geometry Nodes presetu: 'point_scatter' (distribuce bodů a instancování), 'extrude_panel' (extrudování stěn a panelizace).",
+                    },
+                    "node_group_name": {
+                        "type": "string",
+                        "description": "Volitelný název pro vytvořenou skupinu uzlů v Blenderu (např. 'GN_Hull_Panels').",
+                    },
+                },
+                "required": ["setup_type"],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1323,6 +1421,9 @@ ALLOWED_TOOL_NAMES = {
     "create_procedural_shader",
     "uv_texel_audit",
     "smart_uv_pack",
+    "generate_parametric_model",
+    "apply_modifier_stack",
+    "create_geometry_nodes_bridge",
 }
 
 
@@ -1489,6 +1590,9 @@ class UnifiedToolDispatcher:
     - create_procedural_shader(material_name, shader_type)
     - uv_texel_audit(texture_res)
     - smart_uv_pack(target_texel_density, margin, angle_limit, texture_res)
+    - generate_parametric_model(model_type, dimensions)
+    - apply_modifier_stack(stack_type, params, apply_immediately)
+    - create_geometry_nodes_bridge(setup_type, node_group_name)
     """
 
     def __init__(
@@ -1559,6 +1663,19 @@ class UnifiedToolDispatcher:
                 angle_limit=angle,
                 texture_res=tex_res,
             )
+        elif tool_name == "generate_parametric_model":
+            m_type = str(arguments.get("model_type", "enclosure")).strip()
+            dims = arguments.get("dimensions", {})
+            return self._execute_generate_parametric_model(model_type=m_type, dimensions=dims)
+        elif tool_name == "apply_modifier_stack":
+            s_type = str(arguments.get("stack_type", "hard_surface")).strip()
+            p = arguments.get("params", {})
+            apply_imm = bool(arguments.get("apply_immediately", False))
+            return self._execute_apply_modifier_stack(stack_type=s_type, params=p, apply_immediately=apply_imm)
+        elif tool_name == "create_geometry_nodes_bridge":
+            s_type = str(arguments.get("setup_type", "point_scatter")).strip()
+            g_name = arguments.get("node_group_name")
+            return self._execute_create_geometry_nodes_bridge(setup_type=s_type, node_group_name=g_name)
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -2608,6 +2725,352 @@ class UnifiedToolDispatcher:
             "post_pack_metrics": post_metrics,
             "result": result_text,
             "_expert_system_prompt": self._UV_TEXEL_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Procedural Modeling & Parametric Engine
+    # ------------------------------------------------------------------
+
+    _PARAMETRIC_CAD_SYSTEM_PROMPT = (
+        "Jsi zkušený Hard-Surface & CAD 3D designér, strojní konstruktér a expert na parametrické modelování a nedestruktivní modifikátory v Blenderu. "
+        "Odborně komentuješ vygenerovanou parametrickou geometrii nebo aplikovaný řetězec modifikátorů s důrazem na:\n"
+        "  • Výrobní a tiskové tolerance (FDM/SLA 3D tisk tolerance 0.2–0.4 mm, montážní vůle pro vkládané komponenty a šroubové spoje M3/M4/M6)\n"
+        "  • Strukturální integrita a tloušťka stěn (minimální doporučená tloušťka stěny pro plastové skořepiny 2–3 mm, žebrování, prevence deformací smrštěním)\n"
+        "  • Geometrie a kinematika mechanických dílů (poměry ozubení, modul, úhly záběru, vůle v ložiskových uloženích a otvorech)\n"
+        "  • Profesionální Hard-Surface Shading Rig (kombinace Bevel s úhlovým omezením např. 30–35° a Weighted Normal – "
+        "    vysvětli, jak split normály přenášejí stínování z velkých ploch na zkosené fazety a eliminují stínové deformace i bez subsurf podpůrných hran)\n"
+        "  • Nedestruktivní pipeline (výhoda ponechání modifikátorů ve stacku pro budoucí parametrické úpravy a exporty)\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť konstrukční rozměry a geometrické proporce dílu (šířka, hloubka, výška v mm, tloušťka stěny, montážní otvory)\n"
+        "  2. Popiš roli aplikovaných modifikátorů a jejich přínos pro výsledný vzhled nebo pevnost modelu\n"
+        "  3. Uveď 1-2 praktická doporučení z pohledu výroby (např. orientace tisku, zaoblení vnitřních hran, montážní podložky).\n"
+    )
+
+    def _execute_generate_parametric_model(
+        self, model_type: str = "enclosure", dimensions: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Spustí Parametric Modeling Engine — vygeneruje parametrickou geometrii v Blenderu."""
+        from blender_connector import request_parametric_model, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_type = (model_type or "enclosure").lower().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● 📐 Generuji parametrický CAD model '{clean_type}'…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n📐 *Volám nástroj:* `generate_parametric_model(model_type='{clean_type}')`\n")
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "generate_parametric_model",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_parametric_model(
+                model_type=clean_type, dimensions=dimensions, host=host, port=port, timeout=25.0
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při generování modelu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Parametric Engine selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "generate_parametric_model",
+                "error": err_msg,
+                "result": f"Generování parametrického modelu selhalo: {err_msg}",
+            }
+
+        model_data = res.get("model", {})
+        obj_name = model_data.get("object_name", "?")
+        dims_data = model_data.get("dimensions", {})
+        v_count = model_data.get("vertex_count", 0)
+        p_count = model_data.get("polygon_count", 0)
+        mods = model_data.get("modifiers", [])
+
+        dim_rows = ""
+        for k, v in dims_data.items():
+            dim_rows += f"| {k.replace('_', ' ').title()} | **{v}** |\n"
+
+        mods_formatted = ", ".join(f"`{m}`" for m in mods) if mods else "*žádné*"
+
+        ui_report = (
+            f"\n\n📐 **Parametric CAD Model — `{obj_name}`** (`{clean_type}`)\n\n"
+            f"---\n\n"
+            f"| Parametr | Hodnota |\n|---|---|\n"
+            f"| Typ modelu | `{clean_type}` |\n"
+            f"| Počet vrcholů | **{v_count}** |\n"
+            f"| Počet stěn (Faces) | **{p_count}** |\n"
+            f"| Modifikátory | {mods_formatted} |\n"
+            + dim_rows +
+            f"\n---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"PARAMETRICKÝ MODEL vygenerován — název: '{obj_name}', typ: '{clean_type}':\n"
+            f"  - Geometrie: {v_count} vrcholů, {p_count} polygonů\n"
+            f"  - Rozměry: {json.dumps(dims_data, ensure_ascii=False)}\n"
+            f"  - Modifikátory: {', '.join(mods) if mods else 'žádné'}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ CAD model '{obj_name}' ({clean_type}) vytvořen ({v_count} verts)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "generate_parametric_model",
+            "model": model_data,
+            "result": result_text,
+            "_expert_system_prompt": self._PARAMETRIC_CAD_SYSTEM_PROMPT,
+        }
+
+    def _execute_apply_modifier_stack(
+        self,
+        stack_type: str = "hard_surface",
+        params: dict[str, Any] | None = None,
+        apply_immediately: bool = False,
+    ) -> dict[str, Any]:
+        """Spustí Modifier Stack Pipeline — aplikace profesionálního řetězce modifikátorů."""
+        from blender_connector import request_modifier_stack, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_stack = (stack_type or "hard_surface").lower().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● ⚙️ Aplikuji řetězec modifikátorů '{clean_stack}'…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n⚙️ *Volám nástroj:* `apply_modifier_stack(stack_type='{clean_stack}')`\n")
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "apply_modifier_stack",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_modifier_stack(
+                stack_type=clean_stack,
+                params=params,
+                apply_immediately=apply_immediately,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při aplikaci modifikátorů.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Modifier Stack selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "apply_modifier_stack",
+                "error": err_msg,
+                "result": f"Aplikace modifikátorů selhala: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        mods = res.get("modifiers", [])
+        imm = res.get("applied_immediately", False)
+
+        mods_list_md = "\n".join(
+            f"  {idx + 1}. `{m.get('name', '?')}` ({m.get('type', '?')})"
+            for idx, m in enumerate(mods)
+        )
+
+        ui_report = (
+            f"\n\n⚙️ **Modifier Stack Aplikován — `{obj_name}`**\n"
+            f"*Typ stacku: `{clean_stack}`*\n\n"
+            f"---\n\n"
+            f"**Řetězec modifikátorů ({len(mods)}):**\n"
+            f"{mods_list_md}\n\n"
+            f"| Stav | Hodnota |\n|---|---|\n"
+            f"| Způsob aplikace | {'🔒 Trvale zapsáno do sítě (Applied)' if imm else '🧩 Nedestruktivní (Live Stack)'} |\n"
+            f"| Auto Smooth | ✅ Aktivováno pro Weighted Normal |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"MODIFIER STACK aplikován na objekt '{obj_name}' (stack_type: '{clean_stack}'):\n"
+            f"  - Počet modifikátorů: {len(mods)}\n"
+            f"  - Řetězec: {', '.join(m.get('name', '?') for m in mods)}\n"
+            f"  - Nedestruktivní: {'NE (aplikováno)' if imm else 'ANO (ponecháno ve stacku)'}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Stack '{clean_stack}' aplikován na '{obj_name}' ({len(mods)} modifikátorů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "apply_modifier_stack",
+            "object_name": obj_name,
+            "stack_type": clean_stack,
+            "modifiers": mods,
+            "result": result_text,
+            "_expert_system_prompt": self._PARAMETRIC_CAD_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Geometry Nodes Bridge
+    # ------------------------------------------------------------------
+
+    _GEOMETRY_NODES_SYSTEM_PROMPT = (
+        "Jsi špičkový 3D Geometry Nodes architekt, Technical TD a expert na procedurální grafové systémy v Blenderu. "
+        "Odborně a detailně komentuješ vygenerovaný uzlový strom s důrazem na:\n"
+        "  • Dataflow Fields architekturu v Blenderu (rozdíl mezi geometrií a polí hodnot/fields, vyhodnocování v kontextech domén: Point, Edge, Face, Corner, Instance)\n"
+        "  • Paměťová optimalizace a instancování (výhody lehkých instancí pro GPU rendering vs nutnost 'Realize Instances' pro následné booleany nebo deformace)\n"
+        "  • Topologické operace (Extrude Mesh, selekce Top/Side stěn, Scale Elements pro procedurální švy a spáry panelů sci-fi trupů a archviz fasád)\n"
+        "  • Parametrizace pro umělce (vystavení klíčových socketů do NodeGroupInput modifikátoru, což umožňuje artistům měnit hustotu, měřítko a posun přímo v panelu vlastností)\n"
+        "  • Praktické tipy pro další rozvoj grafu (náhodná rotace instancí přes Random Value, propojení s Noise texturou pro organický rozptyl).\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť architekturu a účel vytvořeného stromu uzlů (point_scatter nebo extrude_panel)\n"
+        "  2. Popiš tok dat mezi uzly (Group Input -> operace -> Group Output)\n"
+        "  3. Navrhni 1-2 konkrétní parametry, které lze ihned ladit na modifikátoru nebo v Node Editoru.\n"
+    )
+
+    def _execute_create_geometry_nodes_bridge(
+        self, setup_type: str = "point_scatter", node_group_name: str | None = None
+    ) -> dict[str, Any]:
+        """Spustí Geometry Nodes Bridge — vytvoření a aplikace procedurálního uzlového systému."""
+        from blender_connector import request_geometry_nodes_bridge, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_type = (setup_type or "point_scatter").lower().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● 🧩 Sestavuji Geometry Nodes strom '{clean_type}'…")
+        if self.callback_on_token:
+            name_display = f", name='{node_group_name}'" if node_group_name else ""
+            self.callback_on_token(f"\n🧩 *Volám nástroj:* `create_geometry_nodes_bridge(setup_type='{clean_type}'{name_display})`\n")
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "create_geometry_nodes_bridge",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_geometry_nodes_bridge(
+                setup_type=clean_type,
+                node_group_name=node_group_name,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření Geometry Nodes.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Geometry Nodes Bridge selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "create_geometry_nodes_bridge",
+                "error": err_msg,
+                "result": f"Geometry Nodes Bridge selhal: {err_msg}",
+            }
+
+        obj_name = res.get("object_name", "?")
+        mod_name = res.get("modifier_name", "GeometryNodes")
+        group_name = res.get("node_group_name", "?")
+        n_count = res.get("node_count", 0)
+        l_count = res.get("link_count", 0)
+        nodes_list = res.get("nodes", [])
+
+        nodes_md = "\n".join(
+            f"  • `{n.get('name', '?')}` ({n.get('type', '?')})"
+            for n in nodes_list
+        )
+
+        type_desc = (
+            "Distribuce bodů po povrchu stěn a instancování 3D prvků"
+            if clean_type == "point_scatter"
+            else "Procedurální panelizace a extrudování polygonů se spárami"
+        )
+
+        ui_report = (
+            f"\n\n🧩 **Geometry Nodes Bridge — `{group_name}`**\n"
+            f"*{type_desc}*\n\n"
+            f"---\n\n"
+            f"| Parametr | Hodnota |\n|---|---|\n"
+            f"| Cílový objekt | `{obj_name}` |\n"
+            f"| Modifikátor | `{mod_name}` |\n"
+            f"| Typ presetu | `{clean_type}` |\n"
+            f"| Počet uzlů (Nodes) | **{n_count}** |\n"
+            f"| Počet spojení (Links) | **{l_count}** |\n\n"
+            f"**Architektura uzlového grafu:**\n"
+            f"{nodes_md}\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"GEOMETRY NODES BRIDGE vytvořen pro objekt '{obj_name}':\n"
+            f"  - Modifikátor: '{mod_name}', Node Group: '{group_name}'\n"
+            f"  - Typ setupu: '{clean_type}' ({type_desc})\n"
+            f"  - Uzly ({n_count}): {', '.join(n.get('name', '?') for n in nodes_list)}\n"
+            f"  - Spojení: {l_count} propojení\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Geometry Nodes '{group_name}' aplikován ({n_count} uzlů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "create_geometry_nodes_bridge",
+            "object_name": obj_name,
+            "modifier_name": mod_name,
+            "node_group_name": group_name,
+            "setup_type": clean_type,
+            "nodes": nodes_list,
+            "result": result_text,
+            "_expert_system_prompt": self._GEOMETRY_NODES_SYSTEM_PROMPT,
         }
 
 

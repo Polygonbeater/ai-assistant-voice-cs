@@ -1503,10 +1503,545 @@ def process_blender_queue_timer():
                 print(err_trace)
             finally:
                 completion_event.set()
+        # 8. Parametric Modeling Engine – parametrické generování geometrie
+        if action == "generate_parametric_model":
+            print("\n[AI-Blender] >>> Zahajuji Parametric Modeling Engine...")
+            try:
+                import math
+                import bmesh
+
+                model_type = message.get("model_type", "enclosure").lower().strip()
+                dims = message.get("dimensions", {}) or {}
+
+                # Deselect all
+                for o in bpy.context.selected_objects:
+                    o.select_set(False)
+
+                created_obj = None
+
+                if model_type == "enclosure":
+                    # Krabička pro elektroniku / pouzdro
+                    w = float(dims.get("width", 0.10))     # 100 mm
+                    d = float(dims.get("depth", 0.08))     # 80 mm
+                    h = float(dims.get("height", 0.04))    # 40 mm
+                    wt = float(dims.get("wall_thickness", 0.003)) # 3 mm
+
+                    # Vytvoření základního kvádru
+                    bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0, h / 2.0))
+                    obj = bpy.context.active_object
+                    obj.name = "Parametric_Enclosure"
+                    obj.scale = (w, d, h)
+                    bpy.ops.object.transform_apply(scale=True)
+
+                    # Vymazání horní stěny (Z max) pro vytvoření otevřeného pouzdra
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bm = bmesh.from_edit_mesh(obj.data)
+                    top_faces = [f for f in bm.faces if f.normal.z > 0.8]
+                    bmesh.ops.delete(bm, geom=top_faces, context='FACES')
+                    bmesh.update_edit_mesh(obj.data)
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                    # Aplikace Solidify pro tloušťku stěny
+                    sol = obj.modifiers.new(name="Solidify", type='SOLIDIFY')
+                    sol.thickness = wt
+                    sol.offset = -1.0  # směrem dovnitř
+                    sol.use_even_offset = True
+
+                    # Jemný zkosený okraj (Bevel)
+                    bev = obj.modifiers.new(name="Bevel", type='BEVEL')
+                    bev.width = min(wt * 0.4, 0.0015)
+                    bev.segments = 2
+                    bev.limit_method = 'ANGLE'
+
+                    created_obj = obj
+                    dims_summary = {
+                        "width_mm": round(w * 1000, 1),
+                        "depth_mm": round(d * 1000, 1),
+                        "height_mm": round(h * 1000, 1),
+                        "wall_thickness_mm": round(wt * 1000, 1),
+                    }
+
+                elif model_type == "gear":
+                    # Ozubené kolo
+                    n_teeth = int(dims.get("teeth_count", 20))
+                    r = float(dims.get("radius", 0.05))         # 50 mm
+                    td = float(dims.get("tooth_depth", 0.008))   # 8 mm
+                    th = float(dims.get("thickness", 0.012))    # 12 mm
+                    bore = float(dims.get("bore_radius", 0.01)) # 10 mm
+
+                    # Sestavení ozubeného profilu v 2D bmesh
+                    bm = bmesh.new()
+                    root_r = max(r - td * 0.5, 0.005)
+                    tip_r = r + td * 0.5
+
+                    outer_verts = []
+                    for i in range(n_teeth):
+                        base_angle = (2.0 * math.pi * i) / n_teeth
+                        step = (2.0 * math.pi) / (n_teeth * 4.0)
+
+                        a0 = base_angle
+                        a1 = base_angle + step * 0.9
+                        a2 = base_angle + step * 2.1
+                        a3 = base_angle + step * 3.0
+
+                        outer_verts.append(bm.verts.new((root_r * math.cos(a0), root_r * math.sin(a0), 0)))
+                        outer_verts.append(bm.verts.new((tip_r * math.cos(a1), tip_r * math.sin(a1), 0)))
+                        outer_verts.append(bm.verts.new((tip_r * math.cos(a2), tip_r * math.sin(a2), 0)))
+                        outer_verts.append(bm.verts.new((root_r * math.cos(a3), root_r * math.sin(a3), 0)))
+
+                    face = bm.faces.new(outer_verts)
+
+                    # Vytažení profilu do 3D
+                    geom_ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+                    verts_ext = [e for e in geom_ext['geom'] if isinstance(e, bmesh.types.BMVert)]
+                    bmesh.ops.translate(bm, vec=(0, 0, th), verts=verts_ext)
+
+                    mesh = bpy.data.meshes.new("Parametric_Gear_Mesh")
+                    bm.to_mesh(mesh)
+                    bm.free()
+
+                    obj = bpy.data.objects.new("Parametric_Gear", mesh)
+                    bpy.context.collection.objects.link(obj)
+                    bpy.context.view_layer.objects.active = obj
+                    obj.select_set(True)
+
+                    # Středový montážní otvor (Boolean Cylinder)
+                    if bore > 0.001:
+                        bpy.ops.mesh.primitive_cylinder_add(radius=bore, depth=th * 3.0, location=(0, 0, th / 2.0))
+                        cyl = bpy.context.active_object
+                        cyl.name = "_temp_gear_bore"
+
+                        bool_mod = obj.modifiers.new(name="Bore_Hole", type='BOOLEAN')
+                        bool_mod.object = cyl
+                        bool_mod.operation = 'DIFFERENCE'
+                        bpy.context.view_layer.objects.active = obj
+                        try:
+                            bpy.ops.object.modifier_apply(modifier=bool_mod.name)
+                        except Exception:
+                            pass
+                        bpy.data.objects.remove(cyl, do_unlink=True)
+
+                    bev = obj.modifiers.new(name="Bevel", type='BEVEL')
+                    bev.width = min(td * 0.1, 0.001)
+                    bev.segments = 2
+                    bev.limit_method = 'ANGLE'
+
+                    created_obj = obj
+                    dims_summary = {
+                        "teeth_count": n_teeth,
+                        "pitch_radius_mm": round(r * 1000, 1),
+                        "tooth_depth_mm": round(td * 1000, 1),
+                        "thickness_mm": round(th * 1000, 1),
+                        "bore_radius_mm": round(bore * 1000, 1),
+                    }
+
+                elif model_type == "bracket":
+                    # L-držák s montážními otvory
+                    w = float(dims.get("width", 0.05))         # 50 mm šířka
+                    l1 = float(dims.get("leg1_length", 0.08))  # 80 mm rameno 1 (X)
+                    l2 = float(dims.get("leg2_length", 0.06))  # 60 mm rameno 2 (Z)
+                    t = float(dims.get("thickness", 0.006))    # 6 mm tloušťka
+                    hole_r = float(dims.get("hole_radius", 0.0035)) # 3.5 mm (M6)
+
+                    bm = bmesh.new()
+                    pts = [
+                        (0, 0, 0),
+                        (l1, 0, 0),
+                        (l1, 0, t),
+                        (t, 0, t),
+                        (t, 0, l2),
+                        (0, 0, l2),
+                    ]
+                    bm_verts = [bm.verts.new(p) for p in pts]
+                    face = bm.faces.new(bm_verts)
+
+                    # Extrude v ose Y o šířku w
+                    geom_ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+                    verts_ext = [e for e in geom_ext['geom'] if isinstance(e, bmesh.types.BMVert)]
+                    bmesh.ops.translate(bm, vec=(0, w, 0), verts=verts_ext)
+
+                    mesh = bpy.data.meshes.new("Parametric_Bracket_Mesh")
+                    bm.to_mesh(mesh)
+                    bm.free()
+
+                    obj = bpy.data.objects.new("Parametric_Bracket", mesh)
+                    bpy.context.collection.objects.link(obj)
+                    bpy.context.view_layer.objects.active = obj
+                    obj.select_set(True)
+
+                    # Vyvrtání montážních otvorů na obou ramenech
+                    if hole_r > 0.001:
+                        h1_x = l1 * 0.65
+                        h1_y = w * 0.5
+                        bpy.ops.mesh.primitive_cylinder_add(radius=hole_r, depth=t * 4.0, location=(h1_x, h1_y, t / 2.0))
+                        c1 = bpy.context.active_object
+                        c1.name = "_temp_h1"
+
+                        h2_z = l2 * 0.65
+                        h2_y = w * 0.5
+                        bpy.ops.mesh.primitive_cylinder_add(radius=hole_r, depth=t * 4.0, location=(t / 2.0, h2_y, h2_z))
+                        c2 = bpy.context.active_object
+                        c2.name = "_temp_h2"
+                        c2.rotation_euler = (0, math.radians(90), 0)
+
+                        for cyl in [c1, c2]:
+                            mod = obj.modifiers.new(name="Hole", type='BOOLEAN')
+                            mod.object = cyl
+                            mod.operation = 'DIFFERENCE'
+                            bpy.context.view_layer.objects.active = obj
+                            try:
+                                bpy.ops.object.modifier_apply(modifier=mod.name)
+                            except Exception:
+                                pass
+                            bpy.data.objects.remove(cyl, do_unlink=True)
+
+                    bev = obj.modifiers.new(name="Bevel", type='BEVEL')
+                    bev.width = min(t * 0.25, 0.0015)
+                    bev.segments = 2
+                    bev.limit_method = 'ANGLE'
+
+                    created_obj = obj
+                    dims_summary = {
+                        "width_mm": round(w * 1000, 1),
+                        "leg1_length_mm": round(l1 * 1000, 1),
+                        "leg2_length_mm": round(l2 * 1000, 1),
+                        "thickness_mm": round(t * 1000, 1),
+                        "hole_diameter_mm": round(hole_r * 2000, 1),
+                    }
+                else:
+                    w = float(dims.get("width", 0.1))
+                    d = float(dims.get("depth", 0.1))
+                    h = float(dims.get("height", 0.1))
+                    bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0, h / 2.0))
+                    obj = bpy.context.active_object
+                    obj.name = f"Parametric_{model_type.title()}"
+                    obj.scale = (w, d, h)
+                    bpy.ops.object.transform_apply(scale=True)
+                    created_obj = obj
+                    dims_summary = {"width_mm": round(w * 1000, 1), "depth_mm": round(d * 1000, 1), "height_mm": round(h * 1000, 1)}
+
+                bpy.context.view_layer.objects.active = created_obj
+                created_obj.select_set(True)
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                mesh_data = created_obj.data
+                v_count = len(mesh_data.vertices)
+                p_count = len(mesh_data.polygons)
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "generate_parametric_model",
+                    "model": {
+                        "object_name": created_obj.name,
+                        "model_type": model_type,
+                        "dimensions": dims_summary,
+                        "vertex_count": v_count,
+                        "polygon_count": p_count,
+                        "modifiers": [m.name for m in created_obj.modifiers],
+                    }
+                }
+                print(f"✅ [AI-Blender] Parametric Model '{created_obj.name}' ({model_type}) úspěšně vytvořen ({v_count} verts).")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Parametric Model: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 8. Vykonání Python kódu (action == 'execute')
+        # 9. Modifier Stack Pipeline – aplikace hard-surface řetězců modifikátorů
+        if action == "apply_modifier_stack":
+            print("\n[AI-Blender] >>> Zahajuji Modifier Stack Pipeline...")
+            try:
+                import math
+
+                active_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    active_obj = bpy.context.view_layer.objects.active
+                if not active_obj and hasattr(bpy.context, "active_object"):
+                    active_obj = bpy.context.active_object
+
+                if not active_obj or active_obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                stack_type = message.get("stack_type", "hard_surface").lower().strip()
+                params = message.get("params", {}) or {}
+                apply_immediately = bool(message.get("apply_immediately", False))
+
+                applied_modifiers = []
+
+                if stack_type == "hard_surface":
+                    bevel_w = float(params.get("bevel_width", 0.002))
+                    bevel_seg = int(params.get("bevel_segments", 3))
+                    angle_deg = float(params.get("angle_limit", 35.0))
+
+                    bev = active_obj.modifiers.new(name="HS_Bevel", type='BEVEL')
+                    bev.width = bevel_w
+                    bev.segments = bevel_seg
+                    bev.limit_method = 'ANGLE'
+                    bev.angle_limit = math.radians(angle_deg)
+                    bev.miter_outer = 'MITER_ARC'
+                    applied_modifiers.append({"name": bev.name, "type": "BEVEL", "width": bevel_w, "segments": bevel_seg})
+
+                    wn = active_obj.modifiers.new(name="HS_WeightedNormal", type='WEIGHTED_NORMAL')
+                    wn.keep_sharp = True
+                    wn.weight = 50
+                    applied_modifiers.append({"name": wn.name, "type": "WEIGHTED_NORMAL", "keep_sharp": True})
+
+                    try:
+                        active_obj.data.use_auto_smooth = True
+                        active_obj.data.auto_smooth_angle = math.radians(60.0)
+                    except Exception:
+                        pass
+
+                elif stack_type == "clean_solidify":
+                    thick = float(params.get("thickness", 0.004))
+                    bevel_w = float(params.get("bevel_width", 0.001))
+
+                    sol = active_obj.modifiers.new(name="Clean_Solidify", type='SOLIDIFY')
+                    sol.thickness = thick
+                    sol.offset = -1.0
+                    sol.use_even_offset = True
+                    sol.use_quality_normals = True
+                    applied_modifiers.append({"name": sol.name, "type": "SOLIDIFY", "thickness": thick})
+
+                    bev = active_obj.modifiers.new(name="Clean_Bevel", type='BEVEL')
+                    bev.width = bevel_w
+                    bev.segments = 2
+                    bev.limit_method = 'ANGLE'
+                    applied_modifiers.append({"name": bev.name, "type": "BEVEL", "width": bevel_w})
+
+                elif stack_type == "subdivision_bevel":
+                    bevel_w = float(params.get("bevel_width", 0.002))
+                    subdiv_lvl = int(params.get("subdiv_levels", 2))
+
+                    bev = active_obj.modifiers.new(name="Subdiv_Bevel", type='BEVEL')
+                    bev.width = bevel_w
+                    bev.segments = 2
+                    bev.limit_method = 'ANGLE'
+                    applied_modifiers.append({"name": bev.name, "type": "BEVEL", "width": bevel_w})
+
+                    sub = active_obj.modifiers.new(name="Subdivision", type='SUBSURF')
+                    sub.levels = subdiv_lvl
+                    sub.render_levels = subdiv_lvl + 1
+                    applied_modifiers.append({"name": sub.name, "type": "SUBSURF", "levels": subdiv_lvl})
+
+                else:
+                    bev = active_obj.modifiers.new(name="Bevel", type='BEVEL')
+                    bev.width = 0.002
+                    bev.limit_method = 'ANGLE'
+                    applied_modifiers.append({"name": bev.name, "type": "BEVEL", "width": 0.002})
+
+                if apply_immediately:
+                    bpy.context.view_layer.objects.active = active_obj
+                    for mod_info in list(applied_modifiers):
+                        mod_name = mod_info["name"]
+                        if mod_name in active_obj.modifiers:
+                            try:
+                                bpy.ops.object.modifier_apply(modifier=mod_name)
+                            except Exception:
+                                pass
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "apply_modifier_stack",
+                    "object_name": active_obj.name,
+                    "stack_type": stack_type,
+                    "applied_immediately": apply_immediately,
+                    "modifiers_count": len(applied_modifiers),
+                    "modifiers": applied_modifiers,
+                }
+                print(f"✅ [AI-Blender] Modifier Stack '{stack_type}' aplikován na '{active_obj.name}' ({len(applied_modifiers)} modifikátorů).")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Apply Modifier Stack: {e}")
+                print(err_trace)
+        # 10. Geometry Nodes Bridge – programová správa a generování uzlových stromů
+        if action == "create_geometry_nodes_bridge":
+            print("\n[AI-Blender] >>> Zahajuji Geometry Nodes Bridge...")
+            try:
+                active_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    active_obj = bpy.context.view_layer.objects.active
+                if not active_obj and hasattr(bpy.context, "active_object"):
+                    active_obj = bpy.context.active_object
+
+                if not active_obj or active_obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                setup_type = message.get("setup_type", "point_scatter").lower().strip()
+                req_name = message.get("node_group_name")
+                group_name = req_name.strip() if req_name and req_name.strip() else f"GN_{setup_type.title()}"
+
+                # 1. Přidání Geometry Nodes modifikátoru na aktivní objekt
+                mod = active_obj.modifiers.new(name="GeometryNodes", type='NODES')
+
+                # 2. Vytvoření nového GeometryNodeTree
+                node_group = bpy.data.node_groups.new(name=group_name, type='GeometryNodeTree')
+                mod.node_group = node_group
+
+                # Inicializace rozhraní (interface sockets pro Blender 4.0+ i starší 3.x)
+                if hasattr(node_group, "interface"):
+                    # Blender 4.0+
+                    has_in = any(getattr(item, "name", "") == "Geometry" and getattr(item, "in_out", "") == 'INPUT' for item in node_group.interface.items_tree)
+                    if not has_in:
+                        node_group.interface.new_socket(name="Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+                    has_out = any(getattr(item, "name", "") == "Geometry" and getattr(item, "in_out", "") == 'OUTPUT' for item in node_group.interface.items_tree)
+                    if not has_out:
+                        node_group.interface.new_socket(name="Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+                else:
+                    # Blender 3.x
+                    if hasattr(node_group, "inputs") and "Geometry" not in node_group.inputs:
+                        node_group.inputs.new('NodeSocketGeometry', 'Geometry')
+                    if hasattr(node_group, "outputs") and "Geometry" not in node_group.outputs:
+                        node_group.outputs.new('NodeSocketGeometry', 'Geometry')
+
+                nodes = node_group.nodes
+                links = node_group.links
+                nodes.clear()
+
+                # Vstupní a výstupní uzel skupiny
+                group_in = nodes.new('NodeGroupInput')
+                group_in.location = (-450, 0)
+
+                group_out = nodes.new('NodeGroupOutput')
+                group_out.location = (450, 0)
+
+                # 3. Sestavení uzlového grafu podle zvoleného presetu
+                if setup_type == "point_scatter":
+                    # Distribuce bodů po ploše a instancování kostek
+                    distribute = nodes.new('GeometryNodeDistributePointsOnFaces')
+                    distribute.location = (-150, -100)
+                    try:
+                        distribute.inputs['Density'].default_value = 40.0
+                    except Exception:
+                        pass
+
+                    cube = nodes.new('GeometryNodeMeshCube')
+                    cube.location = (-150, -320)
+                    try:
+                        cube.inputs['Size'].default_value = (0.04, 0.04, 0.04)
+                    except Exception:
+                        pass
+
+                    instance = nodes.new('GeometryNodeInstanceOnPoints')
+                    instance.location = (120, -100)
+
+                    join = nodes.new('GeometryNodeJoinGeometry')
+                    join.location = (300, 0)
+
+                    # Propojení
+                    links.new(group_in.outputs['Geometry'], distribute.inputs['Mesh'])
+                    links.new(distribute.outputs['Points'], instance.inputs['Points'])
+                    links.new(cube.outputs['Mesh'], instance.inputs['Instance'])
+
+                    links.new(group_in.outputs['Geometry'], join.inputs['Geometry'])
+                    links.new(instance.outputs['Instances'], join.inputs['Geometry'])
+                    links.new(join.outputs['Geometry'], group_out.inputs['Geometry'])
+
+                elif setup_type == "extrude_panel":
+                    # Procedurální extruze stěn a vytvoření spár panelů
+                    extrude = nodes.new('GeometryNodeExtrudeMesh')
+                    extrude.location = (-120, 0)
+                    try:
+                        extrude.mode = 'FACES'
+                        extrude.inputs['Offset Scale'].default_value = 0.02
+                    except Exception:
+                        pass
+
+                    scale_elem = nodes.new('GeometryNodeScaleElements')
+                    scale_elem.location = (150, 0)
+                    try:
+                        scale_elem.inputs['Scale'].default_value = 0.88
+                    except Exception:
+                        pass
+
+                    # Propojení
+                    links.new(group_in.outputs['Geometry'], extrude.inputs['Mesh'])
+                    links.new(extrude.outputs['Mesh'], scale_elem.inputs['Geometry'])
+                    if 'Top' in extrude.outputs and 'Selection' in scale_elem.inputs:
+                        links.new(extrude.outputs['Top'], scale_elem.inputs['Selection'])
+                    links.new(scale_elem.outputs['Geometry'], group_out.inputs['Geometry'])
+
+                else:
+                    # Základní přímé propojení (passthrough)
+                    links.new(group_in.outputs['Geometry'], group_out.inputs['Geometry'])
+
+                # Překreslení viewportu
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                created_nodes_summary = [
+                    {"name": n.name, "type": n.type, "label": getattr(n, "label", "") or n.name}
+                    for n in nodes
+                ]
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "create_geometry_nodes_bridge",
+                    "object_name": active_obj.name,
+                    "modifier_name": mod.name,
+                    "node_group_name": node_group.name,
+                    "setup_type": setup_type,
+                    "node_count": len(created_nodes_summary),
+                    "link_count": len(links),
+                    "nodes": created_nodes_summary,
+                }
+                print(f"✅ [AI-Blender] Geometry Nodes Bridge '{node_group.name}' ({setup_type}) aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Geometry Nodes Bridge: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 11. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()
