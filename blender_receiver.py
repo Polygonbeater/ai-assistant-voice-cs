@@ -124,6 +124,7 @@ class BlenderSocketServer:
                 resp = {
                     "status": "error",
                     "error": "Timeout: Blender hlavní vlákno nestihlo úlohu vykonat včas.",
+                    "traceback": "TimeoutError: bpy.app.timers execution timed out after 10.0s",
                 }
             else:
                 resp = result_container.get("response", {"status": "success"})
@@ -131,7 +132,7 @@ class BlenderSocketServer:
             conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
 
         except Exception as exc:
-            err_resp = {"status": "error", "error": str(exc), "trace": traceback.format_exc()}
+            err_resp = {"status": "error", "error": str(exc), "traceback": traceback.format_exc()}
             try:
                 conn.sendall((json.dumps(err_resp) + "\n").encode("utf-8"))
             except Exception:
@@ -210,7 +211,7 @@ def process_blender_queue_timer():
             result_container["response"] = {
                 "status": "error",
                 "error": str(e),
-                "trace": err_trace,
+                "traceback": err_trace,
                 "output": stdout_capture.getvalue().strip(),
             }
             print(f"❌ [AI-Blender] Chyba při spuštění kódu: {e}")

@@ -455,16 +455,29 @@ def is_blender_command(prompt: str, config: dict | None = None) -> bool:
     return False
 
 
-def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None):
+def handle_blender_command(
+    llm: Llama,
+    prompt: str,
+    config: dict,
+    callback_on_token=None,
+    stop_event=None,
+    status_callback=None,
+):
     """
     Vygeneruje Python kód pro Blender (bpy) na základě uživatelského pokynu
     a odešle ho přes lokální TCP socket do běžící instance Blenderu.
+    Obsahuje Self-Healing Blender Loop – při chybě (Exception) zachytí traceback
+    a nechá LLM kód automaticky opravit (až 2 pokusy o opravu).
     """
     from blender_connector import send_code_to_blender, is_blender_available
 
     blender_cfg = config.get("blender", {})
     host = blender_cfg.get("host", "127.0.0.1")
     port = int(blender_cfg.get("port", 9876))
+    max_retries = int(blender_cfg.get("max_retries", 2))
+
+    if status_callback:
+        status_callback("● Generuji Python kód pro Blender…")
 
     status_msg = "Generuji Python kód pro Blender…"
     if callback_on_token:
@@ -472,34 +485,11 @@ def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_to
     yield status_msg
 
     try:
-        messages = [
-            {"role": "system", "content": BLENDER_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Příkaz: {prompt}"}
-        ]
-
-        response = llm.create_chat_completion(
-            messages=messages,
-            max_tokens=350,
-            temperature=0.1,
-            stream=False
-        )
-
-        raw_code = response["choices"][0]["message"].get("content", "")
-        clean_code = clean_python_code(raw_code)
-
-        if not clean_code:
-            err_msg = "Nepodařilo se vygenerovat kód pro Blender."
-            if callback_on_token:
-                callback_on_token(f"\n{err_msg}\n")
-            yield err_msg
-            return
-
         # Ověření dostupnosti Blenderu na socketu
         if not is_blender_available(host, port):
             warn_msg = (
                 f"\n\n⚠️ **Blender není připojen na portu {port}.**\n\n"
                 f"Spusťte prosím v Blenderu v Text Editoru skript `blender_receiver.py` (Run Script / Alt+P).\n\n"
-                f"**Vygenerovaný kód pro Blender:**\n```python\n{clean_code}\n```"
             )
             tts_alert = "Blender není připojen na portu 9876. Spusťte prosím v Blenderu přijímací skript."
             if callback_on_token:
@@ -507,30 +497,141 @@ def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_to
             yield tts_alert
             return
 
-        # Odeslání do Blenderu přes TCP socket
-        res = send_code_to_blender(clean_code, host=host, port=port, timeout=8.0)
+        messages = [
+            {"role": "system", "content": BLENDER_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Příkaz: {prompt}"}
+        ]
 
-        if res.get("status") == "success":
-            output_info = res.get("output", "").strip()
-            out_detail = f"\n*Výstup z Blenderu:* `{output_info}`" if output_info and output_info != "Kód byl úspěšně vykonán." else ""
-            success_ui = (
-                f"\n\n✅ **Příkaz v Blenderu byl úspěšně vykonán.**{out_detail}\n\n"
-                f"```python\n{clean_code}\n```"
+        attempt = 0
+        last_code = ""
+        last_res = {}
+
+        while attempt <= max_retries:
+            if stop_event and stop_event.is_set():
+                return
+
+            if attempt > 0:
+                if status_callback:
+                    status_callback(f"● 🔄 Blender Self-Healing: Generuji opravu ({attempt}/{max_retries})…")
+                if callback_on_token:
+                    callback_on_token(f"\n🔄 *Self-Healing (pokus {attempt}/{max_retries}): Generuji opravenou verzi kódu...*\n")
+
+            response = llm.create_chat_completion(
+                messages=messages,
+                max_tokens=450,
+                temperature=0.1,
+                stream=False
             )
-            success_tts = "Příkaz byl úspěšně vykonán v Blenderu."
-            if callback_on_token:
-                callback_on_token(success_ui)
-            yield success_tts
-        else:
-            err_detail = res.get("error") or res.get("message", "Neznámá chyba")
-            fail_ui = (
-                f"\n\n❌ **Při vykonávání v Blenderu došlo k chybě:**\n```\n{err_detail}\n```\n\n"
-                f"**Kód:**\n```python\n{clean_code}\n```"
-            )
-            fail_tts = "Při vykonávání kódu v Blenderu došlo k chybě."
-            if callback_on_token:
-                callback_on_token(fail_ui)
-            yield fail_tts
+
+            raw_code = response["choices"][0]["message"].get("content", "")
+            clean_code = clean_python_code(raw_code)
+            last_code = clean_code
+
+            if not clean_code:
+                err_msg = "Nepodařilo se vygenerovat kód pro Blender."
+                if callback_on_token:
+                    callback_on_token(f"\n{err_msg}\n")
+                yield err_msg
+                return
+
+            # Odeslání do Blenderu přes TCP socket
+            if status_callback:
+                if attempt == 0:
+                    status_callback("● Odesílám kód do Blenderu…")
+                else:
+                    status_callback(f"● Odesílám opravený kód do Blenderu ({attempt}/{max_retries})…")
+
+            res = send_code_to_blender(clean_code, host=host, port=port, timeout=10.0)
+            last_res = res
+
+            # Vyhodnocení výsledku
+            if res.get("status") == "success":
+                output_info = res.get("output", "").strip()
+                out_detail = f"\n*Výstup z Blenderu:* `{output_info}`" if output_info and output_info != "Kód byl úspěšně vykonán." else ""
+
+                if attempt > 0:
+                    success_ui = (
+                        f"\n\n✅ **Příkaz v Blenderu byl úspěšně vykonán po automatické opravě (pokus {attempt}/{max_retries}).**{out_detail}\n\n"
+                        f"```python\n{clean_code}\n```"
+                    )
+                    success_tts = "Příkaz byl po automatické opravě úspěšně vykonán v Blenderu."
+                    if status_callback:
+                        status_callback("● ✅ Kód byl v Blenderu úspěšně opraven a vykonán")
+                else:
+                    success_ui = (
+                        f"\n\n✅ **Příkaz v Blenderu byl úspěšně vykonán.**{out_detail}\n\n"
+                        f"```python\n{clean_code}\n```"
+                    )
+                    success_tts = "Příkaz byl úspěšně vykonán v Blenderu."
+                    if status_callback:
+                        status_callback("● ✅ Kód byl v Blenderu úspěšně vykonán")
+
+                if callback_on_token:
+                    callback_on_token(success_ui)
+                yield success_tts
+                return
+
+            # Došlo k chybě při spuštění kódu v Blenderu
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba")
+            tb = res.get("traceback", "")
+            err_short = err_msg.splitlines()[-1] if "\n" in err_msg else err_msg
+
+            # Síťová chyba (odmítnuto / timeout socketu)
+            if res.get("error_type") in ("ConnectionRefused", "Timeout") and not is_blender_available(host, port):
+                fail_ui = (
+                    f"\n\n❌ **Spojení s Blenderem selhalo:** {err_msg}\n"
+                    f"**Poslední kód:**\n```python\n{clean_code}\n```"
+                )
+                if callback_on_token:
+                    callback_on_token(fail_ui)
+                yield "Spojení s Blenderem bylo přerušeno."
+                return
+
+            attempt += 1
+            if attempt <= max_retries:
+                logging.warning(
+                    "Blender kód vyvolal chybu (pokus %d/%d): %s. Spouštím Self-Healing smyčku.",
+                    attempt, max_retries, err_short
+                )
+                if status_callback:
+                    status_callback(f"● ⚠️ Chyba v Blenderu: {err_short[:35]}… Zahajuji opravu ({attempt}/{max_retries})")
+
+                if callback_on_token:
+                    callback_on_token(
+                        f"\n⚠️ *Chyba při vykonávání v Blenderu:* `{err_short}`\n"
+                        f"🛠️ *Aktivuji Self-Healing smyčku (pokus {attempt}/{max_retries})...*\n"
+                    )
+
+                # Přidáme asistentův kód a uživatelský pokyn k opravě
+                messages.append({"role": "assistant", "content": clean_code})
+                repair_prompt = (
+                    f"Tvůj předchozí kód pro Blender selhal s následující chybou (Exception):\n"
+                    f"CHYBA: {err_msg}\n"
+                )
+                if tb:
+                    repair_prompt += f"TRACEBACK:\n{tb}\n"
+                repair_prompt += (
+                    f"\nAnalyzuj přesnou příčinu selhání (např. neplatný kontext, chybějící objekt, "
+                    f"nesprávný atribut nebo zastaralá syntaxe API) a vygeneruj kompletní OPRAVENÝ a funkční "
+                    f"Python kód pro Blender (bpy). Odpověz VÝHRADNĚ čistým Python kódem bez jakéhokoliv markdownu či komentářů."
+                )
+                messages.append({"role": "user", "content": repair_prompt})
+
+        # Všechny pokusy vyčerpány
+        final_err = last_res.get("error") or last_res.get("message", "Neznámá chyba")
+        final_tb = last_res.get("traceback", "")
+        tb_detail = f"\n```\n{final_tb}\n```" if final_tb else ""
+        fail_ui = (
+            f"\n\n❌ **Při vykonávání v Blenderu došlo k chybě (i po {max_retries} pokusech o automatickou opravu):**\n"
+            f"**Chyba:** `{final_err}`{tb_detail}\n\n"
+            f"**Poslední verze kódu:**\n```python\n{last_code}\n```"
+        )
+        fail_tts = "Při vykonávání kódu v Blenderu došlo k chybě i po automatických pokusech o opravu."
+        if status_callback:
+            status_callback("● ❌ Kód se v Blenderu nepodařilo automaticky opravit")
+        if callback_on_token:
+            callback_on_token(fail_ui)
+        yield fail_tts
 
     except Exception as exc:
         logging.exception("Chyba při zpracování příkazu pro Blender: %s", exc)
@@ -693,7 +794,8 @@ def generate_response(
             prompt,
             config,
             callback_on_token=callback_on_token,
-            stop_event=stop_event
+            stop_event=stop_event,
+            status_callback=status_callback,
         ):
             yield chunk
         return

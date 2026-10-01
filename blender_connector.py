@@ -49,20 +49,53 @@ def ping_blender(host: str = DEFAULT_BLENDER_HOST, port: int = DEFAULT_BLENDER_P
         return {"status": "error", "message": f"Blender neodpovídá: {e}"}
 
 
+import traceback
+
+
+class BlenderExecutionError(Exception):
+    """Výjimka vyvolaná při chybě spuštění kódu nebo selhání komunikace s Blenderem."""
+
+    def __init__(
+        self,
+        message: str,
+        error: str = "",
+        traceback_str: str = "",
+        response: dict[str, Any] | None = None,
+    ):
+        super().__init__(message)
+        self.error = error or message
+        self.traceback = traceback_str
+        self.response = response or {}
+
+
 def send_code_to_blender(
     code: str,
     host: str = DEFAULT_BLENDER_HOST,
     port: int = DEFAULT_BLENDER_PORT,
     timeout: float = DEFAULT_TIMEOUT,
+    raise_on_error: bool = False,
 ) -> dict[str, Any]:
     """
     Odešle Python kód do Blenderu k bezpečnému spuštění v hlavním vlákně Blenderu.
+    Čte strukturovanou JSON odpověď od Blenderu.
+    
     Vrací slovník s výsledkem:
     - {"status": "success", "output": "..."} při úspěchu
-    - {"status": "error", "error": "...", "message": "..."} při chybě
+    - {"status": "error", "error": "...", "traceback": "...", "detail": "..."} při chybě
+
+    Pokud je nastaveno raise_on_error=True a přijde chyba, vyvolá výjimku BlenderExecutionError.
     """
     if not code or not code.strip():
-        return {"status": "error", "message": "Kód k odeslání je prázdný."}
+        err_dict = {
+            "status": "error",
+            "error": "EmptyCodeError",
+            "traceback": "",
+            "message": "Kód k odeslání je prázdný.",
+            "detail": "Kód k odeslání je prázdný.",
+        }
+        if raise_on_error:
+            raise BlenderExecutionError("Kód k odeslání je prázdný.", response=err_dict)
+        return err_dict
 
     sock = None
     try:
@@ -85,39 +118,88 @@ def send_code_to_blender(
             response_bytes += chunk
 
         if not response_bytes:
-            return {
+            msg = "Blender spojení uzavřel bez odpovědi."
+            err_dict = {
                 "status": "error",
-                "message": "Blender spojení uzavřel bez odpovědi.",
+                "error": "ConnectionClosedWithoutResponse",
+                "traceback": "",
+                "message": msg,
+                "detail": msg,
             }
+            if raise_on_error:
+                raise BlenderExecutionError(msg, response=err_dict)
+            return err_dict
 
-        response = json.loads(response_bytes.decode("utf-8"))
-        logger.info("Přijata odpověď od Blenderu: status=%s", response.get("status"))
+        response: dict[str, Any] = json.loads(response_bytes.decode("utf-8"))
+        status = response.get("status", "unknown")
+        logger.info("Přijata odpověď od Blenderu: status=%s", status)
+
+        if status == "error":
+            err_msg = response.get("error", "Neznámá chyba v Blenderu")
+            tb = response.get("traceback") or response.get("trace", "")
+            detailed_err = f"{err_msg}\n{tb}".strip() if tb else err_msg
+            response["detail"] = detailed_err
+            if "message" not in response:
+                response["message"] = err_msg
+            logger.error("Chyba při vykonávání v Blenderu: %s\n%s", err_msg, tb)
+            if raise_on_error:
+                raise BlenderExecutionError(
+                    detailed_err,
+                    error=err_msg,
+                    traceback_str=tb,
+                    response=response,
+                )
+
         return response
 
     except ConnectionRefusedError:
         logger.warning("Připojení k Blenderu na %s:%d bylo odmítnuto.", host, port)
-        return {
+        msg = (
+            f"Nelze se spojit s Blenderem na {host}:{port}. "
+            "Ujistěte se, že Blender běží a v Text Editoru má spuštěný skript 'blender_receiver.py'."
+        )
+        res = {
             "status": "error",
             "error_type": "ConnectionRefused",
-            "message": (
-                f"Nelze se spojit s Blenderem na {host}:{port}. "
-                "Ujistěte se, že Blender běží a v Text Editoru má spuštěný skript 'blender_receiver.py'."
-            ),
+            "error": "ConnectionRefused: Nelze se připojit k Blenderu",
+            "traceback": "",
+            "message": msg,
+            "detail": msg,
         }
+        if raise_on_error:
+            raise BlenderExecutionError(msg, error="ConnectionRefused", response=res)
+        return res
     except socket.timeout:
         logger.error("Vypršel časový limit při čekání na odpověď od Blenderu.")
-        return {
+        msg = f"Vypršel časový limit ({timeout} s) při vykonávání kódu v Blenderu."
+        res = {
             "status": "error",
             "error_type": "Timeout",
-            "message": f"Vypršel časový limit ({timeout} s) při vykonávání kódu v Blenderu.",
+            "error": "TimeoutError: Vypršel časový limit operace",
+            "traceback": "",
+            "message": msg,
+            "detail": msg,
         }
+        if raise_on_error:
+            raise BlenderExecutionError(msg, error="Timeout", response=res)
+        return res
+    except BlenderExecutionError:
+        raise
     except Exception as exc:
         logger.exception("Chyba při komunikaci s Blenderem: %s", exc)
-        return {
+        tb = traceback.format_exc()
+        msg = f"Chyba při komunikaci s Blenderem: {exc}"
+        res = {
             "status": "error",
             "error_type": "CommunicationError",
-            "message": f"Chyba při komunikaci s Blenderem: {exc}",
+            "error": str(exc),
+            "traceback": tb,
+            "message": msg,
+            "detail": f"{msg}\n{tb}".strip(),
         }
+        if raise_on_error:
+            raise BlenderExecutionError(msg, error=str(exc), traceback_str=tb, response=res)
+        return res
     finally:
         if sock is not None:
             try:
