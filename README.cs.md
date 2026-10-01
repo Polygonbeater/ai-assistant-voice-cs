@@ -12,8 +12,6 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
-![Demo Video Placeholder](https://via.placeholder.com/800x400.png?text=AI+Assistant+Voice+CS+-+Video+Demo+Coming+Soon)
-
 **Hlavní architekt & autor:** Vítězslav Koneval (*Polygon Beater*)  
 **Projektový repozitář:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
