@@ -1,5 +1,7 @@
 # 🎙️ AI Assistant Voice CS: Local Voice Companion & 3D Technical Director
 
+🌍 **[🇨🇿 Přejít na Českou verzi (Czech Version)](README.cs.md)**
+
 > **100% Local, Private, Voice-Controlled AI Assistant for Czech & English with Direct 3D Automation, Procedural Modeling, and Post-Processing in Blender 4.2.1 LTS.**  
 > *Producing explicit 3D geometry — clean Quad topology, unwrap UVs, and baked PBR materials ready for game engines and VFX.*
 
@@ -9,8 +11,6 @@
 [![Tools](https://img.shields.io/badge/Registered%20Tools-20%20Production%20Tools-purple.svg)]()
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
-
-🌍 **[Česká verze (Czech Version)](#česká-verze)** • **[README.cs.md](README.cs.md)**
 
 **Lead Architect & Author:** Vítězslav Koneval (*Polygon Beater*)  
 **Repository:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)

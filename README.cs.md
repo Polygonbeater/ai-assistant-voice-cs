@@ -1,5 +1,7 @@
 # 🎙️ AI Assistant Voice CS: Lokální hlasový parťák & 3D Technical Director
 
+🌍 **[🇬🇧 Read the English Version (Anglická verze)](README.md)**
+
 > **100% lokální, soukromý hlasový AI asistent pro český jazyk s přímou automatizací 3D modelování, procedurální geometrie a postprodukce v Blenderu 4.2.1 LTS.**  
 > *Vytváříme explicitní geometrii — čisté Quad sítě, rozbalené UV a přepečené PBR materiály připravené pro herní enginy a VFX.*
 
@@ -9,8 +11,6 @@
 [![Tools](https://img.shields.io/badge/Registered%20Tools-20%20Production%20Tools-purple.svg)]()
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
-
-🌍 **[English Version (Anglická verze)](README.md)**
 
 **Hlavní architekt & autor:** Vítězslav Koneval (*Polygon Beater*)  
 **Projektový repozitář:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
