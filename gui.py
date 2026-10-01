@@ -125,6 +125,7 @@ class AssistantGUI(tk.Tk):
         )
         self.settings_apply_button: tk.Button | None = None
         self._llm_config_before_reload: dict | None = None
+        self._chat_images: list = []
 
         self.title("Offline Czech Voice Assistant")
         self.geometry("960x720")
@@ -585,9 +586,39 @@ class AssistantGUI(tk.Tk):
 
         re_bold = re.compile(r'\*\*(.+?)\*\*')
         re_link = re.compile(r'\[([^\]]+)\]\((https?://[^\s\)]+)\)|(https?://[^\s\)]+)')
+        re_image = re.compile(r'^!\[([^\]]*)\]\(([^\)]+)\)$')
 
         lines = text.split("\n")
         for i, line in enumerate(lines):
+            # Kontrola pro vložení lokálního obrázku (např. viewport snapshot z Blenderu)
+            img_match = re_image.match(line.strip())
+            if img_match:
+                alt_txt = img_match.group(1).strip()
+                img_path = img_match.group(2).strip()
+                if os.path.isfile(img_path):
+                    try:
+                        from PIL import Image, ImageTk
+                        pil_img = Image.open(img_path)
+                        # Vytvoření náhledu se zachováním poměru stran
+                        pil_img.thumbnail((480, 270), Image.Resampling.LANCZOS)
+                        tk_img = ImageTk.PhotoImage(pil_img)
+                        if not hasattr(self, "_chat_images"):
+                            self._chat_images = []
+                        self._chat_images.append(tk_img)
+
+                        self.chat_box.insert(tk.END, f"🖼️ {alt_txt or 'Náhled'}:\n", (base_tag, "chat_bold"))
+                        self.chat_box.image_create(tk.END, image=tk_img)
+                        self.chat_box.insert(tk.END, "\n")
+                        tag_name = f"img_open_{self.link_counter}"
+                        self.link_counter += 1
+                        self.chat_box.insert(tk.END, f"🔍 Zobrazit soubor v plném rozlišení ({img_path})\n", (base_tag, "hyperlink", tag_name))
+                        self.chat_box.tag_bind(tag_name, "<Button-1>", lambda _e, p=img_path: webbrowser.open(f"file://{os.path.abspath(p)}"))
+                        if i < len(lines) - 1:
+                            self.chat_box.insert(tk.END, "\n", (base_tag,))
+                        continue
+                    except Exception as img_err:
+                        logger.warning("Nepodařilo se zobrazit obrázek v chatu: %s", img_err)
+
             is_header = False
             display_line = line
             if display_line.startswith("### "):
@@ -1186,12 +1217,18 @@ class AssistantGUI(tk.Tk):
                 self.current_tts_player = tts_player
 
             response_sentences = []
+            collected_tokens = []
+
+            def _on_token(token: str):
+                collected_tokens.append(token)
+                self.token_queue.put(("token", token))
+
             for sentence_chunk in generate_response(
                 self.llm,
                 prompt,
                 self.config,
                 chat_history=chat_history,
-                callback_on_token=lambda token: self.token_queue.put(("token", token)),
+                callback_on_token=_on_token,
                 status_callback=lambda status: self.token_queue.put(("auto_status", status)),
                 stop_event=self.stop_event,
             ):
@@ -1203,7 +1240,8 @@ class AssistantGUI(tk.Tk):
                 tts_player.finish()
                 self.current_tts_player = None
 
-            full_response = " ".join(response_sentences).strip()
+            full_tokens_text = "".join(collected_tokens).strip()
+            full_response = full_tokens_text if full_tokens_text else " ".join(response_sentences).strip()
             self.token_queue.put(("complete", full_response))
         except Exception:
             logger.exception("Generování odpovědi selhalo")
@@ -1220,6 +1258,8 @@ class AssistantGUI(tk.Tk):
                 elif event_type == "auto_status":
                     if any(k in value.lower() for k in ("web", "zdroj", "internet", "hledám")):
                         self._set_status(value, "#38bdf8")
+                    elif any(k in value.lower() for k in ("blender", "scén", "viewport")):
+                        self._set_status(value, "#a855f7")
                     else:
                         self._set_status(value, "#fbbf24")
                 elif event_type == "auto_switched":

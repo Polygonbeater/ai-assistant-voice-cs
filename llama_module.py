@@ -407,12 +407,285 @@ def clean_python_code(raw_text: str) -> str:
     return text
 
 
+def is_blender_inspection_query(prompt: str, config: dict | None = None) -> bool:
+    """
+    Detekuje, zda uživatel žádá o vizuální kontrolu, analýzu či telemetrii 3D scény / viewportu v Blenderu.
+    Např.: „podívej se na scénu“, „zkontroluj co je ve viewportu“, „co vidíš ve scéně“, „jak vypadá scéna v blenderu“.
+    """
+    if config and not config.get("blender", {}).get("enabled", True):
+        return False
+
+    p = prompt.strip().lower()
+
+    # Přímé technické výrazy
+    direct_terms = (
+        "inspect scene", "viewport snapshot", "inspekce scény", "inspekce viewportu",
+        "snímek viewportu", "screenshot viewportu", "render viewportu", "viewport render"
+    )
+    if any(t in p for t in direct_terms):
+        return True
+
+    # Cílová doména (musí se týkat scény / viewportu / blenderu)
+    domain_terms = ("scén", "viewport", "3d pohled", "3d scén", "blender")
+    has_domain = any(d in p for d in domain_terms)
+    if not has_domain:
+        return False
+
+    # Vizuální / inspekční dotazy
+    inspection_actions = (
+        "podívej se", "koukni se", "mrkni se", "zkontroluj", "prohlédni",
+        "co vidíš", "co je na", "co je ve", "co máme ve", "co máme na",
+        "jak vypadá", "jaký je stav", "stav scény", "zhodnoť", "analyzuj",
+        "ukaž", "popiš"
+    )
+    has_action = any(act in p for act in inspection_actions)
+
+    if has_action:
+        # Odfiltrování obecných otázek nesouvisejících se stavem aktuální 3D scény
+        generic_non_scene = (
+            "kdo vytvořil", "kdy vyšel", "novinky ve verzi", "historie", "počasí", "jak stáhnout"
+        )
+        if any(ign in p for ign in generic_non_scene):
+            return False
+        return True
+
+    return False
+
+
+def format_scene_metrics_for_prompt(metrics: dict, screenshot_path: str = "") -> str:
+    """
+    Zformátuje telemetrii a metriky 3D scény z Blenderu do přehledného strukturovaného textu pro LLM prompt.
+    """
+    total_objects = metrics.get("total_objects", 0)
+    mode = metrics.get("mode", "OBJECT")
+    scene_name = metrics.get("scene_name", "Scene")
+    engine = metrics.get("render_engine", "EEVEE")
+
+    lines = [
+        "=== TELEMETRIE A METRIKY 3D SCÉNY BLENDERU ===",
+        f"Název scény: {scene_name}",
+        f"Režim editoru: {mode}",
+        f"Renderovací engine: {engine}",
+        f"Celkový počet objektů ve scéně: {total_objects}",
+    ]
+
+    if screenshot_path:
+        lines.append(f"Cesta ke snímku 3D viewportu: {screenshot_path}")
+
+    # Aktivní objekt
+    active = metrics.get("active_object")
+    if active:
+        act_line = (
+            f"Aktivní objekt: '{active.get('name')}' (typ: {active.get('type')}, "
+            f"pozice: {active.get('location')}, rotace: {active.get('rotation_euler')}, "
+            f"měřítko: {active.get('scale')}"
+        )
+        if "vertices" in active:
+            act_line += f", vrcholy: {active.get('vertices')}, polygony: {active.get('polygons')}"
+        act_line += ")"
+        lines.append(act_line)
+    else:
+        lines.append("Aktivní objekt: Žádný vybraný aktivní objekt.")
+
+    # Vybrané objekty
+    selected = metrics.get("selected_objects", [])
+    lines.append(f"Počet vybraných objektů ({len(selected)}):")
+    if selected:
+        for obj in selected:
+            info = (
+                f"  - '{obj.get('name')}' [{obj.get('type')}]: "
+                f"pozice={obj.get('location')}, rotace={obj.get('rotation_euler')}, měřítko={obj.get('scale')}"
+            )
+            if "vertices" in obj:
+                info += f", {obj.get('vertices')} vrcholů, {obj.get('polygons')} polygonů"
+            if obj.get("materials"):
+                info += f", materiály: {', '.join(obj.get('materials'))}"
+            lines.append(info)
+    else:
+        lines.append("  - (Žádný objekt není označen/vybrán)")
+
+    # Světla
+    lights = metrics.get("lights", [])
+    lines.append(f"Světla ve scéně ({len(lights)}):")
+    if lights:
+        for light in lights:
+            lines.append(
+                f"  - Světlo '{light.get('name')}' [{light.get('light_type')}]: "
+                f"výkon={light.get('energy')} W, pozice={light.get('location')}"
+            )
+    else:
+        lines.append("  - ⚠️ Žádná světla nebyla nalezena (scéna může být tmavá).")
+
+    # Kamery
+    cameras = metrics.get("cameras", [])
+    lines.append(f"Kamery ve scéně ({len(cameras)}):")
+    if cameras:
+        for cam in cameras:
+            active_marker = " [HLAVNÍ KAMERA SCÉNY]" if cam.get("is_active_scene_camera") else ""
+            lines.append(
+                f"  - Kamera '{cam.get('name')}'{active_marker}: "
+                f"ohnisko={cam.get('lens_mm')} mm, pozice={cam.get('location')}"
+            )
+    else:
+        lines.append("  - ⚠️ Ve scéně chybí jakákoliv kamera.")
+
+    # Přehled ostatních objektů
+    all_objs = metrics.get("all_objects_summary", [])
+    other_objs = [o for o in all_objs if o.get("type") not in ("LIGHT", "CAMERA")]
+    if other_objs:
+        lines.append(f"Ostatní objekty/geometrie (celkem {len(other_objs)}):")
+        for o in other_objs[:15]:
+            vis = "viditelný" if o.get("visible", True) else "skrytý"
+            lines.append(f"  - '{o.get('name')}' ({o.get('type')}, {vis})")
+        if len(other_objs) > 15:
+            lines.append(f"  - ... a dalších {len(other_objs) - 15} objektů")
+
+    return "\n".join(lines)
+
+
+def handle_blender_inspection(
+    llm: Llama,
+    prompt: str,
+    config: dict,
+    chat_history: list | None = None,
+    callback_on_token=None,
+    stop_event=None,
+    status_callback=None,
+):
+    """
+    Provede multimodální inspekci 3D scény v Blenderu:
+    1. Přes blender_connector odešle požadavek na inspekci scény a pořízení snímku viewportu.
+    2. Předá získané telemetrické metriky do expertního promptu pro LLM.
+    3. Zobrazí snímek a telemetrii v GUI a streamuje slovní komentář k aktuálnímu stavu scény.
+    """
+    from blender_connector import request_scene_inspection, is_blender_available
+
+    blender_cfg = config.get("blender", {})
+    host = blender_cfg.get("host", "127.0.0.1")
+    port = int(blender_cfg.get("port", 9876))
+    output_path = blender_cfg.get("viewport_snapshot_path", "/tmp/blender_viewport.png")
+
+    if status_callback:
+        status_callback("● Připojuji se k Blenderu pro inspekci scény…")
+
+    if not is_blender_available(host, port):
+        warn_msg = (
+            f"\n\n⚠️ **Blender není připojen na portu {port}.**\n\n"
+            f"Spusťte prosím v Blenderu v Text Editoru skript `blender_receiver.py` (Run Script / Alt+P).\n\n"
+        )
+        tts_alert = f"Blender není připojen na portu {port}. Spusťte prosím v Blenderu přijímací skript."
+        if callback_on_token:
+            callback_on_token(warn_msg)
+        yield tts_alert
+        return
+
+    if status_callback:
+        status_callback("● Pořizuji snímek viewportu a načítám data scény…")
+
+    try:
+        res = request_scene_inspection(host=host, port=port, output_path=output_path, timeout=12.0)
+    except Exception as e:
+        res = {"status": "error", "error": str(e)}
+
+    if res.get("status") != "success":
+        err_msg = res.get("error") or res.get("message", "Neznámá chyba při komunikaci s Blenderem.")
+        fail_ui = f"\n\n❌ **Inspekce 3D scény v Blenderu selhala:** `{err_msg}`\n"
+        if callback_on_token:
+            callback_on_token(fail_ui)
+        yield "Při inspekci scény v Blenderu došlo k chybě."
+        return
+
+    metrics = res.get("scene_metrics", {})
+    screenshot_path = res.get("screenshot_path", output_path)
+
+    total_objs = metrics.get("total_objects", 0)
+    sel_count = metrics.get("selected_count", 0)
+    lights_count = len(metrics.get("lights", []))
+    cams_count = len(metrics.get("cameras", []))
+    mode = metrics.get("mode", "OBJECT")
+    engine = metrics.get("render_engine", "EEVEE")
+
+    # Informační blok a náhled v GUI chatu
+    ui_header = (
+        f"\n\n📸 **3D Viewport Snapshot:**\n"
+        f"![Viewport Snapshot]({screenshot_path})\n\n"
+        f"📊 **Telemetrie scény:** Celkem objektů: **{total_objs}** | "
+        f"Vybráno: **{sel_count}** | Světla: **{lights_count}** | Kamery: **{cams_count}** | "
+        f"Režim: **{mode}** | Engine: **{engine}**\n\n"
+        f"---\n\n"
+    )
+    if callback_on_token:
+        callback_on_token(ui_header)
+
+    telemetry_text = format_scene_metrics_for_prompt(metrics, screenshot_path)
+
+    system_prompt = (
+        "Jsi špičkový 3D grafik, technický režisér a expert na Blender 3D.\n"
+        "Uživatel tě požádal o vizuální kontrolu, telemetrii a zhodnocení aktuálního stavu 3D scény ve viewportu.\n"
+        "Zde jsou přesná naměřená data přímo z běžící instance Blenderu:\n\n"
+        f"{telemetry_text}\n\n"
+        "PRAVIDLA PRO TVOJI ODPOVĚĎ:\n"
+        "1. Odpověz přirozenou, věcnou a plynulou češtinou přímo vhodnou pro hlasový výstup (TTS) i čtení v chatu.\n"
+        "2. Stručně a jasně popiš, co se na scéně nachází: jaké objekty zde jsou, který je vybraný/aktivní, jejich pozici a měřítko.\n"
+        "3. Zhodnoť osvětlení (přítomnost a typ světel) a zda scéna disponuje aktivní kamerou pro render.\n"
+        "4. Pokud vidíš technický problém (např. neaplikované měřítko/scale jiné než 1.0, chybějící světlo, neaktivní kamera, vysoký počet polygonů), konstruktivně na něj upozorni.\n"
+        "5. Přímo zodpověz konkrétní otázku uživatele."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
+    ]
+
+    if status_callback:
+        status_callback("● Analyzuji stav 3D scény…")
+
+    try:
+        stream = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=650,
+            temperature=0.3,
+            stream=True
+        )
+
+        sentence_buffer = ""
+        for chunk in stream:
+            if stop_event and stop_event.is_set():
+                break
+            delta = chunk["choices"][0].get("delta", {})
+            text_piece = delta.get("content") or ""
+            if text_piece:
+                if callback_on_token:
+                    callback_on_token(text_piece)
+                sentence_buffer += text_piece
+                ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+                for ready_chunk in ready_chunks:
+                    yield ready_chunk
+
+        final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
+        for ready_chunk in final_chunks:
+            yield ready_chunk
+
+        if status_callback:
+            status_callback("● ✅ Inspekce 3D scény dokončena")
+
+    except Exception as exc:
+        logging.exception("Chyba při generování komentáře k inspekci scény: %s", exc)
+        err = f"Chyba při analýze scény: {exc}"
+        if callback_on_token:
+            callback_on_token(f"\n{err}\n")
+        yield err
+
+
 def is_blender_command(prompt: str, config: dict | None = None) -> bool:
     """
     Detekuje, zda uživatelský pokyn představuje automatizační příkaz pro Blender 3D.
     Rozlišuje obecné otázky (např. "co je nového v Blenderu") od akčních skriptovacích příkazů.
     """
     if config and not config.get("blender", {}).get("enabled", True):
+        return False
+
+    if is_blender_inspection_query(prompt, config):
         return False
 
     p = prompt.strip().lower()
@@ -785,6 +1058,20 @@ def generate_response(
         if callback_on_token:
             callback_on_token(math_result)
         yield math_result
+        return
+
+    # Detekce a zpracování inspekce 3D scény pro Blender (Viewport Inspection)
+    if is_blender_inspection_query(prompt, config):
+        for chunk in handle_blender_inspection(
+            llm,
+            prompt,
+            config,
+            chat_history=chat_history,
+            callback_on_token=callback_on_token,
+            stop_event=stop_event,
+            status_callback=status_callback,
+        ):
+            yield chunk
         return
 
     # Detekce a zpracování příkazu pro Blender
