@@ -273,6 +273,159 @@ def extract_sentence_chunks(buffer: str, is_final: bool = False) -> tuple[list[s
     return chunks, buffer
 
 
+BLENDER_SYSTEM_PROMPT = """Jsi specializovaný asistent pro generování Python skriptů pro 3D software Blender (knihovna bpy).
+Tvým úkolem je převést uživatelský pokyn na bezpečný, přesný a plně funkční Python kód pro Blender API.
+
+PRAVIDLA:
+1. Vracíš VÝHRADNĚ a POUZE čistý spustitelný Python kód. Žádné markdown bloky (žádné ```python ani ```), žádné komentáře okolo, žádný úvodní ani závěrečný text.
+2. Vždy na začátku importuj `import bpy`.
+3. Používej správné operátory a metody Blender API:
+   - Vycentrování pivotů na geometrii:
+     for obj in bpy.context.selected_objects:
+         bpy.context.view_layer.objects.active = obj
+         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+   - Aplikace transformací (scale):
+     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+   - Tvorba primitiv:
+     bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 0))
+   - Smazání objektů:
+     bpy.ops.object.delete(use_global=False)
+4. Kód musí být připraven k okamžitému spuštění přes exec()."""
+
+
+def clean_python_code(raw_text: str) -> str:
+    """
+    Odstraní z textu Markdown syntaxi kódových bloků (```python ... ```)
+    a případné doprovodné věty, aby zbyl pouze čistý spustitelný Python kód.
+    """
+    text = raw_text.strip()
+    match = re.search(r'```(?:python)?\s*\n?(.*?)\n?```', text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if len(lines) > 1:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    return text
+
+
+def is_blender_command(prompt: str, config: dict | None = None) -> bool:
+    """
+    Detekuje, zda uživatelský pokyn představuje automatizační příkaz pro Blender 3D.
+    """
+    if config and not config.get("blender", {}).get("enabled", True):
+        return False
+
+    p = prompt.strip().lower()
+    if any(k in p for k in ["blender", "bpy", "v blenderu", "do blenderu", "pro blender"]):
+        return True
+
+    blender_patterns = [
+        r'\bpivot', r'\bvycentruj',
+        r'\baplikuj scale\b', r'\baplikuj rotac', r'\baplikuj transformac',
+        r'\borigin\b', r'\bset origin\b', r'\bvybran[éý]ch objekt', r'\boznačen[éý]ch objekt',
+        r'\b(vytvoř|přidej)\s+(krychl|koul|vál|kužel|mesh|světl|kamer)',
+        r'\bsmaž\s+(vybran|všechn|objekt)',
+        r'\bvyrenderuj\b', r'\bextruduj\b', r'\bsubdivide\b'
+    ]
+
+    for pat in blender_patterns:
+        if re.search(pat, p):
+            return True
+
+    return False
+
+
+def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None):
+    """
+    Vygeneruje Python kód pro Blender (bpy) na základě uživatelského pokynu
+    a odešle ho přes lokální TCP socket do běžící instance Blenderu.
+    """
+    from blender_connector import send_code_to_blender, is_blender_available
+
+    blender_cfg = config.get("blender", {})
+    host = blender_cfg.get("host", "127.0.0.1")
+    port = int(blender_cfg.get("port", 9876))
+
+    status_msg = "Generuji Python kód pro Blender…"
+    if callback_on_token:
+        callback_on_token(status_msg + "\n")
+    yield status_msg
+
+    try:
+        messages = [
+            {"role": "system", "content": BLENDER_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Příkaz: {prompt}"}
+        ]
+
+        response = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=350,
+            temperature=0.1,
+            stream=False
+        )
+
+        raw_code = response["choices"][0]["message"].get("content", "")
+        clean_code = clean_python_code(raw_code)
+
+        if not clean_code:
+            err_msg = "Nepodařilo se vygenerovat kód pro Blender."
+            if callback_on_token:
+                callback_on_token(f"\n{err_msg}\n")
+            yield err_msg
+            return
+
+        # Ověření dostupnosti Blenderu na socketu
+        if not is_blender_available(host, port):
+            warn_msg = (
+                f"\n\n⚠️ **Blender není připojen na portu {port}.**\n\n"
+                f"Spusťte prosím v Blenderu v Text Editoru skript `blender_receiver.py` (Run Script / Alt+P).\n\n"
+                f"**Vygenerovaný kód pro Blender:**\n```python\n{clean_code}\n```"
+            )
+            tts_alert = "Blender není připojen na portu 9876. Spusťte prosím v Blenderu přijímací skript."
+            if callback_on_token:
+                callback_on_token(warn_msg)
+            yield tts_alert
+            return
+
+        # Odeslání do Blenderu přes TCP socket
+        res = send_code_to_blender(clean_code, host=host, port=port, timeout=8.0)
+
+        if res.get("status") == "success":
+            output_info = res.get("output", "").strip()
+            out_detail = f"\n*Výstup z Blenderu:* `{output_info}`" if output_info and output_info != "Kód byl úspěšně vykonán." else ""
+            success_ui = (
+                f"\n\n✅ **Příkaz v Blenderu byl úspěšně vykonán.**{out_detail}\n\n"
+                f"```python\n{clean_code}\n```"
+            )
+            success_tts = "Příkaz byl úspěšně vykonán v Blenderu."
+            if callback_on_token:
+                callback_on_token(success_ui)
+            yield success_tts
+        else:
+            err_detail = res.get("error") or res.get("message", "Neznámá chyba")
+            fail_ui = (
+                f"\n\n❌ **Při vykonávání v Blenderu došlo k chybě:**\n```\n{err_detail}\n```\n\n"
+                f"**Kód:**\n```python\n{clean_code}\n```"
+            )
+            fail_tts = "Při vykonávání kódu v Blenderu došlo k chybě."
+            if callback_on_token:
+                callback_on_token(fail_ui)
+            yield fail_tts
+
+    except Exception as exc:
+        logging.exception("Chyba při zpracování příkazu pro Blender: %s", exc)
+        err = f"Chyba při zpracování příkazu pro Blender: {exc}"
+        if callback_on_token:
+            callback_on_token(f"\n{err}\n")
+        yield err
+
+
 def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None, chat_history: list = None, **kwargs):
     """
     Generuje odpověď přes Chat API modelu a vrací (yield) text po ucelených větách / logických úsecích.
@@ -283,6 +436,18 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
         if callback_on_token:
             callback_on_token(math_result)
         yield math_result
+        return
+
+    # Detekce a zpracování příkazu pro Blender
+    if is_blender_command(prompt, config):
+        for chunk in handle_blender_command(
+            llm,
+            prompt,
+            config,
+            callback_on_token=callback_on_token,
+            stop_event=stop_event
+        ):
+            yield chunk
         return
 
     try:

@@ -19,5 +19,11 @@
     "sample_rate": 16000,
     "threshold": 0.3,
     "silence_duration_ms": 2000
+  },
+  "blender": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 9876
   }
 }
+
