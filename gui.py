@@ -1260,7 +1260,10 @@ class AssistantGUI(tk.Tk):
         self.request_in_progress = True
         self.send_button.configure(state=tk.DISABLED)
         self.listen_button.configure(state=tk.DISABLED)
-        self._set_status("● Naslouchám…", "#fbbf24", animate=True)
+        if "whisper" not in self.voice_models or "vad" not in self.voice_models:
+            self._set_status("● Inicializuji hlasové moduly…", "#fbbf24", animate=True)
+        else:
+            self._set_status("● Naslouchám…", "#fbbf24", animate=True)
         threading.Thread(
             target=self._voice_request_worker,
             args=(config,),
@@ -1270,8 +1273,10 @@ class AssistantGUI(tk.Tk):
     def _voice_request_worker(self, config: dict):
         try:
             if "vad" not in self.voice_models:
+                self.token_queue.put(("voice_status", "● Inicializuji VAD model…"))
                 self.voice_models["vad"], _ = initialize_vad()
             if "whisper" not in self.voice_models:
+                self.token_queue.put(("voice_status", "● Načítám Whisper…"))
                 self.voice_models["whisper"] = initialize_whisper(config)
 
             self.token_queue.put(("voice_status", "● Naslouchám…"))
@@ -1281,7 +1286,11 @@ class AssistantGUI(tk.Tk):
             try:
                 audio = record_with_vad(config, pa, self.voice_models["vad"])
             finally:
-                pa.terminate()
+                try:
+                    pa.terminate()
+                except Exception:
+                    pass
+
             if audio.size == 0:
                 self.token_queue.put(("error", "Nebylo detekováno žádné mluvené slovo."))
                 return
