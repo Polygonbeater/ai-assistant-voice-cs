@@ -11,7 +11,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from audio import initialize_vad, record_with_vad
+from audio import initialize_vad, record_with_vad, WakeWordListener
 from document_service import DocumentService
 from history_repository import HistoryRepository
 from llama_module import ANALYTICAL_PRESETS, DEFAULT_ANALYTICAL_PRESET, DEFAULT_SYSTEM_PROMPT, load_analytical_prompt, DEFAULT_ANALYTICAL_PRESET, generate_response, initialize_llama
@@ -72,6 +72,7 @@ class AssistantGUI(tk.Tk):
         self.voice_models: dict[str, object] = {}
         self.voice_tts_enabled = False
         self.current_tts_player: TTSStreamPlayer | None = None
+        self.wakeword_listener: WakeWordListener | None = None
         self.sidebar_visible = True
         self.settings_visible = False
         self.session_search = tk.StringVar()
@@ -429,10 +430,11 @@ class AssistantGUI(tk.Tk):
             font=("TkDefaultFont", 10, "bold"),
         )
         self.mode_switch.pack(side=tk.LEFT)
-        tk.Checkbutton(
+        self.handsfree_switch = tk.Checkbutton(
             voice_controls,
-            text="Automaticky naslouchat",
+            text="🎙️ Hands-free (Hey Jarvis)",
             variable=self.auto_listen,
+            command=self._on_handsfree_toggled,
             bg=self.COLORS["background"],
             fg=self.COLORS["muted"],
             selectcolor=self.COLORS["panel_alt"],
@@ -440,7 +442,8 @@ class AssistantGUI(tk.Tk):
             activeforeground=self.COLORS["text"],
             relief=tk.FLAT,
             font=("TkDefaultFont", 9),
-        ).pack(side=tk.LEFT, padx=(8, 0))
+        )
+        self.handsfree_switch.pack(side=tk.LEFT, padx=(8, 0))
         tk.Label(
             voice_controls,
             text="Vstup:",
@@ -1242,9 +1245,11 @@ class AssistantGUI(tk.Tk):
         self.listen_button.configure(
             state=tk.NORMAL if self.voice_enabled.get() else tk.DISABLED
         )
-        self._set_status("● Připraven", "#4ade80")
-        if self.voice_enabled.get() and self.auto_listen.get():
-            self.after(350, self.start_voice_capture)
+        if self.auto_listen.get() and hasattr(self, "wakeword_listener") and self.wakeword_listener:
+            self.wakeword_listener.resume()
+            self._set_status("● Hands-free aktivní (Řekněte 'Hey Jarvis')", "#38bdf8")
+        else:
+            self._set_status("● Připraven", "#4ade80")
 
     def _voice_mode_changed(self):
         enabled = self.voice_enabled.get()
@@ -1253,7 +1258,43 @@ class AssistantGUI(tk.Tk):
             self._set_status("● Hlasový režim připraven", self.COLORS["accent"])
         else:
             self.auto_listen.set(False)
+            self._stop_handsfree_listener()
             self._set_status("● Připraven", "#4ade80")
+
+    def _on_handsfree_toggled(self):
+        if self.auto_listen.get():
+            self._start_handsfree_listener()
+        else:
+            self._stop_handsfree_listener()
+
+    def _start_handsfree_listener(self):
+        if not self.voice_enabled.get():
+            self.voice_enabled.set(True)
+            self._voice_mode_changed()
+
+        if self.wakeword_listener is None:
+            self.wakeword_listener = WakeWordListener(
+                self.config,
+                on_detected_callback=self._on_wakeword_detected
+            )
+        self.wakeword_listener.start()
+        self._set_status("● Hands-free aktivní (Řekněte 'Hey Jarvis')", "#38bdf8")
+
+    def _stop_handsfree_listener(self):
+        if self.wakeword_listener:
+            self.wakeword_listener.stop()
+            self.wakeword_listener = None
+        if not self.request_in_progress:
+            self._set_status("● Připraven", "#4ade80")
+
+    def _on_wakeword_detected(self):
+        logger.info("Wake Word zachycen, spouštím VAD nahrávání...")
+        self.token_queue.put(("voice_status", "● Klíčové slovo zachyceno! Naslouchám…"))
+        try:
+            cfg = self._voice_config()
+            self._voice_request_worker(cfg)
+        except Exception as e:
+            logger.error("Chyba při spuštění nahrávání po wake wordu: %s", e)
 
     def _voice_config(self) -> dict:
         audio_config = dict(self.config.get("audio", {}))
@@ -1273,6 +1314,8 @@ class AssistantGUI(tk.Tk):
     def start_voice_capture(self):
         if not self.voice_enabled.get() or self.request_in_progress:
             return
+        if hasattr(self, "wakeword_listener") and self.wakeword_listener:
+            self.wakeword_listener.pause()
         try:
             config = self._voice_config()
         except ValueError as exc:

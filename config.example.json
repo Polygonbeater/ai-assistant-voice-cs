@@ -20,6 +20,11 @@
     "threshold": 0.3,
     "silence_duration_ms": 2000
   },
+  "wakeword": {
+    "enabled": false,
+    "model": "hey_jarvis",
+    "threshold": 0.5
+  },
   "blender": {
     "enabled": true,
     "host": "127.0.0.1",
