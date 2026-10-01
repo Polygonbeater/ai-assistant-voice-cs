@@ -1,24 +1,93 @@
 #!/usr/bin/env python3
 """
-local_3d_inference.py — Lokální AI Image-to-3D Inference Wrapper.
+local_3d_inference.py — Lokální AI Image-to-3D Inference Wrapper s podporou TripoSR.
 
-Slouží jako abstrakční vrstva pro spouštění lokálních modelů generování 3D geometrie
-z 2D obrazových předloh (např. TripoSR, SF3D / Stable Fast 3D, InstantMesh).
+Slouží jako produkční vrstva pro generování 3D modelů z 2D obrázků pomocí
+reálného modelu TripoSR ze stažené složky TripoSR (stabilityai/TripoSR).
 
-Obsahuje plně funkční mock/dummy režim pro bezproblémový běh testů a vývoje
-bez nutnosti předem stahovat víceragabytové váhy PyTorch modelů.
+V případě nedostupnosti vah, chybějících závislostí nebo výpadku paměti (OOM)
+poskytuje plynulý deterministický Mock fallback, aby byly unit testy a vývoj
+vždy stoprocentně stabilní.
 """
 
+import math
 import os
 import sys
-import math
 import time
 import logging
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
+import rembg
+import torch
+from PIL import Image
+
 logger = logging.getLogger(__name__)
+
+# PŘED importem TSR přidáme složku TripoSR do cesty
+TRIPOSR_DIR = os.path.abspath("TripoSR")
+if TRIPOSR_DIR not in sys.path:
+    sys.path.append(TRIPOSR_DIR)
+
+try:
+    from tsr.system import TSR
+except Exception as _e_tsr:
+    TSR = None
+    logger.debug("TSR import nebyl úspěšný (bude použit fallback): %s", _e_tsr)
+
+
+class RealTripoSRInference:
+    """
+    Reálná inference TripoSR modelu ze stažené složky.
+    """
+
+    def __init__(
+        self,
+        pretrained_model_name_or_path: str = "stabilityai/TripoSR",
+        config_name: str = "TripoSR/config.yaml",
+        weight_name: str = "model.ckpt",
+    ):
+        if TSR is None:
+            raise ImportError(
+                "Modul TSR z balíčku TripoSR není dostupný (chybí závislosti nebo složka TripoSR)."
+            )
+
+        # Ověření cesty ke konfiguračnímu souboru
+        cfg = config_name
+        if not os.path.exists(cfg):
+            alt_cfg = os.path.join(TRIPOSR_DIR, "config.yaml")
+            if os.path.exists(alt_cfg):
+                cfg = alt_cfg
+            else:
+                cfg = "config.yaml"
+
+        self.model = TSR.from_pretrained(
+            pretrained_model_name_or_path,
+            config_name=cfg,
+            weight_name=weight_name,
+        )
+        self.model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+    def generate(self, image_path: str, output_path: str) -> str:
+        """
+        Načte obrázek, odstraní pozadí pomocí rembg, vygeneruje 3D data a uloží mesh (.obj).
+        """
+        image = Image.open(image_path)
+        image_rmbg = rembg.remove(image)
+
+        # Vygenerování dat modelu
+        device = getattr(self.model, "device", "cuda" if torch.cuda.is_available() else "cpu")
+        try:
+            scene_codes = self.model(image_rmbg, device=device)
+        except Exception:
+            scene_codes = self.model([image_rmbg], device=device)
+
+        meshes = self.model.extract_mesh(scene_codes)
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        meshes[0].export(output_path)
+        return output_path
 
 
 def _write_dummy_ply(
@@ -153,8 +222,8 @@ def _write_dummy_obj(
 
 class Local3DInferencePipeline:
     """
-    Třída zajišťující orchestraci lokálních AI modelů pro převod 2D snímků do 3D meshů.
-    Podporuje integraci s TripoSR, SF3D a případnými dalšími architekturami.
+    Třída zajišťující orchestraci modelů pro převod 2D snímků do 3D meshů
+    s bezpečným Mock režimem.
     """
 
     def __init__(
@@ -167,19 +236,12 @@ class Local3DInferencePipeline:
         self.device = device
         self.cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "ai_3d_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
-        self._real_pipeline = None
 
     def is_model_available(self) -> bool:
         """
-        Zkontroluje, zda jsou nainstalovány potřebné balíčky (torch, trimesh, tsr apod.)
-        a zda jsou stažené váhy. Pokud ne, wrapper bezpečně přepíná do dummy módu.
+        Zkontroluje, zda je modul TSR dostupný.
         """
-        try:
-            import torch  # noqa: F401
-            # Zde v budoucnu kontrola importu tsr nebo sf3d
-            return False
-        except ImportError:
-            return False
+        return TSR is not None
 
     def generate_mesh(
         self,
@@ -190,17 +252,7 @@ class Local3DInferencePipeline:
         subdivisions: int = 24,
     ) -> dict[str, Any]:
         """
-        Vygeneruje 3D model ze zadaného obrázku.
-
-        Args:
-            image_path: Cesta ke zdrojovému obrázku.
-            output_path: Volitelná cílová cesta pro vygenerovaný mesh.
-            remove_bg: Zda provést automatické oříznutí pozadí před inferencí.
-            target_format: Formát výstupu ('ply', 'obj', 'glb').
-            subdivisions: Hustota vzorkování pro syntetický/dummy mesh.
-
-        Returns:
-            Strukturovaný slovník s metrikami vygenerovaného modelu.
+        Vygeneruje 3D model ze zadaného obrázku (Mock fallback mód).
         """
         start_time = time.time()
         ext = target_format.lower().lstrip(".")
@@ -211,8 +263,6 @@ class Local3DInferencePipeline:
             base_name = Path(image_path).stem if image_path else "ai_mesh"
             output_path = os.path.join(self.cache_dir, f"{base_name}_raw.{ext}")
 
-        # Pokud by byl dostupný reálný PyTorch model, provedla by se inference zde.
-        # Pro účely spolehlivého běhu bez 2GB závaží generujeme validní surový model:
         if ext == "ply":
             v_count, f_count = _write_dummy_ply(output_path, subdivisions=subdivisions)
         else:
@@ -233,7 +283,7 @@ class Local3DInferencePipeline:
             "is_mock": True,
             "inference_time_s": duration,
             "message": (
-                f"Model úspěšně vygenerován pomocí lokálního AI enginu ({self.model_name}). "
+                f"Model vygenerován pomocí fallback AI enginu ({self.model_name}). "
                 f"Surová geometrie: {v_count} vrcholů, {f_count} polygonů."
             ),
         }
@@ -253,11 +303,60 @@ def generate_local_ai_3d_mesh(
     model_name: str = "TripoSR",
     device: str = "auto",
     remove_bg: bool = True,
-    target_format: str = "ply",
+    target_format: str = "obj",
 ) -> dict[str, Any]:
     """
-    Pomocná globální funkce pro okamžitou inferenci z obrázku.
+    Globální funkce pro okamžitou inferenci z obrázku.
+    Nejprve se pokusí spustit RealTripoSRInference a uložit model do /tmp/ (nebo output_path).
+    Při chybě (chybějící váhy, paměť, závislosti) plynule přechází na Mock fallback.
     """
+    ext = (target_format or "obj").lower().lstrip(".")
+    if ext not in ("obj", "ply", "glb"):
+        ext = "obj"
+
+    real_output_path = output_path
+    if not real_output_path:
+        base_name = Path(image_path).stem if image_path else "ai_mesh"
+        real_output_path = os.path.join(tempfile.gettempdir(), f"{base_name}_{int(time.time())}.{ext}")
+
+    # 1. Pokus o reálnou inferenci pomocí RealTripoSRInference
+    try:
+        start_time = time.time()
+        real_pipeline = RealTripoSRInference()
+        out_obj = real_pipeline.generate(image_path, real_output_path)
+        duration = round(time.time() - start_time, 3)
+
+        v_count, f_count = 0, 0
+        try:
+            import trimesh
+            m = trimesh.load(out_obj)
+            v_count = len(m.vertices)
+            f_count = len(m.faces)
+        except Exception:
+            pass
+
+        logger.info("RealTripoSRInference úspěšná: %s (v=%d, f=%d)", out_obj, v_count, f_count)
+        return {
+            "status": "success",
+            "model_name": "TripoSR (Real)",
+            "image_path": str(image_path),
+            "mesh_path": str(out_obj),
+            "format": ext,
+            "has_vertex_colors": True,
+            "raw_vertices": v_count,
+            "raw_faces": f_count,
+            "remove_bg": remove_bg,
+            "is_mock": False,
+            "inference_time_s": duration,
+            "message": f"Skutečný 3D model úspěšně vygenerován pomocí TripoSR ({v_count} v, {f_count} f).",
+        }
+    except Exception as exc:
+        logger.warning(
+            "RealTripoSRInference selhala nebo není k dispozici (%s). Používám Mock fallback.",
+            exc,
+        )
+
+    # 2. Plynulý Mock fallback
     pipeline = Local3DInferencePipeline(model_name=model_name, device=device)
     return pipeline.generate_mesh(
         image_path=image_path,
@@ -272,7 +371,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Lokální 3D AI inference.")
     parser.add_argument("image_path", nargs="?", default="test_input.png", help="Cesta k obrázku")
-    parser.add_argument("--format", default="ply", choices=["ply", "obj"], help="Výstupní formát")
+    parser.add_argument("--format", default="obj", choices=["ply", "obj"], help="Výstupní formát")
     args = parser.parse_args()
 
     res = generate_local_ai_3d_mesh(args.image_path, target_format=args.format)
