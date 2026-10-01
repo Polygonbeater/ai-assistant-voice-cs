@@ -630,7 +630,276 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 4. Vykonání Python kódu (action == 'execute')
+        # 4. Product Viz Studio Automator – automatické produktové studio
+        if action == "create_product_studio":
+            print("\n[AI-Blender] >>> Zahajuji Product Viz Studio Automator...")
+            try:
+                import math
+
+                style = message.get("style", "standard")
+                # Vyčistit případné starší studio objekty (prefix "Studio_")
+                for obj in list(bpy.data.objects):
+                    if obj.name.startswith("Studio_"):
+                        bpy.data.objects.remove(obj, do_unlink=True)
+
+                # Zjistit aktivní nebo cílový objekt
+                target_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    target_obj = bpy.context.view_layer.objects.active
+                if not target_obj and hasattr(bpy.context, "active_object"):
+                    target_obj = bpy.context.active_object
+
+                # Cílová poloha pro kameru a světla
+                if target_obj:
+                    cx, cy, cz = target_obj.location
+                    # Odhadnout velikost objektu z bounding boxu
+                    dims = target_obj.dimensions
+                    obj_size = max(dims.x, dims.y, dims.z) if max(dims.x, dims.y, dims.z) > 0 else 1.0
+                else:
+                    cx, cy, cz = 0.0, 0.0, 0.0
+                    obj_size = 1.0
+
+                scale = max(obj_size * 3.0, 2.0)  # Minimálně 2m studio
+
+                # ── 1. BACKDROP (hladká zakřivená rovina) ────────────────
+                backdrop_w = scale * 4
+                backdrop_d = scale * 3
+                backdrop_h = scale * 2.5
+
+                bpy.ops.mesh.primitive_plane_add(size=1, location=(cx, cy + backdrop_d * 0.5, cz))
+                backdrop = bpy.context.active_object
+                backdrop.name = "Studio_Backdrop"
+                backdrop.scale = (backdrop_w, backdrop_d, 1.0)
+                bpy.ops.object.transform_apply(scale=True)
+
+                # Posunout spodní hranu na Z=0 vůči objektu
+                for vert in backdrop.data.vertices:
+                    vert.co.y -= 0.5
+                    vert.co.z -= 0.5
+
+                # Zakřivení pomocí Curve modifikátoru — použijeme Simple Deform (Bend)
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.subdivide(number_cuts=20)
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+                deform = backdrop.modifiers.new(name="Bend", type='SIMPLE_DEFORM')
+                deform.deform_method = 'BEND'
+                deform.deform_axis = 'X'
+                deform.angle = math.radians(-30)
+                deform.limits = (0.0, 0.4)
+
+                solidify = backdrop.modifiers.new(name="Solidify", type='SOLIDIFY')
+                solidify.thickness = 0.02
+                solidify.offset = -1.0
+
+                bevel = backdrop.modifiers.new(name="Bevel", type='BEVEL')
+                bevel.width = 0.05
+                bevel.segments = 3
+
+                # Hladké stínování
+                for poly in backdrop.data.polygons:
+                    poly.use_smooth = True
+
+                # Backdrop materiál — bílý matný
+                mat_name = "Studio_Backdrop_Mat"
+                if mat_name not in bpy.data.materials:
+                    mat = bpy.data.materials.new(name=mat_name)
+                    mat.use_nodes = True
+                    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+                    if bsdf:
+                        bsdf.inputs["Base Color"].default_value = (0.95, 0.95, 0.95, 1.0)
+                        bsdf.inputs["Roughness"].default_value = 0.9
+                        bsdf.inputs["Specular IOR Level"].default_value = 0.0 if "Specular IOR Level" in bsdf.inputs else None
+                        try:
+                            bsdf.inputs["Specular"].default_value = 0.0
+                        except Exception:
+                            pass
+                else:
+                    mat = bpy.data.materials[mat_name]
+                if backdrop.data.materials:
+                    backdrop.data.materials[0] = mat
+                else:
+                    backdrop.data.materials.append(mat)
+
+                # ── 2. TŘÍBODOVÉ OSVĚTLENÍ ────────────────────────────────
+                # Styly přednastavení
+                style_presets = {
+                    "standard": {
+                        "key":  {"energy": 800,  "color": (1.00, 0.97, 0.90, 1.0), "size": scale * 0.8, "softness": 1.0},
+                        "fill": {"energy": 200,  "color": (0.85, 0.90, 1.00, 1.0), "size": scale * 1.2, "softness": 1.0},
+                        "rim":  {"energy": 400,  "color": (1.00, 1.00, 1.00, 1.0), "size": scale * 0.5, "softness": 0.5},
+                    },
+                    "dramatic": {
+                        "key":  {"energy": 1200, "color": (1.00, 0.92, 0.75, 1.0), "size": scale * 0.5, "softness": 0.3},
+                        "fill": {"energy": 80,   "color": (0.70, 0.80, 1.00, 1.0), "size": scale * 1.5, "softness": 1.0},
+                        "rim":  {"energy": 600,  "color": (1.00, 0.98, 0.95, 1.0), "size": scale * 0.4, "softness": 0.2},
+                    },
+                    "soft": {
+                        "key":  {"energy": 500,  "color": (1.00, 0.98, 0.95, 1.0), "size": scale * 1.5, "softness": 1.0},
+                        "fill": {"energy": 350,  "color": (0.95, 0.95, 1.00, 1.0), "size": scale * 2.0, "softness": 1.0},
+                        "rim":  {"energy": 200,  "color": (1.00, 1.00, 1.00, 1.0), "size": scale * 1.0, "softness": 1.0},
+                    },
+                }
+                preset = style_presets.get(style, style_presets["standard"])
+
+                d = scale * 2.2  # Vzdálenost světel od středu
+                lights_created = []
+
+                def create_area_light(name, location, energy, color, size, rotation_euler):
+                    bpy.ops.object.light_add(type='AREA', location=location)
+                    light_obj = bpy.context.active_object
+                    light_obj.name = name
+                    light_obj.rotation_euler = rotation_euler
+                    light_obj.data.energy = energy
+                    light_obj.data.color = color[:3]
+                    light_obj.data.size = size
+                    light_obj.data.shadow_soft_size = size * 0.5
+                    return light_obj
+
+                # Key Light — 45° vlevo nahoře, přední
+                key_loc = (cx - d * 0.7, cy - d * 0.8, cz + d * 1.2)
+                key_rot = (math.radians(55), 0, math.radians(-35))
+                key = create_area_light(
+                    "Studio_Key_Light", key_loc,
+                    preset["key"]["energy"], preset["key"]["color"],
+                    preset["key"]["size"], key_rot,
+                )
+                lights_created.append({
+                    "name": key.name, "role": "key",
+                    "location": [round(v, 3) for v in key_loc],
+                    "energy": preset["key"]["energy"],
+                    "color_temp": "warm white",
+                    "size": round(preset["key"]["size"], 3),
+                })
+
+                # Fill Light — vpravo nízko, měkké
+                fill_loc = (cx + d * 0.9, cy - d * 0.6, cz + d * 0.4)
+                fill_rot = (math.radians(30), 0, math.radians(50))
+                fill = create_area_light(
+                    "Studio_Fill_Light", fill_loc,
+                    preset["fill"]["energy"], preset["fill"]["color"],
+                    preset["fill"]["size"], fill_rot,
+                )
+                lights_created.append({
+                    "name": fill.name, "role": "fill",
+                    "location": [round(v, 3) for v in fill_loc],
+                    "energy": preset["fill"]["energy"],
+                    "color_temp": "cool blue-white",
+                    "size": round(preset["fill"]["size"], 3),
+                })
+
+                # Rim Light — zezadu-vlevo nahoře, tvrdý okraj
+                rim_loc = (cx - d * 0.5, cy + d * 1.1, cz + d * 1.0)
+                rim_rot = (math.radians(-45), 0, math.radians(-150))
+                rim = create_area_light(
+                    "Studio_Rim_Light", rim_loc,
+                    preset["rim"]["energy"], preset["rim"]["color"],
+                    preset["rim"]["size"], rim_rot,
+                )
+                lights_created.append({
+                    "name": rim.name, "role": "rim",
+                    "location": [round(v, 3) for v in rim_loc],
+                    "energy": preset["rim"]["energy"],
+                    "color_temp": "neutral white",
+                    "size": round(preset["rim"]["size"], 3),
+                })
+
+                # ── 3. KAMERA ─────────────────────────────────────────────
+                cam_dist = scale * 3.5
+                cam_loc = (cx + cam_dist * 0.1, cy - cam_dist, cz + cam_dist * 0.3)
+
+                # Odebrat existující studio kameru
+                if "Studio_Camera" in bpy.data.objects:
+                    bpy.data.objects.remove(bpy.data.objects["Studio_Camera"], do_unlink=True)
+
+                bpy.ops.object.camera_add(location=cam_loc)
+                cam_obj = bpy.context.active_object
+                cam_obj.name = "Studio_Camera"
+
+                # Nastavit ohniskovou vzdálenost 85mm
+                cam_obj.data.lens = 85.0
+                cam_obj.data.lens_unit = 'MILLIMETERS'
+
+                # Namířit kameru na cíl (Track To constraint)
+                track = cam_obj.constraints.new(type='TRACK_TO')
+                track.target = target_obj if target_obj else None
+                track.track_axis = 'TRACK_NEGATIVE_Z'
+                track.up_axis = 'UP_Y'
+                if not target_obj:
+                    # Manuálně namířit na origin
+                    import mathutils
+                    direction = mathutils.Vector((cx, cy, cz)) - mathutils.Vector(cam_loc)
+                    rot_quat = direction.to_track_quat('-Z', 'Y')
+                    cam_obj.rotation_euler = rot_quat.to_euler()
+                    cam_obj.constraints.remove(track)
+
+                # Nastavit jako aktivní scénovou kameru
+                scene = bpy.context.scene
+                scene.camera = cam_obj
+
+                # ── 4. RENDER NASTAVENÍ (EEVEE / Cycles) ─────────────────
+                if hasattr(scene, "render"):
+                    scene.render.resolution_x = 2048
+                    scene.render.resolution_y = 2048
+                    # Pokusit se nastavit na Cycles pro lepší odlesky
+                    try:
+                        scene.render.engine = 'CYCLES'
+                        if hasattr(scene, "cycles"):
+                            scene.cycles.samples = 128
+                            scene.cycles.use_denoising = True
+                    except Exception:
+                        pass  # Zůstat na EEVEE
+
+                # Překreslit viewport
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                studio_result = {
+                    "backdrop": {
+                        "name": backdrop.name,
+                        "dimensions_m": [round(backdrop_w, 2), round(backdrop_d, 2), round(backdrop_h, 2)],
+                        "material": mat_name,
+                        "modifiers": ["SimpleDeform(Bend)", "Solidify", "Bevel"],
+                    },
+                    "lights": lights_created,
+                    "camera": {
+                        "name": cam_obj.name,
+                        "location": [round(v, 3) for v in cam_loc],
+                        "focal_length_mm": 85,
+                        "resolution": "2048x2048",
+                        "is_active_camera": True,
+                    },
+                    "style": style,
+                    "scale_factor": round(scale, 3),
+                    "target_object": target_obj.name if target_obj else "world_origin",
+                }
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "create_product_studio",
+                    "studio": studio_result,
+                }
+                print(f"✅ [AI-Blender] Product Viz Studio vytvořeno: styl='{style}', "
+                      f"měřítko={scale:.2f}m, světla={len(lights_created)}")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Product Viz Studio: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 5. Vykonání Python kódu (action == 'execute')
+
         code = message.get("code", "")
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()

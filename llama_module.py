@@ -1176,6 +1176,38 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_product_studio",
+            "description": (
+                "Automaticky vytvoří kompletní produktové prezentační studio v Blenderu pro aktivní objekt. "
+                "Vygeneruje: (1) zakřivené hladké pozadí (backdrop) s Bevel a Solidify modifikátory, "
+                "(2) profesionální tříbodové AREA osvětlení (Key light, Fill light, Rim light), "
+                "(3) kameru s ohniskovou vzdáleností 85mm namířenou na objekt, "
+                "(4) render nastavení 2048×2048px. "
+                "Použij při požadavcích jako 'vytvoř produktové studio', 'nastavit prezentační osvětlení', "
+                "'připrav scénu pro produktové foto', 'tříbodové svícení', 'key fill rim světla', "
+                "'nastavit studio pro render', 'udělej profesionální fotografické pozadí'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "style": {
+                        "type": "string",
+                        "enum": ["standard", "dramatic", "soft"],
+                        "description": (
+                            "Osvětlovací styl studia: "
+                            "'standard' = neutrální vyvážené bílé studio (výchozí), "
+                            "'dramatic' = vysoký kontrast s teplým key lightem a slabým fill lightem, "
+                            "'soft' = jemné přesvětlení s velkými difuzními plochami pro beauty produkty."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1186,6 +1218,7 @@ ALLOWED_TOOL_NAMES = {
     "inspect_blender_scene",
     "mesh_doctor_audit",
     "mesh_doctor_repair",
+    "create_product_studio",
 }
 
 
@@ -1348,6 +1381,7 @@ class UnifiedToolDispatcher:
     - inspect_blender_scene()
     - mesh_doctor_audit()
     - mesh_doctor_repair(merge_distance)
+    - create_product_studio(style)
     """
 
     def __init__(
@@ -1395,6 +1429,11 @@ class UnifiedToolDispatcher:
         elif tool_name == "mesh_doctor_repair":
             merge_distance = float(arguments.get("merge_distance", 0.0001))
             return self._execute_mesh_doctor_repair(merge_distance=merge_distance)
+        elif tool_name == "create_product_studio":
+            style = str(arguments.get("style", "standard")).strip()
+            if style not in ("standard", "dramatic", "soft"):
+                style = "standard"
+            return self._execute_create_product_studio(style=style)
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -1922,6 +1961,169 @@ class UnifiedToolDispatcher:
             "post_repair_stats": stats,
             "result": result_text,
             "_expert_system_prompt": self._MESH_DOCTOR_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Product Viz Studio Automator – produktové prezentační studio
+    # ------------------------------------------------------------------
+
+    _PRODUCT_STUDIO_SYSTEM_PROMPT = (
+        "Jsi profesionální produktový fotorežisér a lighting designer specializovaný na 3D vizualizaci "
+        "a CGI reklamu. Analyzuješ a komentuj vytvořené studio nastavení z pohledu odborníka na:\n"
+        "  • Tříbodové osvětlení (Key light – hlavní zdroj světla a tvar stínu,\n"
+        "    Fill light – vyplnění stínů a kontrola kontrastu,\n"
+        "    Rim/Back light – oddělení produktu od pozadí a zvýraznění kontury)\n"
+        "  • Fotometrie a exponometrické poměry světel (Key:Fill ratio, Rim intensity)\n"
+        "  • Barevná teplota světel a její vliv na materiálové odlesky a kolorit produktu\n"
+        "  • Kompozice záběru: pravidlo třetin, goldilocks zone ohniskové vzdálenosti (85mm = mírný telephoto)\n"
+        "  • Odlesky a spekulární světla na lesklých materiálech (kov, sklo, lakovaný plast)\n"
+        "  • Backdrop design: zakřivené studio pozadí eliminuje rohy a vytváří nekonečný horizont\n\n"
+        "Při komentáři studia:\n"
+        "  1. Popiš roli každého světla a jeho příspěvek k výsledné fotografii\n"
+        "  2. Zhodnoť volbu stylu (standard/dramatic/soft) pro daný typ produktu\n"
+        "  3. Navrhni případné doladění (výkon, barevná teplota, velikost světla) pro konkrétní materiály\n"
+        "  4. Okomentuj kameru a ohniskovou vzdálenost z pohledu produktové fotografie\n"
+        "  5. Případně doporuč render engine (Cycles vs EEVEE) a klíčové nastavení\n"
+    )
+
+    _STYLE_DESCRIPTIONS = {
+        "standard": "Neutrální vyvážené bílé studio — universální pro většinu produktů",
+        "dramatic": "Vysoký kontrast s teplým key lightem — ideální pro prémiové produkty (parfémy, šperky, elektronika)",
+        "soft": "Jemné přesvětlení s velkými difuzními plochami — ideální pro kosmetiku, food a beauty produkty",
+    }
+
+    def _execute_create_product_studio(self, style: str = "standard") -> dict[str, Any]:
+        """Spustí Product Viz Studio Automator — vytvoří produktové studio v Blenderu."""
+        from blender_connector import request_product_studio, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        style_desc = self._STYLE_DESCRIPTIONS.get(style, style)
+
+        if self.status_callback:
+            self.status_callback(f"● 🎬 Vytvářím produktové studio (styl: {style})…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n🎬 *Volám nástroj:* `create_product_studio(style='{style}')`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "create_product_studio",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_product_studio(host=host, port=port, style=style, timeout=30.0)
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření studia.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Studio Automator selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "create_product_studio",
+                "error": err_msg,
+                "result": f"Vytvoření studia selhalo: {err_msg}",
+            }
+
+        studio = res.get("studio", {})
+        backdrop = studio.get("backdrop", {})
+        lights = studio.get("lights", [])
+        camera = studio.get("camera", {})
+        scale = studio.get("scale_factor", 1.0)
+        target = studio.get("target_object", "?")
+
+        # Najít světla podle role
+        key_l   = next((l for l in lights if l.get("role") == "key"), {})
+        fill_l  = next((l for l in lights if l.get("role") == "fill"), {})
+        rim_l   = next((l for l in lights if l.get("role") == "rim"), {})
+
+        def light_row(light: dict, label: str, icon: str) -> str:
+            if not light:
+                return f"| {icon} {label} | — | — | — |\n"
+            return (
+                f"| {icon} **{label}** (`{light.get('name', '?')}`) "
+                f"| {light.get('energy', '?')} W "
+                f"| {light.get('color_temp', '?')} "
+                f"| {light.get('size', '?')} m |\n"
+            )
+
+        dims = backdrop.get("dimensions_m", [0, 0, 0])
+        mods = " + ".join(backdrop.get("modifiers", []))
+
+        ui_report = (
+            f"\n\n🎬 **Product Viz Studio — `{style.upper()}` styl**\n"
+            f"*{style_desc}*\n\n"
+            f"---\n\n"
+            f"**🎨 Pozadí (Backdrop)**\n\n"
+            f"| Parametr | Hodnota |\n|---|---|\n"
+            f"| Objekt | `{backdrop.get('name', '?')}` |\n"
+            f"| Rozměry | {dims[0]:.1f} × {dims[1]:.1f} m |\n"
+            f"| Materiál | `{backdrop.get('material', '?')}` (matný bílý 95%) |\n"
+            f"| Modifikátory | {mods} |\n\n"
+            f"**💡 Tříbodové osvětlení**\n\n"
+            f"| Světlo | Výkon | Barevná teplota | Velikost |\n|---|---|---|---|\n"
+            + light_row(key_l, "Key Light", "☀️")
+            + light_row(fill_l, "Fill Light", "🔵")
+            + light_row(rim_l, "Rim Light", "⭐")
+            + f"\n**📷 Kamera**\n\n"
+            f"| Parametr | Hodnota |\n|---|---|\n"
+            f"| Objekt | `{camera.get('name', '?')}` |\n"
+            f"| Ohnisková vzdálenost | **{camera.get('focal_length_mm', 85)} mm** |\n"
+            f"| Rozlišení renderu | {camera.get('resolution', '?')} px |\n"
+            f"| Aktivní kamera | {'✅ Ano' if camera.get('is_active_camera') else '❌ Ne'} |\n\n"
+            f"**🎯 Cílový objekt:** `{target}` | **Měřítko studia:** {scale:.2f} m\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        # Textový souhrn pro LLM
+        result_text = (
+            f"PRODUCT VIZ STUDIO vytvořeno — styl: '{style}' ({style_desc})\n"
+            f"Cílový objekt: '{target}', měřítko studia: {scale:.2f} m\n\n"
+            f"Backdrop:\n"
+            f"  - Objekt: '{backdrop.get('name', '?')}', rozměry: {dims[0]:.1f}×{dims[1]:.1f} m\n"
+            f"  - Modifikátory: {mods}\n"
+            f"  - Materiál: matný bílý (roughness=0.9)\n\n"
+            f"Osvětlení:\n"
+        )
+        for light in lights:
+            result_text += (
+                f"  - {light.get('role', '?').upper()} ({light.get('name', '?')}): "
+                f"{light.get('energy', '?')} W, {light.get('color_temp', '?')}, "
+                f"velikost {light.get('size', '?')} m\n"
+            )
+        result_text += (
+            f"\nKamera:\n"
+            f"  - '{camera.get('name', '?')}', ohnisková vzdálenost: {camera.get('focal_length_mm', 85)} mm\n"
+            f"  - Rozlišení: {camera.get('resolution', '?')} px, aktivní kamera: "
+            f"{'ANO' if camera.get('is_active_camera') else 'NE'}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Studio '{style}' vytvořeno — {len(lights)} světla, 85mm kamera"
+            )
+
+        return {
+            "status": "success",
+            "tool": "create_product_studio",
+            "studio": studio,
+            "result": result_text,
+            "_expert_system_prompt": self._PRODUCT_STUDIO_SYSTEM_PROMPT,
         }
 
 

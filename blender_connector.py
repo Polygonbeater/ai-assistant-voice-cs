@@ -532,3 +532,36 @@ def request_mesh_repair(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
 
+
+
+def request_product_studio(
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    style: str = "standard",
+    timeout: float = 30.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na vytvoření kompletního produktového prezentačního studia
+    (action: create_product_studio).
+
+    Studio zahrnuje:
+    - Zakřivené hladké pozadí (backdrop) s SimpleDeform(Bend) + Solidify + Bevel modifikátory
+    - Tříbodové AREA osvětlení (Key / Fill / Rim light) s nastavenou barvou a měkkostí
+    - Kameru s ohniskovou vzdáleností 85mm namířenou na aktivní objekt
+    - Render nastavení 2048×2048 px (Cycles pokud dostupný)
+
+    Args:
+        style: Osvětlovací styl prezentace:
+               - "standard"  -- Neutrální bílé studio, vyvážené světlo (výchozí)
+               - "dramatic"  -- Vysoký kontrast, teplý key light, slabý fill
+               - "soft"      -- Jemné přesvětlení, velké difuzní plochy
+
+    Vrací strukturovaný slovník se seznamem vytvořených objektů (backdrop, světla, kamera).
+    """
+    if style not in ("standard", "dramatic", "soft"):
+        style = "standard"
+    payload = {"action": "create_product_studio", "style": style}
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
