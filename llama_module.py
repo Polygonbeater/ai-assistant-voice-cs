@@ -317,21 +317,42 @@ def clean_python_code(raw_text: str) -> str:
 def is_blender_command(prompt: str, config: dict | None = None) -> bool:
     """
     Detekuje, zda uživatelský pokyn představuje automatizační příkaz pro Blender 3D.
+    Rozlišuje obecné otázky (např. "co je nového v Blenderu") od akčních skriptovacích příkazů.
     """
     if config and not config.get("blender", {}).get("enabled", True):
         return False
 
     p = prompt.strip().lower()
-    if any(k in p for k in ["blender", "bpy", "v blenderu", "do blenderu", "pro blender"]):
-        return True
+
+    # Informační dotazy a otázky nesmí spustit bpy automatizaci
+    info_question_starters = (
+        "co je", "co jsou", "jaké jsou", "jaký je", "jaká je", "kdy", "proč",
+        "kdo", "vysvětli", "popiš", "jak funguje", "jak se liší", "porovnej",
+        "napiš", "řekni", "pověz", "shrň", "jak vytvořit", "jak udělat"
+    )
+    if any(p.startswith(q) for q in info_question_starters):
+        return False
+
+    # Příkaz pro Blender vyžaduje akční operaci nebo skriptování
+    action_keywords = [
+        "vytvoř", "přidej", "smaž", "odstraň", "vycentruj", "aplikuj", "nastav",
+        "otoč", "posuň", "změň", "vyber", "označ", "vyrenderuj", "extruduj", "subdivide",
+        "vyčisti", "spusť skript", "vygeneruj skript"
+    ]
+    has_action = any(re.search(rf"\b{act}", p) for act in action_keywords)
+
+    if any(k in p for k in ["v blenderu", "do blenderu", "pomocí bpy", "přes bpy"]):
+        if has_action or "kód" in p or "skript" in p:
+            return True
 
     blender_patterns = [
         r'\bpivot', r'\bvycentruj',
         r'\baplikuj scale\b', r'\baplikuj rotac', r'\baplikuj transformac',
         r'\borigin\b', r'\bset origin\b', r'\bvybran[éý]ch objekt', r'\boznačen[éý]ch objekt',
-        r'\b(vytvoř|přidej)\s+(krychl|koul|vál|kužel|mesh|světl|kamer)',
+        r'\b(vytvoř|přidej)\s+(krychl|koul|vál|kužel|mesh|světl|kamer|materiál)',
         r'\bsmaž\s+(vybran|všechn|objekt)',
-        r'\bvyrenderuj\b', r'\bextruduj\b', r'\bsubdivide\b'
+        r'\bvyrenderuj\b', r'\bextruduj\b', r'\bsubdivide\b',
+        r'\bshade (smooth|flat)\b'
     ]
 
     for pat in blender_patterns:
@@ -426,7 +447,81 @@ def handle_blender_command(llm: Llama, prompt: str, config: dict, callback_on_to
         yield err
 
 
-def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=None, stop_event=None, chat_history: list = None, **kwargs):
+def generate_search_queries(
+    llm: Llama,
+    user_prompt: str,
+    chat_history: list | None = None,
+    max_queries: int = 3
+) -> list[str]:
+    """
+    Využije LLM model k vygenerování 2-3 optimalizovaných vyhledávacích frází
+    pro internetový vyhledávač na základě uživatelského dotazu a historie.
+    """
+    clean_p = user_prompt.strip()
+    if not clean_p:
+        return []
+
+    context_prefix = ""
+    prev_user_text = ""
+    if chat_history and len(clean_p.split()) <= 6:
+        for prev in reversed(chat_history):
+            if prev.get("role") == "user":
+                prev_user_text = str(prev.get("content", "")).strip()[:80]
+                if prev_user_text:
+                    context_prefix = f"Předchozí kontext konverzace: {prev_user_text}\n"
+                break
+
+    expansion_prompt = (
+        "Jsi expert na internetové rešerše. Tvým úkolem je na základě uživatelského dotazu "
+        "vytvořit 2 až 3 různé, vysoce přesné a stručné vyhledávací fráze pro webový vyhledávač.\n"
+        "Pravidla:\n"
+        "- Fráze musí jít přímo k jádru věci a používat konkrétní klíčová slova bez zbytečných spojek a otázek.\n"
+        "- Vrať VÝHRADNĚ 2 až 3 fráze, každou na samostatném novém řádku.\n"
+        "- Nepoužívej uvozovky, číslování (1., 2.), ani odrážky."
+    )
+
+    messages = [
+        {"role": "system", "content": expansion_prompt},
+        {"role": "user", "content": f"{context_prefix}Uživatelský dotaz: {clean_p}"}
+    ]
+
+    try:
+        response = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=70,
+            temperature=0.2,
+            stream=False
+        )
+        raw_text = response["choices"][0]["message"].get("content", "")
+        queries = []
+        for line in raw_text.strip().splitlines():
+            line_clean = line.strip().lstrip("0123456789.-*• \t").strip("\"'` ")
+            if len(line_clean) > 3 and line_clean.lower() not in [q.lower() for q in queries]:
+                queries.append(line_clean)
+
+        if len(queries) >= 2:
+            return queries[:max_queries]
+    except Exception as exc:
+        logging.warning("Generování vyhledávacích frází selhalo: %s", exc)
+
+    # Fallback, pokud model vrátil méně než 2 fráze
+    fallback = [clean_p.rstrip(".?!")]
+    if prev_user_text:
+        combined = f"{prev_user_text} {clean_p}".rstrip(".?!")
+        fallback.append(combined[:80])
+    return fallback
+
+
+def generate_response(
+    llm: Llama,
+    prompt: str,
+    config: dict,
+    callback_on_token=None,
+    stop_event=None,
+    chat_history: list = None,
+    status_callback=None,
+    **kwargs
+):
     """
     Generuje odpověď přes Chat API modelu a vrací (yield) text po ucelených větách / logických úsecích.
     Zároveň průběžně volá callback_on_token pro okamžité vykreslování jednotlivých tokenů v GUI.
@@ -467,18 +562,37 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
         user_content = prompt
         if llama_config.get("online_mode"):
             try:
-                from web_search import search_web_context
-                search_query = prompt
-                if chat_history and len(prompt.split()) <= 6:
-                    for prev in reversed(chat_history):
-                        if prev.get("role") == "user":
-                            search_query = f"{prev.get('content', '')[:60]} {prompt}"
-                            break
+                from web_search import search_web_multi_source
 
-                web_context = search_web_context(search_query)
-                user_content = f"{web_context}\n\nDOTAZ UŽIVATELE:\n{prompt}"
+                if status_callback:
+                    status_callback("● Analyzuji dotaz a navrhuji vyhledávací fráze…")
+
+                # 1. Vygenerovat 2-3 optimalizované fráze pro vyhledávač
+                search_queries = generate_search_queries(
+                    llm,
+                    prompt,
+                    chat_history=chat_history,
+                    max_queries=3
+                )
+                logging.info("Multi-Source RAG fráze: %s", search_queries)
+
+                if status_callback:
+                    queries_preview = ", ".join(f"„{q}“" for q in search_queries[:2])
+                    status_callback(f"● Prohledávám web a stahuji zdroje ({queries_preview})…")
+
+                # 2. Asynchronně vyhledat a stáhnout top 3 relevantní zdroje přes aiohttp + trafilatura
+                web_context = search_web_multi_source(
+                    search_queries,
+                    max_sources=3,
+                    max_total_chars=3600
+                )
+
+                if status_callback:
+                    status_callback("● Syntetizuji odpověď z více webových zdrojů…")
+
+                user_content = f"{web_context}\n\nDOTAZ UŽIVATELE K ZPRACOVÁNÍ:\n{prompt}"
             except Exception:
-                logging.exception("Online kontext se nepodařilo načíst.")
+                logging.exception("Multi-Source online kontext se nepodařilo načíst.")
 
         # Dynamické tokeny
         raw_max = llama_config.get('max_tokens', 'auto')
@@ -507,6 +621,15 @@ def generate_response(llm: Llama, prompt: str, config: dict, callback_on_token=N
             "- Vždy navazuj na předchozí kontext konverzace a paměť odpovědí."
         )
         system_prompt = f"{system_prompt}{cas_info}"
+
+        if llama_config.get("online_mode"):
+            multi_rag_rules = (
+                "\n\nPRAVIDLA PRO MULTI-SOURCE SYNTÉZU:\n"
+                "- Odpověď musí komplexně syntetizovat fakta ze všech poskytnutých webových zdrojů do uceleného a srozumitelného textu.\n"
+                "- Pokud se informace ve zdrojích doplňují nebo liší, popiš souvislosti věcně a přesně.\n"
+                "- Na ÚPLNÝ KONEC své odpovědi VŽDY přidej sekci '### Použité zdroje:' s číslovaným seznamem klikatelných odkazů ve formátu [Titulek](URL)."
+            )
+            system_prompt = f"{system_prompt}{multi_rag_rules}"
 
         # Sestavení kontextového okna (historie chatu)
         messages = [{"role": "system", "content": system_prompt}]

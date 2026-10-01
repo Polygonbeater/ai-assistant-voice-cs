@@ -1127,6 +1127,7 @@ class AssistantGUI(tk.Tk):
                 self.config,
                 chat_history=chat_history,
                 callback_on_token=lambda token: self.token_queue.put(("token", token)),
+                status_callback=lambda status: self.token_queue.put(("auto_status", status)),
                 stop_event=self.stop_event,
             ):
                 response_sentences.append(sentence_chunk)
