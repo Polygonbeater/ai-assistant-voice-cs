@@ -155,6 +155,35 @@ Current generative video models merely hallucinate shifting RGB pixels on a 2D s
 
 ---
 
+## 🧭 Section 4: Intellectual Modules & Strategic Frameworks (Expert Prompts V3.1 & Methodologies)
+
+Beyond being a precision voice and 3D technical operator, the assistant integrates a sophisticated cognitive engine driven by **11 expert methodologies** for strategic analysis, risk management, and decision-making under uncertainty.
+
+### 📚 Embedded Methodology Suite (`prompts/Advanced-Analytical-Prompts-main/`)
+
+The repository includes a curated collection of executive-level analytical frameworks:
+* **Taleb’s Methodology (Incerto):** Audits systems for Antifragility, Black Swan exposures, Via Negativa (eliminating systemic vulnerabilities), Convexity vs. Concavity payoffs, Skin in the Game accountability, and Pre-mortem failure analysis.
+* **Cynefin Framework & OODA Loop:** Domain categorization (Simple, Complicated, Complex, Chaotic, Disordered) coupled with high-tempo Observe-Orient-Decide-Act cycles for hyper-dynamic operational environments.
+* **Systems Thinking (Peter Senge) & Porter’s Five Forces:** Structural feedback loops (reinforcing vs. balancing loops mapped with Mermaid diagrams), system archetypes, leverage interventions, and competitive industry forces (rivalry, supplier/buyer power, substitute threats, entry barriers).
+* **Design Thinking & Scenario Planning:** Human-centered innovation with Key Behavioral Indicators (KBIs), identification of critical uncertainties, trigger point signposts, and multi-timeline contingency planning.
+* **Meta-Prompt for Comprehensive Strategic Analysis:** A unified executive protocol combining macro-environmental PESTLE, industry Porter, internal SWOT matrices, multi-criteria decision matrices, and ACH (Analysis of Competing Hypotheses).
+
+### 🔍 Methodological Protocols for Deep Peer-Review (`prompts/frameworks/`)
+
+For rigorous cross-examination of technical and creative tasks, the assistant draws upon dedicated analytical protocols:
+* **[`advanced_assumption_audit.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/advanced_assumption_audit.md):** Red Team stress testing, forensic audits of hidden premises (categorizing statements into Facts, Hypotheses, and Dogmas), Popperian falsification criteria, and steelmanning counter-proposals before deconstruction.
+* **[`auteur_visual_analysis.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/auteur_visual_analysis.md):** Deep semiotic and art-historical film deconstruction (mise-en-scène geometry, chiaroscuro/tenebrism lighting, camera movement, and historical iconographies from Caravaggio to Fritz Lang).
+* **[`first_principles_technical.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/first_principles_technical.md):** First-principles technical deconstruction for Python systems and 3D graphics (matrix transformations, quaternion rotation mathematics, illegal state prevention, deterministic invariant proofs, and direct Blender BMesh vector memory operations).
+
+### 🧠 Cognitive Integration with the AI Model
+
+These frameworks function as an internal cognitive toolkit for the local LLM. Rather than relying on unstructured generative text, the assistant applies structured reasoning that:
+1. **Eliminates cognitive biases** (confirmation bias, narrative fallacy, planning optimism, sunk cost fallacy).
+2. **Enforces empirical falsifiability** through Analysis of Competing Hypotheses (ACH).
+3. **Elevates responses** from generic chat dialogue to rigorous, boardroom-grade technical direction.
+
+---
+
 ## 🧪 Testing & Production Stability: 176 Unit Tests (100% Pass)
 
 Every single tool, socket payload, LLM prompt parser, and inference fallback is covered by our unit test suite:

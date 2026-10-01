@@ -155,6 +155,35 @@ Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obraz
 
 ---
 
+## 🧭 Sekce 4: Intelektuální moduly & Strategické frameworky (Expert Prompts V3.1 & Metodiky)
+
+Asistent neslouží pouze jako technický operátor pro 3D grafiku a hlasový dialog – disponuje integrovanou kognitivní výbavou čítající **11 expertních metodik** pro hloubkovou strategickou analýzu, řízení rizik a rozhodování v podmínkách nejistoty.
+
+### 📚 Přehled metodik v repozitáři (`prompts/Advanced-Analytical-Prompts-main/`)
+
+V repozitáři je integrována ucelená sada expertních analytických rámců:
+* **Talebova metodika (Incerto):** Analýza systémů z pohledu Antifragility, zranitelnosti vůči černým labutím (Black Swan), Via Negativa (odstraňování slabin), konvexity/konkavity dopadů, principu Skin in the Game a Pre-mortem analýzy selhání.
+* **Cynefin rámec & OODA Loop:** Kategorizace problémů do domén (prostá, komplikovaná, komplexní, chaotická) a rychlé cykly rozhodování (Observe-Orient-Decide-Act) pro hyperdynamická prostředí.
+* **Systémové myšlení (Peter Senge) & Porterových pět sil:** Mapování kauzálních smyček a zpětných vazeb (včetně generování Mermaid diagramů), hledání pákových bodů a analýza konkurenčních tlaků v odvětví.
+* **Design Thinking & Plánování scénářů:** Uživatelsky orientovaná inovace s behaviorálními ukazateli (KBIs), práce s kritickými nejistotami a sledování varovných indikátorů (trigger points).
+* **Meta-prompt pro komplexní strategickou analýzu:** Ucelený exekutivní protokol propojující makroanalýzu PESTLE, oborového Portera, matici SWOT, multikriteriální rozhodovací matice a metodu ACH (Analysis of Competing Hypotheses).
+
+### 🔍 Metodické protokoly pro hloubkovou oponenturu (`prompts/frameworks/`)
+
+Pro nekompromisní prověřování návrhů a kódu asistent využívá specializované protokoly:
+* **[`advanced_assumption_audit.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/advanced_assumption_audit.md):** Red Team zátěžové testy a forenzní audit skrytých premis (striktní třídění výroků na Fakta, Hypotézy a Dogmata), Popperovská falsifikační kritéria a steelmanning protinávrhů.
+* **[`auteur_visual_analysis.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/auteur_visual_analysis.md):** Sémiotická a ikonografická dekonstrukce audiovizuálních děl (geometrie mizanscény, světelná dramaturgie šerosvitu, montážní syntax a odkazy na mistry od Caravaggia po Fritze Langa).
+* **[`first_principles_technical.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/first_principles_technical.md):** Myšlení v prvních principech pro kód a 3D geometrii ($4\times 4$ transformační matice, kvaterniony bez rizika Gimbal Locku, neměnné stavy a přímá práce s BMesh strukturami v Blenderu).
+
+### 🧠 Propojení s umělou inteligencí
+
+Tyto metodické rámce slouží jako strukturovaný kognitivní toolkit pro lokální LLM model uvnitř asistenta. Tím:
+1. **Eliminují běžná kognitivní zkreslení** (konfirmační zkreslení, iluzi kontroly, plánovací optimismus či utopené náklady).
+2. **Vynucují rigorózní analytický postup** s explicitním testováním konkurenčních hypotéz (ACH).
+3. **Povyšují výstupy asistenta** z pouhých odpovědí na úroveň nekompromisního strategického a technického poradce.
+
+---
+
 ## 🧪 Testování a produkční stabilita: 176 Unit Testů (100% Úspěšnost)
 
 Stabilita celého ekosystému je doložena rozsáhlým testovacím balíkem pokrývajícím všech 20 nástrojů, socketový protokol, parser i sémantickou paměť:
