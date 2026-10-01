@@ -1067,3 +1067,58 @@ def request_vectorize_to_3d(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_compositor_setup(
+    preset: str = "product_pop",
+    glare_threshold: float = 0.75,
+    glare_size: int = 8,
+    dispersion: float = 0.015,
+    vignette_strength: float = 0.8,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na nastavení nodového kompozitoru pro post-processing
+    (action: setup_compositor).
+
+    Args:
+        preset: Zvolený styl postprodukce:
+                - "product_pop": Fog Glow (odlesky) + Color Balance (kontrast)
+                - "cinematic": Lens Distortion (chromatická aberace) + Ellipse Vignette
+                - "denoise_only": Čisté odstranění šumu
+        glare_threshold: Prahová hodnota pro Fog Glow (pro preset product_pop).
+        glare_size: Velikost záře Fog Glow (pro preset product_pop).
+        dispersion: Míra chromatické aberace (pro preset cinematic).
+        vignette_strength: Intenzita vinětace (pro preset cinematic).
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "setup_compositor",
+        "preset": str,
+        "node_count": int,
+        "link_count": int,
+        "nodes": list[dict],
+        "use_nodes": bool,
+    }
+    """
+    clean_preset = (preset or "product_pop").lower().strip()
+    payload: dict[str, Any] = {
+        "action": "setup_compositor",
+        "preset": clean_preset,
+        "glare_threshold": float(glare_threshold),
+        "glare_size": int(glare_size),
+        "dispersion": float(dispersion),
+        "vignette_strength": float(vignette_strength),
+    }
+
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )

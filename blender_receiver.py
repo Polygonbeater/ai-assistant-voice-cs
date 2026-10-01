@@ -2708,7 +2708,182 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 15. Vykonání Python kódu (action == 'execute')
+        # 15. Nastavení kompozitoru a post-processingu (action == 'setup_compositor')
+        if action == "setup_compositor":
+            try:
+                preset = str(message.get("preset", "product_pop")).lower().strip()
+                valid_presets = {"product_pop", "cinematic", "denoise_only"}
+                if preset not in valid_presets:
+                    preset = "product_pop"
+
+                scene = bpy.context.scene
+                scene.use_nodes = True
+                tree = scene.node_tree
+                nodes = tree.nodes
+                links = tree.links
+                nodes.clear()
+
+                if preset == "product_pop":
+                    # 1. Render Layers
+                    rlayers = nodes.new('CompositorNodeRLayers')
+                    rlayers.location = (-400, 100)
+
+                    # 2. Glare (Fog Glow)
+                    glare = nodes.new('CompositorNodeGlare')
+                    glare.location = (-100, 100)
+                    try:
+                        glare.glare_type = 'FOG_GLOW'
+                        glare.quality = 'HIGH'
+                        glare.threshold = float(message.get("glare_threshold", 0.75))
+                        glare.size = int(message.get("glare_size", 8))
+                    except Exception:
+                        pass
+
+                    # 3. Color Balance (zvýšení kontrastu a čistoty tónů)
+                    col_bal = nodes.new('CompositorNodeColorBalance')
+                    col_bal.location = (200, 100)
+                    try:
+                        col_bal.correction_method = 'LIFT_GAMMA_GAIN'
+                        col_bal.gain = (1.04, 1.04, 1.04)
+                        col_bal.gamma = (0.98, 0.98, 0.98)
+                    except Exception:
+                        pass
+
+                    # 4. Composite & Viewer
+                    composite = nodes.new('CompositorNodeComposite')
+                    composite.location = (500, 100)
+                    viewer = nodes.new('CompositorNodeViewer')
+                    viewer.location = (500, -100)
+
+                    # Propojení
+                    links.new(rlayers.outputs['Image'], glare.inputs['Image'])
+                    links.new(glare.outputs['Image'], col_bal.inputs['Image'])
+                    links.new(col_bal.outputs['Image'], composite.inputs['Image'])
+                    links.new(col_bal.outputs['Image'], viewer.inputs['Image'])
+
+                elif preset == "cinematic":
+                    # 1. Render Layers
+                    rlayers = nodes.new('CompositorNodeRLayers')
+                    rlayers.location = (-500, 150)
+
+                    # 2. Lens Distortion (chromatická aberace)
+                    lens = nodes.new('CompositorNodeLensdist')
+                    lens.location = (-200, 150)
+                    try:
+                        lens.dispersion = float(message.get("dispersion", 0.015))
+                        if hasattr(lens, "use_fit"):
+                            lens.use_fit = True
+                    except Exception:
+                        pass
+
+                    # 3. Vinětace: Ellipse Mask -> Blur
+                    ellipse = nodes.new('CompositorNodeEllipseMask')
+                    ellipse.location = (-400, -180)
+                    try:
+                        ellipse.width = 0.85
+                        ellipse.height = 0.75
+                    except Exception:
+                        pass
+
+                    blur = nodes.new('CompositorNodeBlur')
+                    blur.location = (-150, -180)
+                    try:
+                        blur.filter_type = 'FAST_GAUSS'
+                        blur.use_relative = True
+                        blur.factor_x = 25.0
+                        blur.factor_y = 25.0
+                    except Exception:
+                        pass
+
+                    # 4. Mix (Multiply pro ztmavení okrajů)
+                    mix = nodes.new('CompositorNodeMixRGB')
+                    mix.location = (100, 150)
+                    try:
+                        mix.blend_type = 'MULTIPLY'
+                        mix.inputs[0].default_value = float(message.get("vignette_strength", 0.8))
+                    except Exception:
+                        pass
+
+                    # 5. Composite & Viewer
+                    composite = nodes.new('CompositorNodeComposite')
+                    composite.location = (400, 150)
+                    viewer = nodes.new('CompositorNodeViewer')
+                    viewer.location = (400, -100)
+
+                    # Propojení
+                    links.new(rlayers.outputs['Image'], lens.inputs['Image'])
+                    links.new(ellipse.outputs['Mask'], blur.inputs['Image'])
+                    links.new(lens.outputs['Image'], mix.inputs[1])
+                    blur_out = blur.outputs.get('Mask') or blur.outputs.get('Image') or blur.outputs[0]
+                    links.new(blur_out, mix.inputs[2])
+                    links.new(mix.outputs['Image'], composite.inputs['Image'])
+                    links.new(mix.outputs['Image'], viewer.inputs['Image'])
+
+                else:  # denoise_only
+                    # 1. Render Layers
+                    rlayers = nodes.new('CompositorNodeRLayers')
+                    rlayers.location = (-300, 50)
+
+                    # 2. Denoise
+                    denoise = nodes.new('CompositorNodeDenoise')
+                    denoise.location = (50, 50)
+
+                    # 3. Composite & Viewer
+                    composite = nodes.new('CompositorNodeComposite')
+                    composite.location = (400, 50)
+                    viewer = nodes.new('CompositorNodeViewer')
+                    viewer.location = (400, -150)
+
+                    # Propojení
+                    links.new(rlayers.outputs['Image'], denoise.inputs['Image'])
+                    if 'Denoising Normal' in rlayers.outputs and 'Normal' in denoise.inputs:
+                        links.new(rlayers.outputs['Denoising Normal'], denoise.inputs['Normal'])
+                    elif 'Normal' in rlayers.outputs and 'Normal' in denoise.inputs:
+                        links.new(rlayers.outputs['Normal'], denoise.inputs['Normal'])
+
+                    if 'Denoising Albedo' in rlayers.outputs and 'Albedo' in denoise.inputs:
+                        links.new(rlayers.outputs['Denoising Albedo'], denoise.inputs['Albedo'])
+
+                    links.new(denoise.outputs['Image'], composite.inputs['Image'])
+                    links.new(denoise.outputs['Image'], viewer.inputs['Image'])
+
+                created_nodes_summary = [
+                    {"name": n.name, "type": n.type, "label": getattr(n, "label", "") or n.name}
+                    for n in nodes
+                ]
+
+                # Překreslení viewportu a node editoru
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type in ('VIEW_3D', 'NODE_EDITOR'):
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "setup_compositor",
+                    "preset": preset,
+                    "node_count": len(created_nodes_summary),
+                    "link_count": len(links),
+                    "nodes": created_nodes_summary,
+                    "use_nodes": scene.use_nodes,
+                }
+                print(f"✅ [AI-Blender] Compositor nastaven na preset '{preset}' ({len(created_nodes_summary)} uzlů, {len(links)} spojení).")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při setup_compositor: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 16. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

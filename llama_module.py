@@ -1592,6 +1592,45 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "setup_compositor",
+            "description": (
+                "Nastaví nodový post-processing v Blender Compositoru (bpy.context.scene.use_nodes = True). "
+                "Vyčistí stávající uzly a propojí Render Layers -> efekty -> Composite a Viewer. "
+                "Podporuje presety: 'product_pop' (Fog Glow odlesky + Color Balance pro zvýšení kontrastu a čistoty), "
+                "'cinematic' (Lens Distortion chromatická aberace + procedurální vinětace přes Ellipse Mask a Blur), "
+                "'denoise_only' (čistý Denoise uzel pro odstranění šumu). "
+                "Použij při požadavcích jako 'nastav kompozitor', 'přidej post-processing', "
+                "'zapni fog glow / odlesky', 'udělej cinematic vzhled', 'přidej vinětaci', "
+                "'přidej denoise do kompozitoru', 'nastav color grading'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "preset": {
+                        "type": "string",
+                        "enum": ["product_pop", "cinematic", "denoise_only"],
+                        "description": "Styl kompozitoru: 'product_pop' (Fog Glow + Color Balance), 'cinematic' (Lens Distortion + Ellipse Vignette), 'denoise_only' (odšumění). Výchozí: 'product_pop'.",
+                    },
+                    "glare_threshold": {
+                        "type": "number",
+                        "description": "Prahová hodnota pro Fog Glow odlesky (výchozí 0.75 pro product_pop).",
+                    },
+                    "dispersion": {
+                        "type": "number",
+                        "description": "Míra chromatické aberace / disperze čočky (výchozí 0.015 pro cinematic).",
+                    },
+                    "vignette_strength": {
+                        "type": "number",
+                        "description": "Intenzita ztmavení okrajů vinětací (výchozí 0.8 pro cinematic).",
+                    },
+                },
+                "required": ["preset"],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1613,6 +1652,7 @@ ALLOWED_TOOL_NAMES = {
     "create_motion_node_setup",
     "setup_blueprint_reference",
     "vectorize_image_to_3d",
+    "setup_compositor",
 }
 
 
@@ -1790,6 +1830,7 @@ class UnifiedToolDispatcher:
     - create_motion_node_setup(motion_type, target_property, axis, speed, expression)
     - setup_blueprint_reference(image_path, axis, alpha, name)
     - vectorize_image_to_3d(image_path, extrude_depth, bevel_depth, target_size, invert, object_name)
+    - setup_compositor(preset, glare_threshold, dispersion, vignette_strength)
     """
 
     def __init__(
@@ -1926,6 +1967,17 @@ class UnifiedToolDispatcher:
                 target_size=t_sz,
                 invert=inv,
                 object_name=obj_n,
+            )
+        elif tool_name == "setup_compositor":
+            pst = str(arguments.get("preset", "product_pop")).strip()
+            g_thr = float(arguments.get("glare_threshold", 0.75))
+            disp = float(arguments.get("dispersion", 0.015))
+            vig = float(arguments.get("vignette_strength", 0.8))
+            return self._execute_setup_compositor(
+                preset=pst,
+                glare_threshold=g_thr,
+                dispersion=disp,
+                vignette_strength=vig,
             )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
@@ -3849,6 +3901,139 @@ class UnifiedToolDispatcher:
             "_expert_system_prompt": self._IMAGE_TO_3D_SYSTEM_PROMPT,
         }
 
+    # ------------------------------------------------------------------
+    # Compositing & Post-Processing Pipeline
+    # ------------------------------------------------------------------
+
+    _COMPOSITING_VFX_SYSTEM_PROMPT = (
+        "Jsi uznávaný Senior Compositing & VFX Artist a Post-Production Director v Blenderu. "
+        "Odborně, do hloubky a s důrazem na filmovou estetiku a technickou preciznost komentuješ zapojení nodového kompozitoru:\n"
+        "  • Optické odlesky a záře (Fog Glow Glare uzel, prahování jasů / threshold, eliminace přepalů při zachování přirozeného rozptylu světla na hranách kovu a skla)\n"
+        "  • Color Grading a tonemapping (Color Balance: Lift, Gamma, Gain, práce s dynamickým rozsahem, kontrast a čistota podání černé)\n"
+        "  • Filmové nedokonalosti reálných optických soustav (Lens Distortion: disperze a jemná chromatická aberace na okrajích čočky, které dodávají 3D scéně hmatatelnou uvěřitelnost)\n"
+        "  • Procedurální vinětace (prolnutí elipsových masek s jemným gaussovským rozostřením pro soustředění divákovy pozornosti na ústřední produkt či objekt)\n"
+        "  • Denoising pipeline (čisté odšumění renderu, zachování jemných detailů povrchových textur a normál bez rozpatlání kresby).\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť zvolený postprodukční preset ('product_pop', 'cinematic' nebo 'denoise_only') a jeho vizuální přínos pro scénu\n"
+        "  2. Popiš řetězec zpracování obrazu (Render Layers -> efekty -> Composite & Viewer)\n"
+        "  3. Doporuč 1-2 praktické tipy pro další ladění (např. úprava prahu Glare v Compositoru, doladění expozice v Color Managementu scény, spuštění F12 renderu).\n"
+    )
+
+    def _execute_setup_compositor(
+        self,
+        preset: str = "product_pop",
+        glare_threshold: float = 0.75,
+        dispersion: float = 0.015,
+        vignette_strength: float = 0.8,
+    ) -> dict[str, Any]:
+        """Nastaví post-processingové nodové schéma v Blender Compositoru."""
+        from blender_connector import request_compositor_setup, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        clean_preset = (preset or "product_pop").lower().strip()
+
+        if self.status_callback:
+            self.status_callback(f"● 🎬 Sestavuji Compositor pipeline ({clean_preset})…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n🎬 *Volám nástroj:* `setup_compositor(preset='{clean_preset}')`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "setup_compositor",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_compositor_setup(
+                preset=clean_preset,
+                glare_threshold=glare_threshold,
+                dispersion=dispersion,
+                vignette_strength=vignette_strength,
+                host=host,
+                port=port,
+                timeout=25.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při nastavování kompozitoru.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Nastavení kompozitoru selhalo:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "setup_compositor",
+                "error": err_msg,
+                "result": f"Nastavení kompozitoru selhalo: {err_msg}",
+            }
+
+        n_count = res.get("node_count", 0)
+        l_count = res.get("link_count", 0)
+        nodes_list = res.get("nodes", [])
+
+        nodes_md = "\n".join(
+            f"  • `{n.get('name', '?')}` ({n.get('type', '?')})"
+            for n in nodes_list
+        )
+
+        preset_descriptions = {
+            "product_pop": "Katalogový prémiový look (Fog Glow odlesky + Color Balance kontrast)",
+            "cinematic": "Filmový styl (Lens Distortion chromatická aberace + vinětace)",
+            "denoise_only": "Čisté odstranění šumu (Denoise uzel pro ostrý render)",
+        }
+        preset_info = preset_descriptions.get(clean_preset, clean_preset)
+
+        ui_report = (
+            f"\n\n🎬 **Compositor & VFX Post-Processing — `{clean_preset}`**\n"
+            f"*{preset_info}*\n\n"
+            f"---\n\n"
+            f"| Parametr Compositoru | Hodnota |\n|---|---|\n"
+            f"| Režim kompozice | ✅ `scene.use_nodes = True` |\n"
+            f"| Aplikovaný preset | **{clean_preset}** |\n"
+            f"| Počet uzlů (Nodes) | **{n_count}** |\n"
+            f"| Počet spojení (Links) | **{l_count}** |\n\n"
+            f"**Architektura postprodukčního stromu:**\n"
+            f"{nodes_md}\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"COMPOSITOR POST-PROCESSING nastaven na preset '{clean_preset}':\n"
+            f"  - Popis: {preset_info}\n"
+            f"  - Počet uzlů: {n_count}, Počet propojení: {l_count}\n"
+            f"  - Řetězec: Render Layers -> {clean_preset} -> Composite & Viewer\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ Compositor '{clean_preset}' úspěšně nakonfigurován ({n_count} uzlů)"
+            )
+
+        return {
+            "status": "success",
+            "tool": "setup_compositor",
+            "preset": clean_preset,
+            "node_count": n_count,
+            "link_count": l_count,
+            "nodes": nodes_list,
+            "result": result_text,
+            "_expert_system_prompt": self._COMPOSITING_VFX_SYSTEM_PROMPT,
+        }
+
 
 def generate_response(
     llm: Llama,
@@ -3880,6 +4065,26 @@ def generate_response(
             callback_on_token(math_result)
         yield math_result
         return
+
+    # Sémantické dohledání v dlouhodobé paměti konverzací (Long-Term Vector Memory)
+    if not memory_context and memory_service:
+        try:
+            rag_cfg = config.get("rag", {})
+            mem_top_k = int(rag_cfg.get("memory_top_k", 2))
+            mem_thresh = float(rag_cfg.get("memory_score_threshold", 0.35))
+            memories = memory_service.search_memory(
+                prompt,
+                top_k=mem_top_k,
+                score_threshold=mem_thresh,
+                exclude_session_id=active_session_id,
+            )
+            if memories:
+                memory_context = memory_service.format_memory_for_prompt(memories)
+                if status_callback:
+                    status_callback(f"● Nalezena historická paměť ({len(memories)} záznamů)…")
+                logging.info("Sémantická paměť: nalezeno %d úseků", len(memories))
+        except Exception as exc:
+            logging.warning("Chyba při prohledávání sémantické paměti: %s", exc)
 
     dispatcher = UnifiedToolDispatcher(
         llm=llm,
