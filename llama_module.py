@@ -1,7 +1,9 @@
-import os
+import json
 import logging
+import os
 import re
 from pathlib import Path
+from typing import Any
 from llama_cpp import Llama
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -1045,6 +1047,594 @@ def generate_search_queries(
     return fallback
 
 
+# ==============================================================================
+# NATIVNÍ FUNCTION CALLING & JSON TOOL-USE ARCHITECTURE
+# ==============================================================================
+
+TOOL_SCHEMAS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Živé online vyhledávání na internetu pro aktuální zprávy, čerstvé události, release notes nebo ověření faktů v reálném čase přes DuckDuckGo a Multi-Source RAG.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Optimalizovaný vyhledávací dotaz pro internetový vyhledávač.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_local_rag",
+            "description": "Sémantické vyhledávání v lokálně nahraných a zaindexovaných dokumentech (PDF, DOCX, zdrojové kódy, texty) pomocí FAISS vektorové databáze.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Sémantický vyhledávací dotaz pro vyhledání relevantních úseků v dokumentech.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_memory_rag",
+            "description": "Prohledávání dlouhodobé sémantické paměti minulých rozhovorů s uživatelem (dřívější dohody, parametry, preference, minulé skripty).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Sémantický dotaz na historické informace nebo preference z minulých konverzací.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_blender_code",
+            "description": "Spuštění Python skriptu (bpy) v 3D modelovacím programu Blender přes lokální TCP socket. Použij při požadavcích na vytváření, manipulaci, úpravy materiálů, mazání či renderování 3D objektů.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Kompletní, syntakticky správný spustitelný Python kód využívající modul bpy.",
+                    }
+                },
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_blender_scene",
+            "description": "Získání telemetrie o aktuální 3D scéně v Blenderu (počet objektů, vybrané objekty, kamery, světla, transformační data) a pořízení screenshotu 3D viewportu.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+]
+
+ALLOWED_TOOL_NAMES = {
+    "search_web",
+    "query_local_rag",
+    "query_memory_rag",
+    "execute_blender_code",
+    "inspect_blender_scene",
+}
+
+
+def build_tool_use_prompt(tools: list[dict[str, Any]] | None = None) -> str:
+    """Sestaví systémové instrukce a JSON schémata pro nativní Function Calling."""
+    tools = tools or TOOL_SCHEMAS
+    schemas_json = json.dumps(tools, ensure_ascii=False, indent=2)
+    return (
+        "## DOSTUPNÉ NÁSTROJE (TOOLS):\n"
+        "Máš k dispozici následující registrované nástroje definované formátem JSON Schema:\n"
+        f"```json\n{schemas_json}\n```\n\n"
+        "## PRAVIDLA PRO VOLÁNÍ NÁSTROJŮ (TOOL-USE RULES):\n"
+        "1. Pokud dotaz uživatele vyžaduje externí informace nebo akci (aktuální zprávy na internetu, "
+        "lokální dokumenty, minulou paměť rozhovorů, operace či tvorbu objektů v Blenderu, nebo inspekci 3D scény), "
+        "vygeneruj požadavek na volání nástroje ve formátu JSON.\n"
+        "2. Formát požadavku na volání nástroje MUSÍ být validní JSON:\n"
+        "```json\n"
+        "{\n"
+        '  "tool": "název_nástroje",\n'
+        '  "arguments": {\n'
+        '    "parametr": "hodnota"\n'
+        "  }\n"
+        "}\n"
+        "```\n"
+        "Nebo standardní OpenAI formát:\n"
+        "```json\n"
+        "{\n"
+        '  "type": "function",\n'
+        '  "function": {\n'
+        '    "name": "název_nástroje",\n'
+        '    "arguments": { ... }\n'
+        "  }\n"
+        "}\n"
+        "```\n"
+        "3. Pokud dotaz uživatele NEVYŽADUJE žádný nástroj (běžný rozhovor, obecné vysvětlení teorie, "
+        "pozdrav, matematika, psaní textu bez externích dat), odpověz PŘÍMO přirozeným jazykem bez jakéhokoliv JSONu.\n"
+        "4. Pokud voláš nástroj, odpověz VÝHRADNĚ JSON objektem pro volání nástroje a nepřidávej žádný zbytečný úvodní ani závěrečný text.\n"
+    )
+
+
+def parse_tool_call(text: str) -> dict[str, Any] | None:
+    """
+    Bezpečný parser strukturovaných požadavků na volání nástrojů z výstupu LLM.
+    Podporuje:
+    1. Standardní JSON Schema formát: {"type": "function", "function": {"name": "...", "arguments": {...}}}
+    2. Stručný JSON formát: {"tool": "...", "arguments": {...}} nebo {"name": "...", "arguments": {...}}
+    3. Markdown bloky: ```json ... ```
+    4. XML tagy: <tool_call> ... </tool_call> nebo <function_call> ... </function_call>
+    """
+    if not text or not text.strip():
+        return None
+
+    clean = text.strip()
+
+    # 1. Kontrola XML obalu (<tool_call>...</tool_call> nebo <function_call>...</function_call>)
+    xml_match = re.search(r"<(?:tool_call|function_call)>(.*?)</(?:tool_call|function_call)>", clean, re.DOTALL | re.IGNORECASE)
+    if xml_match:
+        clean = xml_match.group(1).strip()
+
+    # 2. Kontrola Markdown bloku ```json ... ``` nebo ``` ... ```
+    md_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL | re.IGNORECASE)
+    if md_match:
+        clean = md_match.group(1).strip()
+
+    # 3. Vyhledání JSON objektu v textu
+    candidates = []
+    if clean.startswith("{") and clean.endswith("}"):
+        candidates.append(clean)
+    else:
+        start_idx = clean.find("{")
+        while start_idx != -1:
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start_idx, len(clean)):
+                char = clean[i]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif char == "\\":
+                        escape = True
+                    elif char == '"':
+                        in_string = False
+                else:
+                    if char == '"':
+                        in_string = True
+                    elif char == "{":
+                        depth += 1
+                    elif char == "}":
+                        depth -= 1
+                        if depth == 0:
+                            candidates.append(clean[start_idx : i + 1])
+                            break
+            start_idx = clean.find("{", start_idx + 1)
+
+    for cand in candidates:
+        try:
+            data = json.loads(cand)
+            if not isinstance(data, dict):
+                continue
+
+            tool_name = None
+            tool_args = {}
+
+            # Formát OpenAI: {"type": "function", "function": {"name": ..., "arguments": ...}}
+            if data.get("type") == "function" and isinstance(data.get("function"), dict):
+                fn = data["function"]
+                tool_name = fn.get("name")
+                tool_args = fn.get("arguments", {})
+            # Formát {"tool": "...", "arguments": ...}
+            elif "tool" in data:
+                tool_name = data["tool"]
+                tool_args = data.get("arguments", {})
+            # Formát {"name": "...", "arguments": ...}
+            elif "name" in data:
+                tool_name = data["name"]
+                if "arguments" in data:
+                    tool_args = data["arguments"]
+                elif "parameters" in data:
+                    tool_args = data["parameters"]
+                else:
+                    tool_args = {k: v for k, v in data.items() if k not in ("name", "type")}
+            # Formát {"function": "...", "arguments": ...}
+            elif "function" in data and isinstance(data["function"], str):
+                tool_name = data["function"]
+                tool_args = data.get("arguments", {})
+
+            if not tool_name or not isinstance(tool_name, str):
+                continue
+
+            tool_name = tool_name.strip()
+            if isinstance(tool_args, str):
+                try:
+                    tool_args = json.loads(tool_args)
+                except Exception:
+                    pass
+
+            if not isinstance(tool_args, dict):
+                tool_args = {}
+
+            if tool_name in ALLOWED_TOOL_NAMES:
+                return {
+                    "name": tool_name,
+                    "arguments": tool_args,
+                    "raw": cand,
+                }
+        except Exception:
+            continue
+
+    return None
+
+
+class UnifiedToolDispatcher:
+    """
+    Centrální dispatcher pro spouštění registrovaných nástrojů:
+    - search_web(query)
+    - query_local_rag(query)
+    - query_memory_rag(query)
+    - execute_blender_code(code) (včetně Self-Healing smyčky)
+    - inspect_blender_scene()
+    """
+
+    def __init__(
+        self,
+        llm: Llama | None = None,
+        config: dict | None = None,
+        document_service=None,
+        memory_service=None,
+        active_session_id: str | None = None,
+        status_callback=None,
+        callback_on_token=None,
+        stop_event=None,
+    ):
+        self.llm = llm
+        self.config = config or {}
+        self.document_service = document_service
+        self.memory_service = memory_service
+        self.active_session_id = active_session_id
+        self.status_callback = status_callback
+        self.callback_on_token = callback_on_token
+        self.stop_event = stop_event
+
+    def dispatch(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Centrální dispatcher pro spuštění vybraného nástroje."""
+        tool_name = (tool_name or "").strip()
+        arguments = arguments or {}
+        logging.info("UnifiedToolDispatcher: Volání nástroje '%s' s argumenty: %s", tool_name, arguments)
+
+        if tool_name == "search_web":
+            query = str(arguments.get("query", "")).strip()
+            return self._execute_search_web(query)
+        elif tool_name == "query_local_rag":
+            query = str(arguments.get("query", "")).strip()
+            return self._execute_query_local_rag(query)
+        elif tool_name == "query_memory_rag":
+            query = str(arguments.get("query", "")).strip()
+            return self._execute_query_memory_rag(query)
+        elif tool_name == "execute_blender_code":
+            code = str(arguments.get("code", "")).strip()
+            return self._execute_blender_code(code)
+        elif tool_name == "inspect_blender_scene":
+            return self._execute_inspect_blender_scene()
+        else:
+            err = f"Neznámý nástroj: '{tool_name}'"
+            logging.error(err)
+            return {"status": "error", "tool": tool_name, "error": err, "result": err}
+
+    def _execute_search_web(self, query: str) -> dict[str, Any]:
+        if self.status_callback:
+            self.status_callback(f"● 🌐 Vyhledávám na webu: {query[:35]}…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n🌐 *Volám nástroj:* `search_web(query='{query}')`\n")
+
+        from web_search import search_web_multi_source
+        try:
+            context = search_web_multi_source(query, max_sources=3)
+            return {
+                "status": "success",
+                "tool": "search_web",
+                "query": query,
+                "result": context,
+            }
+        except Exception as exc:
+            logging.exception("Chyba při volání nástroje search_web: %s", exc)
+            return {
+                "status": "error",
+                "tool": "search_web",
+                "query": query,
+                "error": str(exc),
+                "result": f"Chyba při online vyhledávání: {exc}",
+            }
+
+    def _execute_query_local_rag(self, query: str) -> dict[str, Any]:
+        if self.status_callback:
+            self.status_callback(f"● 📄 Prohledávám lokální dokumenty: {query[:30]}…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n📄 *Volám nástroj:* `query_local_rag(query='{query}')`\n")
+
+        if not self.document_service or self.document_service.total_chunks() == 0:
+            msg = "V lokálním RAG úložišti nejsou žádné indexované dokumenty."
+            return {"status": "error", "tool": "query_local_rag", "query": query, "result": msg}
+
+        try:
+            top_k = getattr(self.document_service, "top_k", 3)
+            chunks = self.document_service.search(query, top_k=top_k)
+            if not chunks:
+                res_text = f"Pro dotaz '{query}' nebyly v lokálních dokumentech nalezeny žádné relevantní úseky."
+            else:
+                res_text = self.document_service.format_chunks_for_prompt(chunks)
+            return {
+                "status": "success",
+                "tool": "query_local_rag",
+                "query": query,
+                "chunks_count": len(chunks),
+                "result": res_text,
+            }
+        except Exception as exc:
+            logging.exception("Chyba při volání query_local_rag: %s", exc)
+            return {
+                "status": "error",
+                "tool": "query_local_rag",
+                "query": query,
+                "error": str(exc),
+                "result": f"Chyba při prohledávání dokumentů: {exc}",
+            }
+
+    def _execute_query_memory_rag(self, query: str) -> dict[str, Any]:
+        if self.status_callback:
+            self.status_callback(f"● 🧠 Prohledávám sémantickou paměť: {query[:30]}…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n🧠 *Volám nástroj:* `query_memory_rag(query='{query}')`\n")
+
+        if not self.memory_service or self.memory_service.get_memory_stats()["total_chunks"] == 0:
+            msg = "Dlouhodobá sémantická paměť konverzací je prázdná."
+            return {"status": "error", "tool": "query_memory_rag", "query": query, "result": msg}
+
+        try:
+            rag_cfg = self.config.get("rag", {})
+            top_k = int(rag_cfg.get("memory_top_k", 2))
+            score_thresh = float(rag_cfg.get("memory_score_threshold", 0.25))
+            memories = self.memory_service.search_memory(
+                query,
+                top_k=top_k,
+                score_threshold=score_thresh,
+                exclude_session_id=self.active_session_id,
+            )
+            if not memories:
+                res_text = f"Pro dotaz '{query}' nebyly v dlouhodobé paměti nalezeny žádné záznamy."
+            else:
+                res_text = self.memory_service.format_memory_for_prompt(memories)
+            return {
+                "status": "success",
+                "tool": "query_memory_rag",
+                "query": query,
+                "memories_count": len(memories),
+                "result": res_text,
+            }
+        except Exception as exc:
+            logging.exception("Chyba při volání query_memory_rag: %s", exc)
+            return {
+                "status": "error",
+                "tool": "query_memory_rag",
+                "query": query,
+                "error": str(exc),
+                "result": f"Chyba při prohledávání paměti: {exc}",
+            }
+
+    def _execute_blender_code(self, code: str) -> dict[str, Any]:
+        from blender_connector import send_code_to_blender, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        max_retries = int(blender_cfg.get("max_retries", 2))
+
+        if self.status_callback:
+            self.status_callback("● 🎨 Spouštím kód v Blenderu…")
+        if self.callback_on_token:
+            self.callback_on_token("\n🎨 *Volám nástroj:* `execute_blender_code`\n")
+
+        if not is_blender_available(host, port):
+            warn_msg = (
+                f"Blender není připojen na portu {port}. "
+                "Ujistěte se, že Blender běží a má spuštěný skript blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn_msg}**\n")
+            return {
+                "status": "error",
+                "tool": "execute_blender_code",
+                "error": "BlenderNotConnected",
+                "result": warn_msg,
+            }
+
+        clean_code = clean_python_code(code)
+        current_code = clean_code
+        attempt = 0
+        last_res = {}
+
+        while attempt <= max_retries:
+            if self.stop_event and self.stop_event.is_set():
+                return {"status": "error", "tool": "execute_blender_code", "error": "StoppedByUser", "result": "Operace přerušena uživatelem."}
+
+            if attempt > 0:
+                if self.status_callback:
+                    self.status_callback(f"● 🔄 Blender Self-Healing: Oprava ({attempt}/{max_retries})…")
+                if self.callback_on_token:
+                    self.callback_on_token(f"\n🔄 *Self-Healing smyčka (pokus {attempt}/{max_retries}): Odesílám opravený kód...*\n")
+
+            res = send_code_to_blender(current_code, host=host, port=port, timeout=10.0)
+            last_res = res
+
+            if res.get("status") == "success":
+                output_info = res.get("output", "Kód byl úspěšně vykonán.")
+                ui_msg = (
+                    f"\n\n✅ **Kód v Blenderu byl úspěšně vykonán{' po automatické opravě' if attempt > 0 else ''}:**\n"
+                    f"```python\n{current_code}\n```\n"
+                )
+                if self.callback_on_token:
+                    self.callback_on_token(ui_msg)
+                if self.status_callback:
+                    self.status_callback("● ✅ Kód byl v Blenderu úspěšně vykonán")
+
+                return {
+                    "status": "success",
+                    "tool": "execute_blender_code",
+                    "code": current_code,
+                    "output": output_info,
+                    "repaired": (attempt > 0),
+                    "attempts": attempt + 1,
+                    "result": f"Kód byl v Blenderu úspěšně vykonán{' po automatické opravě' if attempt > 0 else ''}. Výstup: {output_info}\nVykonaný kód:\n```python\n{current_code}\n```",
+                }
+
+            # Došlo k chybě -> Self-Healing loop
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba")
+            tb = res.get("traceback", "")
+            err_short = err_msg.splitlines()[-1] if "\n" in err_msg else err_msg
+
+            attempt += 1
+            if attempt <= max_retries and self.llm is not None:
+                if self.status_callback:
+                    self.status_callback(f"● ⚠️ Chyba v Blenderu: {err_short[:30]}… Opravuji ({attempt}/{max_retries})")
+                if self.callback_on_token:
+                    self.callback_on_token(
+                        f"\n⚠️ *Chyba při vykonávání v Blenderu:* `{err_short}`\n"
+                        f"🛠️ *Aktivuji Self-Healing smyčku (pokus {attempt}/{max_retries})...*\n"
+                    )
+
+                repair_prompt = (
+                    f"Předchozí Python kód pro Blender selhal s chybou:\n"
+                    f"CHYBA: {err_msg}\n"
+                    f"TRACEBACK:\n{tb}\n"
+                    f"KÓD:\n```python\n{current_code}\n```\n"
+                    "Analyzuj chybu (např. neplatný kontext, chybějící objekt nebo atribut) a vygeneruj "
+                    "OPRAVENÝ a funkční Python kód pro Blender (bpy). "
+                    "Odpověz VÝHRADNĚ čistým Python kódem bez jakýchkoliv komentářů či markdownu."
+                )
+                repair_messages = [
+                    {"role": "system", "content": BLENDER_SYSTEM_PROMPT},
+                    {"role": "user", "content": repair_prompt}
+                ]
+                try:
+                    rep_resp = self.llm.create_chat_completion(
+                        messages=repair_messages,
+                        max_tokens=450,
+                        temperature=0.1,
+                        stream=False,
+                    )
+                    rep_raw = rep_resp["choices"][0]["message"].get("content", "")
+                    current_code = clean_python_code(rep_raw)
+                except Exception as repair_exc:
+                    logging.error("Chyba při generování opravného kódu: %s", repair_exc)
+                    break
+            else:
+                break
+
+        final_err = last_res.get("error", "Chyba při spuštění kódu v Blenderu")
+        fail_ui = (
+            f"\n\n❌ **Při vykonávání v Blenderu došlo k chybě (i po {max_retries} pokusech o opravu):**\n"
+            f"**Chyba:** `{final_err}`\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(fail_ui)
+        if self.status_callback:
+            self.status_callback("● ❌ Kód se v Blenderu nepodařilo vykonat")
+
+        return {
+            "status": "error",
+            "tool": "execute_blender_code",
+            "error": final_err,
+            "traceback": last_res.get("traceback", ""),
+            "attempts": attempt,
+            "result": f"Při vykonávání kódu v Blenderu došlo k chybě: {final_err}\nKód:\n```python\n{current_code}\n```",
+        }
+
+    def _execute_inspect_blender_scene(self) -> dict[str, Any]:
+        from blender_connector import request_scene_inspection, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        output_path = blender_cfg.get("viewport_snapshot_path", "/tmp/blender_viewport.png")
+
+        if self.status_callback:
+            self.status_callback("● 📸 Pořizuji snímek viewportu a telemetrii scény…")
+        if self.callback_on_token:
+            self.callback_on_token("\n📸 *Volám nástroj:* `inspect_blender_scene()`\n")
+
+        if not is_blender_available(host, port):
+            warn_msg = f"Blender není připojen na portu {port}. Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn_msg}**\n")
+            return {"status": "error", "tool": "inspect_blender_scene", "error": "BlenderNotConnected", "result": warn_msg}
+
+        try:
+            res = request_scene_inspection(host=host, port=port, output_path=output_path, timeout=12.0)
+        except Exception as e:
+            res = {"status": "error", "error": str(e)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při komunikaci s Blenderem.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Inspekce selhala:** `{err_msg}`\n")
+            return {"status": "error", "tool": "inspect_blender_scene", "error": err_msg, "result": f"Inspekce scény selhala: {err_msg}"}
+
+        metrics = res.get("scene_metrics", {})
+        screenshot_path = res.get("screenshot_path", output_path)
+
+        total_objs = metrics.get("total_objects", 0)
+        sel_count = metrics.get("selected_count", 0)
+        lights_count = len(metrics.get("lights", []))
+        cams_count = len(metrics.get("cameras", []))
+        mode = metrics.get("mode", "OBJECT")
+        engine = metrics.get("render_engine", "EEVEE")
+
+        ui_header = (
+            f"\n\n📸 **3D Viewport Snapshot:**\n"
+            f"![Viewport Snapshot]({screenshot_path})\n\n"
+            f"📊 **Telemetrie scény:** Celkem objektů: **{total_objs}** | "
+            f"Vybráno: **{sel_count}** | Světla: **{lights_count}** | Kamery: **{cams_count}** | "
+            f"Režim: **{mode}** | Engine: **{engine}**\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_header)
+
+        telemetry_text = format_scene_metrics_for_prompt(metrics, screenshot_path)
+        return {
+            "status": "success",
+            "tool": "inspect_blender_scene",
+            "scene_metrics": metrics,
+            "screenshot_path": screenshot_path,
+            "result": telemetry_text,
+        }
+
+
 def generate_response(
     llm: Llama,
     prompt: str,
@@ -1053,15 +1643,21 @@ def generate_response(
     stop_event=None,
     chat_history: list = None,
     status_callback=None,
+    document_service=None,
     memory_service=None,
     memory_context: str | None = None,
     active_session_id: str | None = None,
+    enable_tools: bool = True,
     **kwargs
 ):
     """
     Generuje odpověď přes Chat API modelu a vrací (yield) text po ucelených větách / logických úsecích.
-    Zároveň průběžně volá callback_on_token pro okamžité vykreslování jednotlivých tokenů v GUI.
-    Automaticky vyhledává v dlouhodobé sémantické paměti minulých rozhovorů.
+    Podporuje Nativní Function Calling (JSON Tool-Use Architecture) s automatickým dispatcherem:
+    - search_web(query)
+    - query_local_rag(query)
+    - query_memory_rag(query)
+    - execute_blender_code(code)
+    - inspect_blender_scene()
     """
     math_result = _try_evaluate_math(prompt)
     if math_result:
@@ -1070,208 +1666,232 @@ def generate_response(
         yield math_result
         return
 
-    # Sémantické dohledání v dlouhodobé paměti konverzací (Long-Term Vector Memory)
-    if not memory_context and memory_service:
+    dispatcher = UnifiedToolDispatcher(
+        llm=llm,
+        config=config,
+        document_service=document_service,
+        memory_service=memory_service,
+        active_session_id=active_session_id,
+        status_callback=status_callback,
+        callback_on_token=callback_on_token,
+        stop_event=stop_event,
+    )
+
+    tools_enabled = enable_tools and config.get("llama", {}).get("function_calling", True)
+
+    # 1. Zpracování analytické metodiky
+    llama_config = config.get("llama", {})
+    system_prompt = llama_config.get("system_prompt", DEFAULT_SYSTEM_PROMPT).strip()
+    preset_name = llama_config.get("analytical_preset", DEFAULT_ANALYTICAL_PRESET)
+
+    analytical_prompt = None
+    if preset_name and preset_name not in ("⚡ Auto (Doporučit)", "Vypnuto (Standardní chat)"):
         try:
-            rag_cfg = config.get("rag", {})
-            mem_top_k = int(rag_cfg.get("memory_top_k", 2))
-            mem_thresh = float(rag_cfg.get("memory_score_threshold", 0.35))
-            memories = memory_service.search_memory(
-                prompt,
-                top_k=mem_top_k,
-                score_threshold=mem_thresh,
-                exclude_session_id=active_session_id,
-            )
-            if memories:
-                memory_context = memory_service.format_memory_for_prompt(memories)
-                if status_callback:
-                    status_callback(f"● Nalezena historická paměť ({len(memories)} záznamů)…")
-                logging.info("Sémantická paměť: nalezeno %d úseků", len(memories))
+            analytical_prompt = load_analytical_prompt(preset_name)
         except Exception as exc:
-            logging.warning("Chyba při prohledávání sémantické paměti: %s", exc)
+            logging.error("Analytickou metodiku se nepodařilo použít: %s", exc)
+            analytical_prompt = None
 
-    # Detekce a zpracování inspekce 3D scény pro Blender (Viewport Inspection)
-    if is_blender_inspection_query(prompt, config):
-        for chunk in handle_blender_inspection(
-            llm,
-            prompt,
-            config,
-            chat_history=chat_history,
-            callback_on_token=callback_on_token,
-            stop_event=stop_event,
-            status_callback=status_callback,
-        ):
-            yield chunk
-        return
+    auto_requested = (preset_name == "⚡ Auto (Doporučit)")
+    detected_mode = detect_analytical_mode(
+        prompt,
+        llm=llm,
+        allow_llm_classifier=auto_requested,
+    )
+    if detected_mode and (auto_requested or not analytical_prompt or preset_name == "Vypnuto (Standardní chat)"):
+        try:
+            detected_prompt = load_analytical_prompt(detected_mode)
+            if detected_prompt:
+                analytical_prompt = detected_prompt
+                preset_name = detected_mode
+                mode_clean = detected_mode.split("(")[0].strip()
+                logging.info("Dynamicky aktivována analytická metodika: %s", detected_mode)
+                if status_callback:
+                    status_callback(f"● Aktivována metodika: {mode_clean}…")
+        except Exception as exc:
+            logging.error("Chyba při načítání detekované analytické metodiky: %s", exc)
 
-    # Detekce a zpracování příkazu pro Blender
-    if is_blender_command(prompt, config):
-        for chunk in handle_blender_command(
-            llm,
-            prompt,
-            config,
-            callback_on_token=callback_on_token,
-            stop_event=stop_event,
-            status_callback=status_callback,
-            memory_context=memory_context,
-        ):
-            yield chunk
-        return
+    if analytical_prompt:
+        system_prompt = analytical_prompt
+
+    # Dynamické vložení systémového času a data
+    from datetime import datetime
+    now = datetime.now()
+    dny = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
+    den_nazev = dny[now.weekday()]
+    cas_info = (
+        f"\n\n[AKTUÁLNÍ SYSTÉMOVÝ ČAS A DATUM: {den_nazev} {now.day}. {now.month}. {now.year}, {now.strftime('%H:%M')}]\n"
+        "PRAVIDLA PRO ČAS A ZPRAVODAJSTVÍ:\n"
+        "- Výše uvedený čas je tvůj přesný reálný čas. Podle něj určuj, co je ráno, odpoledne, dnes či včera.\n"
+        "- Z webových článků NIKDY nekopíruj zastaralé relativní údaje jako 'před hodinou'. Uváděj přesný čas.\n"
+    )
+    system_prompt = f"{system_prompt}{cas_info}"
+
+    # Injektování definic nástrojů, pokud jsou nástroje povoleny
+    if tools_enabled:
+        system_prompt = f"{system_prompt}\n\n{build_tool_use_prompt()}"
+
+    # Předběžná sémantická paměť (pokud je předána zvenčí nebo nástroje nejsou aktivní)
+    if memory_context:
+        mem_instructions = (
+            f"\n\n{memory_context}\n\n"
+            "POKYNY PRO HISTORICKOU PAMĚŤ:\n"
+            "- Výše uvedené záznamy pocházejí z předchozích rozhovorů s uživatelem v minulosti.\n"
+            "- Využij je jako kontext pro zachování kontinuity, domluvených parametrů a preferencí.\n"
+        )
+        system_prompt = f"{system_prompt}{mem_instructions}"
+
+    # Sestavení zpráv konverzace
+    messages = [{"role": "system", "content": system_prompt}]
+    if chat_history:
+        for turn in chat_history:
+            r = "assistant" if turn.get("role") == "assistant" else "user"
+            c = turn.get("content") or turn.get("text") or ""
+            if c:
+                messages.append({"role": r, "content": c})
+    messages.append({"role": "user", "content": prompt})
+
+    # Určení maximálního počtu tokenů
+    raw_max = llama_config.get('max_tokens', 'auto')
+    if str(raw_max).strip().lower() in ('auto', '0', ''):
+        max_tokens = 2048 if analytical_prompt else 1536
+    else:
+        try:
+            max_tokens = int(raw_max)
+        except ValueError:
+            max_tokens = 1536
+
+    temperature = float(llama_config.get("temperature", 0.7))
 
     try:
-        llama_config = config.get("llama", {})
-        system_prompt = llama_config.get("system_prompt", DEFAULT_SYSTEM_PROMPT).strip()
-        preset_name = llama_config.get("analytical_preset", DEFAULT_ANALYTICAL_PRESET)
-
-        # 1. Zkusíme načíst staticky zvolenou metodiku (pokud není Auto či Vypnuto)
-        analytical_prompt = None
-        if preset_name and preset_name not in ("⚡ Auto (Doporučit)", "Vypnuto (Standardní chat)"):
-            try:
-                analytical_prompt = load_analytical_prompt(preset_name)
-            except Exception as exc:
-                logging.error("Analytickou metodiku se nepodařilo použít: %s", exc)
-                analytical_prompt = None
-
-        # 2. Automatické rozpoznání hlubokého analytického režimu z dotazu uživatele
-        auto_requested = (preset_name == "⚡ Auto (Doporučit)")
-        detected_mode = detect_analytical_mode(
-            prompt,
-            llm=llm,
-            allow_llm_classifier=auto_requested,
+        # --- 1. TAH: Detekce volání nástroje vs. přímá odpověď ---
+        first_stream = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens if not tools_enabled else min(max_tokens, 750),
+            temperature=0.1 if tools_enabled else temperature,
+            stream=True,
         )
 
-        if detected_mode and (auto_requested or not analytical_prompt or preset_name == "Vypnuto (Standardní chat)"):
-            try:
-                detected_prompt = load_analytical_prompt(detected_mode)
-                if detected_prompt:
-                    analytical_prompt = detected_prompt
-                    preset_name = detected_mode
-                    mode_clean = detected_mode.split("(")[0].strip()
-                    logging.info("Dynamicky aktivována analytická metodika: %s", detected_mode)
-                    if status_callback:
-                        status_callback(f"● Aktivována metodika: {mode_clean}…")
-            except Exception as exc:
-                logging.error("Chyba při načítání detekované analytické metodiky: %s", exc)
+        first_turn_buffer = ""
+        is_tool_candidate = None  # None = nerozhodnuto, True = bufferuji JSON, False = streamuji text
+        tool_call_detected = None
+        sentence_buffer = ""
 
-        if analytical_prompt:
-            system_prompt = analytical_prompt
+        for chunk in first_stream:
+            if stop_event and stop_event.is_set():
+                return
+            delta = chunk["choices"][0].get("delta", {})
+            text_piece = delta.get("content") or ""
+            if not text_piece:
+                continue
 
-        user_content = prompt
-        web_search_executed = False
+            if not tools_enabled:
+                if callback_on_token:
+                    callback_on_token(text_piece)
+                sentence_buffer += text_piece
+                ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+                for rc in ready_chunks:
+                    yield rc
+                continue
 
-        if llama_config.get("online_mode"):
-            try:
-                # Bleskový Search Intent Router vyhodnotí, zda je internet skutečně potřeba
-                needs_online = classify_search_intent(llm, prompt, chat_history=chat_history)
-
-                if needs_online:
-                    from web_search import search_web_multi_source
-
-                    if status_callback:
-                        status_callback("● Analyzuji dotaz a navrhuji vyhledávací fráze…")
-
-                    # 1. Vygenerovat 2-3 optimalizované fráze pro vyhledávač
-                    search_queries = generate_search_queries(
-                        llm,
-                        prompt,
-                        chat_history=chat_history,
-                        max_queries=3
-                    )
-                    logging.info("Multi-Source RAG fráze: %s", search_queries)
-
-                    if status_callback:
-                        queries_preview = ", ".join(f"„{q}“" for q in search_queries[:2])
-                        status_callback(f"● Prohledávám web a stahuji zdroje ({queries_preview})…")
-
-                    # 2. Asynchronně vyhledat a stáhnout top 3 relevantní zdroje přes aiohttp + trafilatura
-                    web_context = search_web_multi_source(
-                        search_queries,
-                        max_sources=3,
-                        max_total_chars=3600
-                    )
-
-                    if status_callback:
-                        status_callback("● Syntetizuji odpověď z více webových zdrojů…")
-
-                    user_content = f"{web_context}\n\nDOTAZ UŽIVATELE K ZPRACOVÁNÍ:\n{prompt}"
-                    web_search_executed = True
+            # Nástroje jsou zapnuty: analyzujeme úvodní tokeny
+            if is_tool_candidate is None:
+                first_turn_buffer += text_piece
+                stripped = first_turn_buffer.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith(("{", "<", "```", "tool_call", "function_call")):
+                    is_tool_candidate = True
                 else:
-                    logging.info("Search Intent Router: dotaz nevyžaduje internet, odpovídám přímo z lokálních vah.")
-            except Exception:
-                logging.exception("Multi-Source online kontext se nepodařilo načíst.")
+                    is_tool_candidate = False
+                    if callback_on_token:
+                        callback_on_token(first_turn_buffer)
+                    sentence_buffer += first_turn_buffer
+                    ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+                    for rc in ready_chunks:
+                        yield rc
+                continue
 
-        # Dynamické tokeny
-        raw_max = llama_config.get('max_tokens', 'auto')
-        if str(raw_max).strip().lower() in ('auto', '0', ''):
-            if preset_name and preset_name not in ("Vypnuto (Standardní chat)", "⚡ Auto (Doporučit)"):
-                max_tokens = 2048
-            else:
-                max_tokens = 1536
-        else:
-            try:
-                max_tokens = int(raw_max)
-            except ValueError:
-                max_tokens = 1536
+            if not is_tool_candidate:
+                if callback_on_token:
+                    callback_on_token(text_piece)
+                sentence_buffer += text_piece
+                ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+                for rc in ready_chunks:
+                    yield rc
+                continue
 
-        # Dynamické vložení systémového času a data
-        from datetime import datetime
-        now = datetime.now()
-        dny = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
-        den_nazev = dny[now.weekday()]
-        cas_info = (
-            f"\n\n[AKTUÁLNÍ SYSTÉMOVÝ ČAS A DATUM: {den_nazev} {now.day}. {now.month}. {now.year}, {now.strftime('%H:%M')}]\n"
-            "PRAVIDLA PRO ČAS A ZPRAVODAJSTVÍ:\n"
-            "- Výše uvedený čas je tvůj přesný reálný čas. Podle něj určuj, co je ráno, odpoledne, dnes či včera.\n"
-            "- Z webových článků NIKDY nekopíruj zastaralé relativní údaje jako 'před hodinou' či 'před 7 minutami'. "
-            "Uveď pouze přesný čas vydání článku (např. 'v 08:17') a posuzuj stáří zprávy vůči systémovému času.\n"
-            "- Vždy navazuj na předchozí kontext konverzace a paměť odpovědí."
-        )
-        system_prompt = f"{system_prompt}{cas_info}"
+            if is_tool_candidate:
+                first_turn_buffer += text_piece
+                parsed = parse_tool_call(first_turn_buffer)
+                if parsed:
+                    tool_call_detected = parsed
+                    break
 
-        if web_search_executed:
-            multi_rag_rules = (
-                "\n\nPRAVIDLA PRO MULTI-SOURCE SYNTÉZU:\n"
-                "- Odpověď musí komplexně syntetizovat fakta ze všech poskytnutých webových zdrojů do uceleného a srozumitelného textu.\n"
-                "- Pokud se informace ve zdrojích doplňují nebo liší, popiš souvislosti věcně a přesně.\n"
-                "- Na ÚPLNÝ KONEC své odpovědi VŽDY přidej sekci '### Použité zdroje:' s číslovaným seznamem klikatelných odkazů ve formátu [Titulek](URL)."
+        if not is_tool_candidate:
+            final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
+            for rc in final_chunks:
+                yield rc
+            return
+
+        if not tool_call_detected and first_turn_buffer.strip():
+            tool_call_detected = parse_tool_call(first_turn_buffer)
+
+        # Fallback: pokud model nevygeneroval JSON, ale dotaz je zjevný příkaz pro Blender
+        if not tool_call_detected and is_blender_command(prompt, config):
+            logging.info("Tool-Use fallback: Aktivuji execute_blender_code pro zjevný příkaz Blenderu.")
+            tool_call_detected = {"name": "execute_blender_code", "arguments": {"code": first_turn_buffer or prompt}}
+        elif not tool_call_detected and is_blender_inspection_query(prompt, config):
+            logging.info("Tool-Use fallback: Aktivuji inspect_blender_scene pro zjevný dotaz na viewport.")
+            tool_call_detected = {"name": "inspect_blender_scene", "arguments": {}}
+
+        if not tool_call_detected:
+            # Buffer neobsahoval validní volání nástroje -> uvolníme ho jako běžný text
+            if callback_on_token:
+                callback_on_token(first_turn_buffer)
+            sentence_buffer += first_turn_buffer
+            final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
+            for rc in final_chunks:
+                yield rc
+            return
+
+        # --- 2. TAH: Spuštění nástroje přes UnifiedToolDispatcher a syntéza finální odpovědi ---
+        tool_name = tool_call_detected["name"]
+        tool_args = tool_call_detected["arguments"]
+        logging.info("Spouštím detekovaný nástroj: %s (%s)", tool_name, tool_args)
+
+        dispatch_res = dispatcher.dispatch(tool_name, tool_args)
+        tool_obs_text = dispatch_res.get("result", "")
+
+        if status_callback:
+            status_callback("● Formuluji finální odpověď na základě výsledků…")
+
+        messages.append({
+            "role": "assistant",
+            "content": json.dumps({"tool": tool_name, "arguments": tool_args}, ensure_ascii=False)
+        })
+        messages.append({
+            "role": "user",
+            "content": (
+                f"VÝSLEDEK VOLÁNÍ NÁSTROJE '{tool_name}':\n"
+                f"{tool_obs_text}\n\n"
+                "POKYN: Na základě výše uvedeného výsledku nástroje nyní zformuluj konečnou, "
+                "přirozenou, věcnou a plynulou odpověď pro uživatele v češtině (vhodnou pro zobrazení i pro hlasový výstup TTS). "
+                "Pokud výsledek obsahuje odkazy na zdroje, uveď je na konci. "
+                "Odpověz PŘÍMO bez generování dalšího JSONu."
             )
-            system_prompt = f"{system_prompt}{multi_rag_rules}"
+        })
 
-        # Injektování dlouhodobé sémantické paměti minulých rozhovorů
-        if memory_context:
-            mem_instructions = (
-                f"\n\n{memory_context}\n\n"
-                "POKYNY PRO HISTORICKOU PAMĚŤ:\n"
-                "- Výše uvedené záznamy pocházejí z předchozích rozhovorů s uživatelem v minulosti.\n"
-                "- Využij je jako kontext pro zachování kontinuity, starších domluvených parametrů, "
-                "kódu nebo specifických preferencí uživatele.\n"
-                "- Pokud uživatel navazuje slovy jako 'minule', 'jako minule', 'jak jsme se bavili', "
-                "vycházej přímo z těchto historických informací."
-            )
-            system_prompt = f"{system_prompt}{mem_instructions}"
-
-        # Sestavení kontextového okna (historie chatu)
-        messages = [{"role": "system", "content": system_prompt}]
-        if chat_history:
-            for turn in chat_history:
-                r = "assistant" if turn.get("role") == "assistant" else "user"
-                c = turn.get("content") or turn.get("text") or ""
-                if c:
-                    messages.append({"role": r, "content": c})
-        messages.append({"role": "user", "content": user_content})
-
-        logging.info("Generuji odpověď přes Chat API (max_tokens=%d, kontext_zpráv=%d, stream=True)...", max_tokens, len(messages))
-        stream = llm.create_chat_completion(
+        second_stream = llm.create_chat_completion(
             messages=messages,
             max_tokens=max_tokens,
-            temperature=float(llama_config.get("temperature", 0.7)),
+            temperature=temperature,
             stream=True,
         )
 
         sentence_buffer = ""
-        for chunk in stream:
+        for chunk in second_stream:
             if stop_event and stop_event.is_set():
-                logging.info("Generování přerušeno uživatelem (Stop).")
                 break
             delta = chunk["choices"][0].get("delta", {})
             text_piece = delta.get("content") or ""
@@ -1280,13 +1900,12 @@ def generate_response(
                     callback_on_token(text_piece)
                 sentence_buffer += text_piece
                 ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
-                for ready_chunk in ready_chunks:
-                    yield ready_chunk
+                for rc in ready_chunks:
+                    yield rc
 
-        # Vyprázdnění zbývajícího bufferu po skončení inference
         final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
-        for ready_chunk in final_chunks:
-            yield ready_chunk
+        for rc in final_chunks:
+            yield rc
 
     except Exception as exc:
         logging.error("Chyba při generování: %s", exc)

@@ -1254,6 +1254,7 @@ class AssistantGUI(tk.Tk):
                 callback_on_token=_on_token,
                 status_callback=lambda status: self.token_queue.put(("auto_status", status)),
                 stop_event=self.stop_event,
+                document_service=self.document_service,
                 memory_service=self.memory_service,
                 active_session_id=self.active_session_id,
             ):
@@ -1287,6 +1288,8 @@ class AssistantGUI(tk.Tk):
                         self._set_status(value, "#a855f7")
                     elif any(k in value.lower() for k in ("paměť", "pamět", "histor")):
                         self._set_status(value, "#10b981")
+                    elif any(k in value.lower() for k in ("dokument", "rag", "soubor")):
+                        self._set_status(value, "#f59e0b")
                     else:
                         self._set_status(value, "#fbbf24")
                 elif event_type == "auto_switched":
