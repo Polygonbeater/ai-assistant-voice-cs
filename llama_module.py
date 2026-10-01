@@ -1672,6 +1672,37 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_viewport_image",
+            "description": (
+                "Pořídí aktuální screenshot 3D viewportu z běžícího Blenderu, uloží ho jako PNG soubor "
+                "a provede vizuální analýzu obsahu snímku. Kombinuje telemetrii scény s popisem vizuálního "
+                "stavu viewportu. Použij při požadavcích jako 'podívej se na viewport', 'zkontroluj topologii "
+                "vizuálně', 'co vidíš ve viewportu', 'ukaž mi jak vypadá scéna', 'analyzuj viewport', "
+                "'vizuální inspekce Blenderu', 'je mesh v pořádku vizuálně', 'zkontroluj shader ve viewportu'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "analysis_prompt": {
+                        "type": "string",
+                        "description": (
+                            "Volitelný specifický vizuální dotaz pro analýzu snímku (např. 'zkontroluj topologii "
+                            "a normály', 'zhodnoť rozmístění objektů ve scéně', 'popiš shader a materiály'). "
+                            "Pokud není zadáno, provede se obecná vizuální inspekce."
+                        ),
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Volitelná cesta pro uložení snímku viewportu (výchozí: /tmp/ai_assistant_viewport.png).",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1695,6 +1726,7 @@ ALLOWED_TOOL_NAMES = {
     "vectorize_image_to_3d",
     "setup_compositor",
     "generate_local_ai_mesh",
+    "analyze_viewport_image",
 }
 
 
@@ -1874,6 +1906,7 @@ class UnifiedToolDispatcher:
     - vectorize_image_to_3d(image_path, extrude_depth, bevel_depth, target_size, invert, object_name)
     - setup_compositor(preset, glare_threshold, dispersion, vignette_strength)
     - generate_local_ai_mesh(image_path, production_ready, target_faces, texture_size, voxel_size, object_name)
+    - analyze_viewport_image(analysis_prompt, output_path)
     """
 
     def __init__(
@@ -2036,6 +2069,13 @@ class UnifiedToolDispatcher:
                 texture_size=tex_s,
                 voxel_size=vox_s,
                 object_name=obj_n,
+            )
+        elif tool_name == "analyze_viewport_image":
+            analysis_prompt = str(arguments.get("analysis_prompt", "")).strip() or None
+            output_path = str(arguments.get("output_path", "")).strip() or "/tmp/ai_assistant_viewport.png"
+            return self._execute_analyze_viewport_image(
+                analysis_prompt=analysis_prompt,
+                output_path=output_path,
             )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
@@ -2328,6 +2368,184 @@ class UnifiedToolDispatcher:
             "scene_metrics": metrics,
             "screenshot_path": screenshot_path,
             "result": telemetry_text,
+        }
+
+    # ------------------------------------------------------------------
+    # Vision AI – vizuální inspekce viewportu Blenderu
+    # ------------------------------------------------------------------
+
+    _VISION_AI_SYSTEM_PROMPT = (
+        "Jsi zkušený 3D technický ředitel a expert na Blender 3D s okem pro detail.\n"
+        "Uživatel ti předal screenshoty nebo popis aktuálního stavu viewportu a chce vizuální analýzu.\n"
+        "Na základě telemetrických dat a dostupného popisu viewportu proveď:\n"
+        "  1. Popis toho, co je ve scéně vidět (objekty, jejich poloha, viditelné artefakty)\n"
+        "  2. Zhodnocení kvality geometrie, stínování a materiálů\n"
+        "  3. Identifikaci technických problémů (překrytí ploch, tmavé skvrny, nesprávné normály)\n"
+        "  4. Konkrétní doporučení pro opravu nebo zlepšení\n"
+        "Odpovídej přirozenou plynulou češtinou vhodnou pro hlasový výstup (TTS) i čtení v chatu.\n"
+    )
+
+    def _execute_analyze_viewport_image(
+        self,
+        analysis_prompt: str | None = None,
+        output_path: str = "/tmp/ai_assistant_viewport.png",
+    ) -> dict[str, Any]:
+        """
+        Vision AI — vizuální inspekce viewportu Blenderu.
+
+        Postup:
+        1. Pořídí screenshot viewportu přes inspect_scene TCP akci.
+        2. Zobrazí snímek v GUI chatu.
+        3. Sestaví prompt z telemetrie scény + uživatelova vizuálního dotazu.
+        4. Streamuje analýzu pomocí textového LLM (popis na základě telemetrie
+           a kontextu; skutečný multimodální model lze zapojit v budoucnu).
+        """
+        import os
+        from blender_connector import request_scene_inspection, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        snap_path = blender_cfg.get("viewport_snapshot_path", output_path)
+
+        tool_label = "analyze_viewport_image"
+
+        if self.status_callback:
+            self.status_callback("● 👁️ Vision AI: Pořizuji snímek viewportu…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n👁️ *Volám nástroj:* `{tool_label}("
+                f"analysis_prompt='{(analysis_prompt or 'obecná inspekce')[:40]}')`\n"
+            )
+
+        # 1. Ověření dostupnosti Blenderu
+        if not is_blender_available(host, port):
+            warn_msg = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn_msg}**\n")
+            return {
+                "status": "error",
+                "tool": tool_label,
+                "error": "BlenderNotConnected",
+                "result": warn_msg,
+            }
+
+        # 2. Pořízení snímku viewportu a získání telemetrie scény
+        try:
+            res = request_scene_inspection(
+                host=host, port=port, output_path=snap_path, timeout=15.0
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Vision AI: Pořízení snímku selhalo:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": tool_label,
+                "error": err_msg,
+                "result": f"Pořízení snímku viewportu selhalo: {err_msg}",
+            }
+
+        metrics = res.get("scene_metrics", {})
+        screenshot_path = res.get("screenshot_path", snap_path)
+        image_exists = os.path.isfile(screenshot_path)
+
+        # 3. Zobrazení snímku a telemetrie v GUI chatu
+        total_objs = metrics.get("total_objects", 0)
+        sel_count = metrics.get("selected_count", 0)
+        lights_count = len(metrics.get("lights", []))
+        cams_count = len(metrics.get("cameras", []))
+        mode = metrics.get("mode", "OBJECT")
+        engine = metrics.get("render_engine", "EEVEE")
+
+        img_embed = f"![Viewport Snapshot]({screenshot_path})" if image_exists else "*(snímek viewportu nebyl nalezen na disku)*"
+        snap_info = f"✅ Uložen jako: `{screenshot_path}`" if image_exists else f"⚠️ Soubor nebyl nalezen: `{screenshot_path}`"
+
+        ui_header = (
+            f"\n\n👁️ **Vision AI — Vizuální inspekce viewportu:**\n"
+            f"{img_embed}\n\n"
+            f"📊 **Telemetrie:** Objektů: **{total_objs}** | Vybráno: **{sel_count}** | "
+            f"Světla: **{lights_count}** | Kamery: **{cams_count}** | Režim: **{mode}** | Engine: **{engine}**\n"
+            f"{snap_info}\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_header)
+
+        if self.status_callback:
+            self.status_callback("● 👁️ Vision AI: Analyzuji obsah viewportu…")
+
+        # 4. Sestavení expertního promptu pro LLM analýzu
+        telemetry_text = format_scene_metrics_for_prompt(metrics, screenshot_path)
+        user_question = analysis_prompt or "Proveď obecnou vizuální inspekci scény. Popiš co vidíš, zhodnoť kvalitu geometrie a osvětlení a upozorni na případné technické problémy."
+
+        vision_system = (
+            f"{self._VISION_AI_SYSTEM_PROMPT}\n"
+            f"Zde jsou přesná telemetrická data přímo z běžící instance Blenderu:\n\n"
+            f"{telemetry_text}\n\n"
+            f"{'Snímek viewportu byl uložen na: ' + screenshot_path if image_exists else 'Snímek viewportu nebyl dostupný.'}\n"
+        )
+
+        vision_messages = [
+            {"role": "system", "content": vision_system},
+            {"role": "user", "content": user_question},
+        ]
+
+        # 5. LLM textová analýza na základě telemetrie
+        result_text = ""
+        try:
+            if self.llm is not None:
+                stream = self.llm.create_chat_completion(
+                    messages=vision_messages,
+                    max_tokens=700,
+                    temperature=0.3,
+                    stream=True,
+                )
+                sentence_buffer = ""
+                for chunk in stream:
+                    if self.stop_event and self.stop_event.is_set():
+                        break
+                    delta = chunk["choices"][0].get("delta", {})
+                    piece = delta.get("content") or ""
+                    if piece:
+                        if self.callback_on_token:
+                            self.callback_on_token(piece)
+                        sentence_buffer += piece
+                        result_text += piece
+                # Flush zbytku
+            else:
+                fallback_msg = (
+                    f"Vision AI: LLM není inicializován — nelze provést textovou analýzu. "
+                    f"Telemetrie: {total_objs} objektů, {sel_count} vybráno, {lights_count} světel."
+                )
+                if self.callback_on_token:
+                    self.callback_on_token(fallback_msg)
+                result_text = fallback_msg
+
+        except Exception as exc:
+            logging.exception("Vision AI: Chyba při generování analýzy: %s", exc)
+            err_text = f"Vision AI: Chyba při analýze: {exc}"
+            if self.callback_on_token:
+                self.callback_on_token(f"\n{err_text}\n")
+            result_text = err_text
+
+        if self.status_callback:
+            self.status_callback("● ✅ Vision AI: Vizuální inspekce dokončena")
+
+        return {
+            "status": "success",
+            "tool": tool_label,
+            "scene_metrics": metrics,
+            "screenshot_path": screenshot_path,
+            "image_exists": image_exists,
+            "analysis_prompt": user_question,
+            "result": result_text or telemetry_text,
         }
 
     # ------------------------------------------------------------------
