@@ -12,6 +12,8 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
+![Demo Video Placeholder](https://via.placeholder.com/800x400.png?text=AI+Assistant+Voice+CS+-+Video+Demo+Coming+Soon)
+
 **Lead Architect & Author:** Vítězslav Koneval (*Polygon Beater*)  
 **Repository:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
@@ -58,7 +60,7 @@ The assistant's cognitive core synchronizes three tightly integrated pillars: he
 │ • Coqui TTS: Expressive, low-latency Czech voice model │
 │ • Pipelined Streaming: Audio starts playing on first   │
 │   sentence while remaining response is still inferring │
-│ • Instant Barge-in: Immediate interruption on user speech│
+│ • Instant Barge-in: Immediate interruption on user speech │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -171,6 +173,28 @@ OK (100% pass rate — 0 errors, 0 failures)
 
 ---
 
+## 🖥️ Hardware Requirements
+
+| Specification | Minimum | Recommended (Production) |
+|---|---|---|
+| **System RAM** | 16 GB | **32 GB+** |
+| **GPU VRAM** | 8 GB (NVIDIA CUDA) | **12+ GB VRAM (NVIDIA RTX)** |
+| **Target Workload** | Basic local LLM inference + lightweight Blender scenes | Smooth simultaneous execution of GGUF model, Faster-Whisper, TripoSR neural generation, and Blender viewport without Out-of-Memory (OOM) crashes |
+| **Storage** | 10 GB free SSD space | High-speed NVMe SSD (fast weights & cache loading) |
+
+---
+
+## 💻 Technology Stack & Requirements
+
+* **3D Software:** Blender 4.2.1 LTS (requires running `blender_receiver.py` in the Scripting tab).
+* **Python:** 3.11 (recommended for maximum library ABI stability).
+* **LLM Engine:** `llama-cpp-python` (quantized GGUF models: Qwen 2.5, GLM-4).
+* **Voice Subsystem:** `faster-whisper`, `openwakeword`, `TTS` (Coqui TTS), `gruut`, `pyaudio`.
+* **Vector Memory:** `faiss-cpu`, `sentence-transformers` (`all-MiniLM-L6-v2`).
+* **AI 3D Inference:** `TripoSR`, `torch`, `torchvision`, `trimesh`, `pillow`, `rembg`.
+
+---
+
 ## 🚀 Quick Start & Setup
 
 ### 1. Clone & Prepare Virtual Environment
@@ -185,8 +209,11 @@ source venv/bin/activate
 ### 2. Install System Dependencies (Linux)
 ```bash
 sudo apt update
-sudo apt install -y python3-dev portaudio19-dev ffmpeg
+sudo apt install -y python3-dev portaudio19-dev ffmpeg build-essential
 ```
+
+> [!IMPORTANT]
+> The `build-essential` package (providing gcc and g++ compilers) is strictly required to compile the C++ extension `torchmcubes` during TripoSR setup.
 
 ### 3. Install Python Dependencies
 All packages are pinned in `requirements.txt` to prevent breaking the `gruut` phonetic synthesizer:
@@ -218,6 +245,17 @@ python gui.py
 * **Author:** **Vítězslav Koneval** (*Polygon Beater*)
 * **Specialization:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
 * **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+
+---
+
+## 🤝 Contributing
+
+Contributions from the 3D and AI community are warmly welcome! If you have ideas for new procedural geometry nodes, CAD generators, shader templates, or workflow automation for Blender:
+
+1. **Fork the repository** and create your feature branch: `git checkout -b feature/amazing-blender-tool`
+2. **Implement your tool** in `blender_receiver.py`, `blender_connector.py`, and register its schema in `llama_module.py`.
+3. **Add unit tests** to maintain our 100% pass rate.
+4. **Submit a Pull Request** — every contribution that expands the assistant's creative reach is valued!
 
 ---
 

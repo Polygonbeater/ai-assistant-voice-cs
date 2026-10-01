@@ -12,6 +12,8 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
+![Demo Video Placeholder](https://via.placeholder.com/800x400.png?text=AI+Assistant+Voice+CS+-+Video+Demo+Coming+Soon)
+
 **Hlavní architekt & autor:** Vítězslav Koneval (*Polygon Beater*)  
 **Projektový repozitář:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
@@ -43,7 +45,7 @@ Jádro systému tvoří tři dokonale synchronizované pilíře, které určují
                            │ textový prompt
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 2. JAK ASISTENT MYSLEL (Llama + Vektorový RAG)        │
+│ 2. JAK ASISTENT MYSLÍ (Llama + Vektorový RAG)         │
 │ • llama-cpp-python: Qwen 2.5 / GLM-4 GGUF inference    │
 │ • Dlouhodobá sémantická paměť: FAISS + all-MiniLM-L6-v2│
 │ • Lokální dokumentový RAG: PDF / DOCX parsing          │
@@ -186,6 +188,17 @@ Pokryté oblasti testů:
 
 ---
 
+## 🖥️ Hardwarové požadavky
+
+| Specifikace | Minimum | Doporučeno (Produkční běh) |
+|---|---|---|
+| **Operační paměť (RAM)** | 16 GB | **32 GB+** |
+| **Grafická paměť (VRAM)** | 8 GB (NVIDIA CUDA) | **12+ GB VRAM (NVIDIA RTX)** |
+| **Použití & Zátěž** | Základní běh menšího LLM a lehčí práce v Blenderu | Plynulý souběžný běh GGUF modelu, Whisperu, generování přes TripoSR a samotného Blenderu bez pádů (Out of Memory) |
+| **Úložiště** | 10 GB volného místa na SSD | Rychlý NVMe SSD disk (rychlé načítání vah modelů) |
+
+---
+
 ## 💻 Technologický Stack & Požadavky
 
 * **3D Software:** Blender 4.2.1 LTS (vyžaduje spuštěný skript `blender_receiver.py` v Text Editoru).
@@ -211,8 +224,11 @@ source venv/bin/activate
 ### 2. Instalace systémových knihoven (Linux)
 ```bash
 sudo apt update
-sudo apt install -y python3-dev portaudio19-dev ffmpeg
+sudo apt install -y python3-dev portaudio19-dev ffmpeg build-essential
 ```
+
+> [!IMPORTANT]
+> Balíček `build-essential` (obsahující kompilátory gcc a g++) je nezbytný pro úspěšnou kompilaci C++ rozšíření `torchmcubes` při lokální instalaci TripoSR.
 
 ### 3. Instalace Python závislostí
 Závislosti jsou striktně fixovány v `requirements.txt` proti rozbití syntetizéru `gruut`:
@@ -248,6 +264,17 @@ Můžete ihned mluvit do mikrofonu nebo psát do chatu:
 * **Autor:** **Vítězslav Koneval** (*Polygon Beater*)
 * **Specializace:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
 * **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+
+---
+
+## 🤝 Zapojte se do vývoje (Contributing)
+
+Příspěvky od 3D komunity a vývojářů jsou vřele vítány! Máte nápad na nový parametrický generátor, procedurální shader, automatizaci nodů nebo vylepšení pro Blender?
+
+1. **Forkněte repozitář** a vytvořte novou větev: `git checkout -b feature/novy-blender-nastroj`
+2. **Přidejte implementaci nástroje** do `blender_receiver.py`, klientskou metodu do `blender_connector.py` a zaregistrujte schéma do `llama_module.py`.
+3. **Doplňte unit testy** k ověření funkčnosti a zachování 100% stability.
+4. **Otevřete Pull Request** — každý příspěvek rozšiřující tvůrčí možnosti asistenta je vítán!
 
 ---
 
