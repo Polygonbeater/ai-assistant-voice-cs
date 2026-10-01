@@ -1246,6 +1246,69 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "uv_texel_audit",
+            "description": (
+                "Provede audit UV mapy a texel density (texturové hustoty v px/cm a px/m) aktivního 3D mesh objektu v Blenderu. "
+                "Změří 3D plochu modelu, UV plochu, využití UV prostoru (coverage %), počet UV ostrovů a zkontroluje případné "
+                "překryvy či obrácené polygony. "
+                "Použij při dotazech jako 'zkontroluj UV', 'jaká je texel density', 'audit UV mapy', "
+                "'využití UV prostoru', 'analýza texturové hustoty', 'zkontroluj UV ostrovy a překryvy'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "texture_res": {
+                        "type": "integer",
+                        "description": "Referenční rozlišení textury v pixelech pro výpočet Texel Density (např. 1024, 2048, 4096). Výchozí: 2048.",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "smart_uv_pack",
+            "description": (
+                "Provede inteligentní rozbalení UV (Smart UV Project), sjednocení texel density na cílovou hodnotu "
+                "a efektivní zabalení UV ostrovů (Pack Islands) s definovaným rozestupem (margin/padding) v Blenderu. "
+                "Použij při požadavcích jako 'rozbal UV', 'udělej unwrap', 'sjednoť texel density', "
+                "'zabal UV ostrovy', 'připrav UV pro texturování', 'nastav texel density na 10.24', 'pack islands'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_texel_density": {
+                        "type": "number",
+                        "description": (
+                            "Cílová texel density v px/cm pro sjednocení měřítka UV ostrovů "
+                            "(např. 10.24 pro 2K texturu na 2m objekt, 5.12 pro velké assety). Výchozí: 10.24."
+                        ),
+                    },
+                    "margin": {
+                        "type": "number",
+                        "description": (
+                            "Odsazení / mezera mezi UV ostrovy v relativních jednotkách 0..1 pro zabránění "
+                            "mip-map bleedingu a artefaktů při pečení textur. Výchozí: 0.01 (= 1%)."
+                        ),
+                    },
+                    "angle_limit": {
+                        "type": "number",
+                        "description": "Úhlový limit pro automatické rozdělení švů ve stupních. Výchozí: 66.0.",
+                    },
+                    "texture_res": {
+                        "type": "integer",
+                        "description": "Referenční rozlišení textury v px (např. 2048). Výchozí: 2048.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1258,6 +1321,8 @@ ALLOWED_TOOL_NAMES = {
     "mesh_doctor_repair",
     "create_product_studio",
     "create_procedural_shader",
+    "uv_texel_audit",
+    "smart_uv_pack",
 }
 
 
@@ -1422,6 +1487,8 @@ class UnifiedToolDispatcher:
     - mesh_doctor_repair(merge_distance)
     - create_product_studio(style)
     - create_procedural_shader(material_name, shader_type)
+    - uv_texel_audit(texture_res)
+    - smart_uv_pack(target_texel_density, margin, angle_limit, texture_res)
     """
 
     def __init__(
@@ -1478,6 +1545,20 @@ class UnifiedToolDispatcher:
             mat_name = arguments.get("material_name")
             sh_type = str(arguments.get("shader_type", "brushed_metal")).strip()
             return self._execute_create_procedural_shader(material_name=mat_name, shader_type=sh_type)
+        elif tool_name == "uv_texel_audit":
+            tex_res = int(arguments.get("texture_res", 2048))
+            return self._execute_uv_texel_audit(texture_res=tex_res)
+        elif tool_name == "smart_uv_pack":
+            target_td = float(arguments.get("target_texel_density", 10.24))
+            margin = float(arguments.get("margin", 0.01))
+            angle = float(arguments.get("angle_limit", 66.0))
+            tex_res = int(arguments.get("texture_res", 2048))
+            return self._execute_smart_uv_pack(
+                target_texel_density=target_td,
+                margin=margin,
+                angle_limit=angle,
+                texture_res=tex_res,
+            )
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -2307,6 +2388,226 @@ class UnifiedToolDispatcher:
             "shader": shader_data,
             "result": result_text,
             "_expert_system_prompt": self._PROCEDURAL_SHADER_SYSTEM_PROMPT,
+        }
+
+    # ------------------------------------------------------------------
+    # Smart UV Unpacking & Texel Density Pipeline
+    # ------------------------------------------------------------------
+
+    _UV_TEXEL_SYSTEM_PROMPT = (
+        "Jsi elitní 3D Technical Artist a Texture TD (Technical Director) se specializací na UV mapování, "
+        "texel density management a optimalizaci texturových atlasů pro realtime herní enginy (Unreal Engine 5, Unity) "
+        "a VFX filmové produkce. Odborně komentuješ výsledky UV analýzy nebo zabalení sítě s důrazem na:\n"
+        "  • Texel Density (konzistence hustoty pixelů napříč herními assety, např. standard 10.24 px/cm pro postavy/prop, "
+        "    5.12 px/cm pro architekturu/vozidla při 2048x2048 mapách)\n"
+        "  • UV Space Coverage & Efficiency (procento využití UV čtverce 0..1, minimalizace mrtvého prostoru, zamezení plýtvání VRAM pamětí)\n"
+        "  • UV Padding & Margin (význam dostatečného odstupu mezi ostrovy pro prevenci mip-map bleedingu a černých lemů na okrajích)\n"
+        "  • Orientace ostrovů a švů (zarovnání dle hlavních os pro čisté anizotropní a texturové filtry, umisťování švů na skrytá místa)\n"
+        "  • Baking & Normal Maps (prevence skvrn a artefaktů při pečení normálových map – pravidlo: hard edge musí mít UV seam)\n\n"
+        "Při formulaci odpovědi pro uživatele:\n"
+        "  1. Zhodnoť zjištěnou texel density a její vhodnost pro daný typ modelu a zamýšlené využití (hry vs render)\n"
+        "  2. Vyhodnoť efektivitu využití UV prostoru (pokud je pod 65 %, upozorni na rezervy; nad 75 % pochval vysokou efektivitu)\n"
+        "  3. Zkontroluj případné anomálie (počet ostrovů, obrácené stěny, překryvy)\n"
+        "  4. Uveď 1-2 konkrétní technická doporučení pro další krok (např. export do Substance Painteru, nastavení texturových sad).\n"
+    )
+
+    def _execute_uv_texel_audit(self, texture_res: int = 2048) -> dict[str, Any]:
+        """Spustí UV Texel Audit — analýzu texel density a UV prostoru v Blenderu."""
+        from blender_connector import request_uv_audit, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+
+        if self.status_callback:
+            self.status_callback(f"● 🗺️ Provádím UV Texel Audit (ref. rozlišení {texture_res}px)…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n🗺️ *Volám nástroj:* `uv_texel_audit(texture_res={texture_res})`\n")
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "uv_texel_audit",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_uv_audit(host=host, port=port, texture_res=texture_res, timeout=20.0)
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při UV auditu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **UV Texel Audit selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "uv_texel_audit",
+                "error": err_msg,
+                "result": f"Audit UV selhal: {err_msg}",
+            }
+
+        metrics = res.get("metrics", {})
+        obj_name = metrics.get("object_name", "?")
+        td_cm = metrics.get("texel_density_px_cm", 0.0)
+        td_m = metrics.get("texel_density_px_m", 0.0)
+        coverage = metrics.get("uv_space_coverage_pct", 0.0)
+        islands = metrics.get("uv_islands_count", 0)
+        flipped = metrics.get("flipped_faces_count", 0)
+        overlaps = metrics.get("potential_overlaps", False)
+        area_3d = metrics.get("total_3d_area_m2", 0.0)
+
+        cov_icon = "🟢" if coverage >= 70.0 else ("🟡" if coverage >= 50.0 else "🔴")
+        overlap_icon = "⚠️ Detekován možný překryv" if overlaps else "✅ Bez překryvů"
+        flipped_display = f"⚠️ {flipped} stěn" if flipped > 0 else "✅ 0 (správná orientace)"
+
+        ui_report = (
+            f"\n\n🗺️ **UV Texel Audit — `{obj_name}`** (pro texturu {texture_res}×{texture_res} px)\n\n"
+            f"---\n\n"
+            f"| Metrika | Hodnota | Hodnocení |\n|---|---|---|\n"
+            f"| Texel Density (px/cm) | **{td_cm:.2f} px/cm** | standard: 10.24 px/cm |\n"
+            f"| Texel Density (px/m) | **{td_m:.1f} px/m** | — |\n"
+            f"| UV Space Coverage | **{coverage:.1f} %** | {cov_icon} využití UV plochy |\n"
+            f"| 3D plocha modelu | **{area_3d:.4f} m²** | — |\n"
+            f"| Počet UV ostrovů | **{islands}** | — |\n"
+            f"| Obrácené UV stěny | {flipped_display} | — |\n"
+            f"| Překryvy ostrovů | **{overlap_icon}** | — |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"UV TEXEL AUDIT pro objekt '{obj_name}' (pro texturu {texture_res}x{texture_res} px):\n"
+            f"  - Texel Density: {td_cm:.2f} px/cm ({td_m:.1f} px/m)\n"
+            f"  - Využití UV prostoru (coverage): {coverage:.1f} %\n"
+            f"  - 3D plocha: {area_3d:.4f} m²\n"
+            f"  - Počet UV ostrovů: {islands}\n"
+            f"  - Obrácené stěny (flipped): {flipped}\n"
+            f"  - Možné překryvy (overlaps): {'ANO' if overlaps else 'NE'}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ UV Audit dokončen: TD={td_cm:.2f} px/cm, coverage={coverage:.1f}%"
+            )
+
+        return {
+            "status": "success",
+            "tool": "uv_texel_audit",
+            "metrics": metrics,
+            "result": result_text,
+            "_expert_system_prompt": self._UV_TEXEL_SYSTEM_PROMPT,
+        }
+
+    def _execute_smart_uv_pack(
+        self,
+        target_texel_density: float = 10.24,
+        margin: float = 0.01,
+        angle_limit: float = 66.0,
+        texture_res: int = 2048,
+    ) -> dict[str, Any]:
+        """Spustí Smart UV Pack Pipeline — unwrap, sjednocení texel density a pack ostrovů."""
+        from blender_connector import request_uv_pack, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+
+        if self.status_callback:
+            self.status_callback(f"● 📦 Provádím Smart UV Pack (cílová TD: {target_texel_density} px/cm)…")
+        if self.callback_on_token:
+            self.callback_on_token(
+                f"\n📦 *Volám nástroj:* `smart_uv_pack(target_texel_density={target_texel_density}, margin={margin})`\n"
+            )
+
+        if not is_blender_available(host, port):
+            warn = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn}**\n")
+            return {
+                "status": "error",
+                "tool": "smart_uv_pack",
+                "error": "BlenderNotConnected",
+                "result": warn,
+            }
+
+        try:
+            res = request_uv_pack(
+                target_texel_density=target_texel_density,
+                margin=margin,
+                angle_limit=angle_limit,
+                texture_res=texture_res,
+                host=host,
+                port=port,
+                timeout=30.0,
+            )
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při Smart UV Pack.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Smart UV Pack selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": "smart_uv_pack",
+                "error": err_msg,
+                "result": f"Smart UV Pack selhal: {err_msg}",
+            }
+
+        post_metrics = res.get("post_pack_metrics", {})
+        obj_name = post_metrics.get("object_name", "?")
+        new_td_cm = post_metrics.get("texel_density_px_cm", 0.0)
+        coverage = post_metrics.get("uv_space_coverage_pct", 0.0)
+        islands = post_metrics.get("uv_islands_count", 0)
+        scaled_applied = res.get("scaled_to_target", False)
+
+        cov_icon = "🟢" if coverage >= 70.0 else ("🟡" if coverage >= 50.0 else "🔴")
+
+        ui_report = (
+            f"\n\n📦 **Smart UV Pack Dokončen — `{obj_name}`**\n\n"
+            f"---\n\n"
+            f"| Parametr / Metrika | Hodnota | Poznámka |\n|---|---|---|\n"
+            f"| Cílová Texel Density | **{target_texel_density:.2f} px/cm** | požadováno |\n"
+            f"| Dosažená Texel Density | **{new_td_cm:.2f} px/cm** | {'✅ sjednoceno' if scaled_applied else 'originál'} |\n"
+            f"| Využití UV prostoru | **{coverage:.1f} %** | {cov_icon} po zabalení |\n"
+            f"| Počet UV ostrovů | **{islands}** | Smart Project (úhel {angle_limit}°) |\n"
+            f"| Nastavený Margin / Padding | **{margin * 100:.1f} %** ({margin:.3f}) | ochrana proti bleedingu |\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_report)
+
+        result_text = (
+            f"SMART UV PACK dokončen pro objekt '{obj_name}':\n"
+            f"  - Cílová TD: {target_texel_density:.2f} px/cm, dosažená TD: {new_td_cm:.2f} px/cm (sjednoceno: {'ANO' if scaled_applied else 'NE'})\n"
+            f"  - Využití UV prostoru po zabalení: {coverage:.1f} %\n"
+            f"  - Počet ostrovů: {islands} (Smart Project s limitem úhlu {angle_limit}°)\n"
+            f"  - Margin ostrovů: {margin:.4f}\n"
+        )
+
+        if self.status_callback:
+            self.status_callback(
+                f"● ✅ UV Pack dokončen: TD={new_td_cm:.2f} px/cm, coverage={coverage:.1f}%, ostrovy={islands}"
+            )
+
+        return {
+            "status": "success",
+            "tool": "smart_uv_pack",
+            "post_pack_metrics": post_metrics,
+            "result": result_text,
+            "_expert_system_prompt": self._UV_TEXEL_SYSTEM_PROMPT,
         }
 
 

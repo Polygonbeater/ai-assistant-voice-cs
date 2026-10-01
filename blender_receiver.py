@@ -339,6 +339,131 @@ def capture_viewport_render(output_path="/tmp/blender_viewport.png"):
         scene.render.image_settings.file_format = orig_format
 
 
+def calculate_uv_metrics(obj, texture_res=2048):
+    """
+    Spočítá detailní UV a texel density metriky pro zadaný mesh objekt:
+    - total_3d_area_m2: celková plocha 3D geometrie se zohledněním měřítka
+    - total_uv_area: plocha UV polygonů v intervalu 0..1
+    - uv_space_coverage_pct: využití UV prostoru v %
+    - texel_density_px_m: průměrná texel density v px/m
+    - texel_density_px_cm: průměrná texel density v px/cm (standard pro herní assety)
+    - uv_islands_count: počet samostatných UV ostrovů
+    - flipped_faces_count: počet obrácených UV stěn
+    - potential_overlaps: indikace možného překryvu UV ostrovů
+    """
+    import math
+    import bmesh
+
+    if not obj or obj.type != 'MESH':
+        return None
+    mesh = obj.data
+    if not mesh.uv_layers:
+        return {
+            "has_uv": False,
+            "object_name": obj.name,
+            "error": "Objekt nemá žádnou UV mapu.",
+            "total_3d_area_m2": 0.0,
+            "texel_density_px_cm": 0.0,
+            "uv_space_coverage_pct": 0.0,
+            "uv_islands_count": 0,
+        }
+
+    scale = obj.scale
+    scale_factor = (abs(scale.x * scale.y) + abs(scale.y * scale.z) + abs(scale.x * scale.z)) / 3.0
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    uv_layer = bm.loops.layers.uv.active or bm.loops.layers.uv.verify()
+
+    total_3d_area = 0.0
+    total_uv_area = 0.0
+    flipped_uv_faces = 0
+    weighted_td_sum = 0.0
+
+    face_count = len(bm.faces)
+    parent = list(range(face_count))
+
+    def find(i):
+        path = []
+        while parent[i] != i:
+            path.append(i)
+            i = parent[i]
+        for node in path:
+            parent[node] = i
+        return i
+
+    def union(i, j):
+        root_i = find(i)
+        root_j = find(j)
+        if root_i != root_j:
+            parent[root_i] = root_j
+
+    edge_uv_map = {}
+
+    for f_idx, face in enumerate(bm.faces):
+        area_3d = face.calc_area() * scale_factor
+        total_3d_area += area_3d
+
+        loops = face.loops
+        n = len(loops)
+        uv_signed_area = 0.0
+        for i in range(n):
+            uv1 = loops[i][uv_layer].uv
+            uv2 = loops[(i + 1) % n][uv_layer].uv
+            uv_signed_area += (uv1.x * uv2.y - uv2.x * uv1.y)
+
+            v1_idx = loops[i].vert.index
+            v2_idx = loops[(i + 1) % n].vert.index
+            edge_key = (min(v1_idx, v2_idx), max(v1_idx, v2_idx))
+            uv_pair = (tuple(uv1), tuple(uv2)) if v1_idx < v2_idx else (tuple(uv2), tuple(uv1))
+            if edge_key not in edge_uv_map:
+                edge_uv_map[edge_key] = []
+            edge_uv_map[edge_key].append((f_idx, uv_pair))
+
+        uv_area = abs(uv_signed_area) * 0.5
+        total_uv_area += uv_area
+        if uv_signed_area < -1e-7:
+            flipped_uv_faces += 1
+
+        if area_3d > 1e-8 and uv_area > 1e-8:
+            face_td = (math.sqrt(uv_area) * texture_res) / math.sqrt(area_3d)
+            weighted_td_sum += face_td * area_3d
+
+    # Detekce a spojení UV ostrovů podle identických UV souřadnic na společných hranách
+    for edge_key, entries in edge_uv_map.items():
+        if len(entries) >= 2:
+            for idx1 in range(len(entries)):
+                for idx2 in range(idx1 + 1, len(entries)):
+                    e1 = entries[idx1]
+                    e2 = entries[idx2]
+                    if e1[0] != e2[0]:
+                        p1, p2 = e1[1], e2[1]
+                        if (abs(p1[0][0] - p2[0][0]) < 1e-4 and abs(p1[0][1] - p2[0][1]) < 1e-4 and
+                            abs(p1[1][0] - p2[1][0]) < 1e-4 and abs(p1[1][1] - p2[1][1]) < 1e-4):
+                            union(e1[0], e2[0])
+
+    num_islands = len(set(find(i) for i in range(face_count))) if face_count > 0 else 0
+    bm.free()
+
+    avg_td_m = (weighted_td_sum / total_3d_area) if total_3d_area > 1e-8 else 0.0
+    avg_td_cm = avg_td_m / 100.0
+    uv_coverage_pct = min(total_uv_area * 100.0, 100.0)
+
+    return {
+        "has_uv": True,
+        "object_name": obj.name,
+        "texture_resolution": texture_res,
+        "total_3d_area_m2": round(total_3d_area, 4),
+        "total_uv_area": round(total_uv_area, 4),
+        "uv_space_coverage_pct": round(uv_coverage_pct, 2),
+        "texel_density_px_m": round(avg_td_m, 2),
+        "texel_density_px_cm": round(avg_td_cm, 2),
+        "uv_islands_count": num_islands,
+        "flipped_faces_count": flipped_uv_faces,
+        "potential_overlaps": (total_uv_area > 1.05),
+    }
+
+
 def process_blender_queue_timer():
     """
     Tato funkce je volána pravidelně z HLAVNÍHO VLÁKNA Blenderu pomocí bpy.app.timers.
@@ -1212,10 +1337,176 @@ def process_blender_queue_timer():
                 print(err_trace)
             finally:
                 completion_event.set()
+        # 6. UV Texel Audit – analýza texel density a UV prostoru
+        if action == "uv_texel_audit":
+            print("\n[AI-Blender] >>> Zahajuji UV Texel Audit...")
+            try:
+                active_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    active_obj = bpy.context.view_layer.objects.active
+                if not active_obj and hasattr(bpy.context, "active_object"):
+                    active_obj = bpy.context.active_object
+
+                if not active_obj or active_obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                if not active_obj.data.uv_layers:
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoUVMapFound",
+                        "message": f"Objekt '{active_obj.name}' nemá vytvořenou žádnou UV mapu. Použijte nejprve smart_uv_pack.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                texture_res = int(message.get("texture_res", 2048))
+                metrics = calculate_uv_metrics(active_obj, texture_res=texture_res)
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "uv_texel_audit",
+                    "metrics": metrics,
+                }
+                print(f"✅ [AI-Blender] UV Texel Audit dokončen pro '{active_obj.name}': TD={metrics.get('texel_density_px_cm')} px/cm, coverage={metrics.get('uv_space_coverage_pct')}%")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při UV Texel Audit: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 6. Vykonání Python kódu (action == 'execute')
+        # 7. Smart UV Pack – inteligentní rozbalení, sjednocení texel density a zabalení ostrovů
+        if action == "smart_uv_pack":
+            print("\n[AI-Blender] >>> Zahajuji Smart UV Pack Pipeline...")
+            try:
+                import math
+
+                active_obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    active_obj = bpy.context.view_layer.objects.active
+                if not active_obj and hasattr(bpy.context, "active_object"):
+                    active_obj = bpy.context.active_object
+
+                if not active_obj or active_obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                target_texel_density = float(message.get("target_texel_density", 10.24))
+                margin = float(message.get("margin", 0.01))
+                angle_limit = float(message.get("angle_limit", 66.0))
+                texture_res = int(message.get("texture_res", 2048))
+
+                prev_mode = active_obj.mode
+                if prev_mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                bpy.context.view_layer.objects.active = active_obj
+                active_obj.select_set(True)
+
+                if not active_obj.data.uv_layers:
+                    active_obj.data.uv_layers.new(name="UVMap")
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+
+                # 1. Inteligentní unwrap podle úhlového limitu
+                try:
+                    bpy.ops.uv.smart_project(angle_limit=math.radians(angle_limit), island_margin=margin)
+                except Exception:
+                    try:
+                        bpy.ops.uv.smart_project(angle_limit=angle_limit, island_margin=margin)
+                    except Exception:
+                        bpy.ops.uv.unwrap(method='ANGLE_BASED', margin=margin)
+
+                # 2. Škálování na cílovou Texel Density
+                bpy.ops.object.mode_set(mode='OBJECT')
+                pre_metrics = calculate_uv_metrics(active_obj, texture_res=texture_res)
+                curr_td = pre_metrics.get("texel_density_px_cm", 0.0) if pre_metrics else 0.0
+
+                scaled_applied = False
+                if target_texel_density > 0 and curr_td > 0.001:
+                    scale_mult = target_texel_density / curr_td
+                    import bmesh
+                    bm = bmesh.new()
+                    bm.from_mesh(active_obj.data)
+                    uv_layer = bm.loops.layers.uv.active or bm.loops.layers.uv.verify()
+                    for f in bm.faces:
+                        for l in f.loops:
+                            l[uv_layer].uv *= scale_mult
+                    bm.to_mesh(active_obj.data)
+                    bm.free()
+                    scaled_applied = True
+
+                # 3. Zabalení UV ostrovů (Pack Islands)
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                try:
+                    bpy.ops.uv.pack_islands(margin=margin, rotate=True)
+                except Exception:
+                    try:
+                        bpy.ops.uv.pack_islands(margin=margin)
+                    except Exception:
+                        pass
+
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+                # Překreslení 3D pohledů
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                # Finální vyhodnocení po zabalení
+                final_metrics = calculate_uv_metrics(active_obj, texture_res=texture_res)
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "smart_uv_pack",
+                    "target_texel_density": target_texel_density,
+                    "margin": margin,
+                    "angle_limit": angle_limit,
+                    "scaled_to_target": scaled_applied,
+                    "post_pack_metrics": final_metrics,
+                }
+                print(f"✅ [AI-Blender] Smart UV Pack dokončen: TD={final_metrics.get('texel_density_px_cm')} px/cm, islands={final_metrics.get('uv_islands_count')}, coverage={final_metrics.get('uv_space_coverage_pct')}%")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Smart UV Pack: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 8. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

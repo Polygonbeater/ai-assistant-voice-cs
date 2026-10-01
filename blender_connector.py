@@ -620,3 +620,85 @@ def request_procedural_shader(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
+
+
+def request_uv_audit(
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    texture_res: int = 2048,
+    timeout: float = 20.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na audit UV mapy a texel density aktivního objektu
+    (action: uv_texel_audit).
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "uv_texel_audit",
+        "metrics": {
+            "has_uv": bool,
+            "object_name": str,
+            "texture_resolution": int,
+            "total_3d_area_m2": float,
+            "total_uv_area": float,
+            "uv_space_coverage_pct": float,
+            "texel_density_px_m": float,
+            "texel_density_px_cm": float,
+            "uv_islands_count": int,
+            "flipped_faces_count": int,
+            "potential_overlaps": bool,
+        }
+    }
+    """
+    payload = {
+        "action": "uv_texel_audit",
+        "texture_res": texture_res,
+    }
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+
+
+def request_uv_pack(
+    target_texel_density: float = 10.24,
+    margin: float = 0.01,
+    angle_limit: float = 66.0,
+    texture_res: int = 2048,
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    timeout: float = 30.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na automatické rozbalení (Smart UV), sjednocení texel density
+    na cílovou hodnotu a zabalení UV ostrovů (action: smart_uv_pack).
+
+    Args:
+        target_texel_density: Cílová texel density v px/cm (výchozí: 10.24 px/cm = standard pro 2K mapu na 2m model).
+        margin: Odsazení mezi UV ostrovy v relativních jednotkách (výchozí: 0.01 = 1% UV padding).
+        angle_limit: Úhlový limit pro rozdělení švů ve stupních (výchozí: 66.0°).
+        texture_res: Referenční rozlišení textury v px (výchozí: 2048).
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "smart_uv_pack",
+        "target_texel_density": float,
+        "margin": float,
+        "angle_limit": float,
+        "scaled_to_target": bool,
+        "post_pack_metrics": dict,
+    }
+    """
+    payload = {
+        "action": "smart_uv_pack",
+        "target_texel_density": float(target_texel_density),
+        "margin": float(margin),
+        "angle_limit": float(angle_limit),
+        "texture_res": int(texture_res),
+    }
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
