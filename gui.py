@@ -12,7 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from audio import initialize_vad, record_with_vad, WakeWordListener
-from document_service import DocumentService
+from document_service import DocumentService, ConversationMemoryService
 from history_repository import HistoryRepository
 from llama_module import (
     ANALYTICAL_PRESETS,
@@ -64,6 +64,16 @@ class AssistantGUI(tk.Tk):
             else self.history_repository.create_session()["session_id"]
         )
         self.document_service = document_service or DocumentService(config=config)
+        self.memory_service = ConversationMemoryService(
+            config=config,
+            shared_model=self.document_service.get_embedding_model() if hasattr(self.document_service, "get_embedding_model") else None,
+        )
+        self.history_repository.set_memory_service(self.memory_service)
+        if self.memory_service.get_memory_stats().get("total_chunks", 0) == 0:
+            threading.Thread(
+                target=self.history_repository.reindex_all_to_memory,
+                daemon=True,
+            ).start()
         self.rag_enabled = tk.BooleanVar(
             value=bool(config.get("rag", {}).get("enabled", True))
         )
@@ -1144,6 +1154,19 @@ class AssistantGUI(tk.Tk):
         elif self.document_context:
             display_text += f"  [dokument: {len(self.document_context):,} znaků]"
 
+        if self.memory_service and user_text:
+            try:
+                mem_matches = self.memory_service.search_memory(
+                    user_text,
+                    top_k=2,
+                    score_threshold=0.35,
+                    exclude_session_id=self.active_session_id,
+                )
+                if mem_matches:
+                    display_text += f"  [paměť: {len(mem_matches)} záznamů]"
+            except Exception as exc:
+                logger.debug("Chyba při zjišťování paměti pro display_text: %s", exc)
+
         self._start_generation(prompt_text, display_text)
         self.attached_file = None
         self.document_context = ""
@@ -1231,6 +1254,8 @@ class AssistantGUI(tk.Tk):
                 callback_on_token=_on_token,
                 status_callback=lambda status: self.token_queue.put(("auto_status", status)),
                 stop_event=self.stop_event,
+                memory_service=self.memory_service,
+                active_session_id=self.active_session_id,
             ):
                 response_sentences.append(sentence_chunk)
                 if tts_player and not self.stop_event.is_set():
@@ -1260,6 +1285,8 @@ class AssistantGUI(tk.Tk):
                         self._set_status(value, "#38bdf8")
                     elif any(k in value.lower() for k in ("blender", "scén", "viewport")):
                         self._set_status(value, "#a855f7")
+                    elif any(k in value.lower() for k in ("paměť", "pamět", "histor")):
+                        self._set_status(value, "#10b981")
                     else:
                         self._set_status(value, "#fbbf24")
                 elif event_type == "auto_switched":
@@ -1540,7 +1567,7 @@ class AssistantGUI(tk.Tk):
             messagebox.showerror("Chyba RAG", f"Nepodařilo se zindexovat dokument:\n{exc}")
 
     def open_document_manager(self):
-        """Otevře přehledné modální okno pro správu indexovaných dokumentů v RAG."""
+        """Otevře přehledné modální okno pro správu indexovaných dokumentů a dlouhodobé sémantické paměti."""
         if self.rag_doc_manager_window is not None and self.rag_doc_manager_window.winfo_exists():
             self.rag_doc_manager_window.lift()
             self.rag_doc_manager_window.focus_force()
@@ -1548,49 +1575,38 @@ class AssistantGUI(tk.Tk):
 
         win = tk.Toplevel(self)
         self.rag_doc_manager_window = win
-        win.title("Správa dokumentů & Lokální RAG")
-        win.geometry("820x520")
-        win.minsize(680, 420)
+        win.title("Správa RAG: Dokumenty & Dlouhodobá sémantická paměť")
+        win.geometry("920x640")
+        win.minsize(760, 520)
         win.configure(bg=self.COLORS["background"])
         win.transient(self)
 
-        # Hlavička
-        header_frame = tk.Frame(win, bg=self.COLORS["panel"], padx=16, pady=12)
-        header_frame.pack(fill=tk.X)
-
-        title_lbl = tk.Label(
-            header_frame,
-            text="🗂 Lokální RAG Úložiště Dokumentů",
-            font=("TkDefaultFont", 12, "bold"),
-            bg=self.COLORS["panel"],
-            fg=self.COLORS["text"],
-        )
-        title_lbl.pack(anchor=tk.W)
-
-        subtitle_lbl = tk.Label(
-            header_frame,
-            text="Sémantické vyhledávání přes FAISS a CPU embeddings (all-MiniLM-L6-v2) s chytrým překryvem bloků",
-            font=("TkDefaultFont", 9),
-            bg=self.COLORS["panel"],
-            fg=self.COLORS["muted"],
-        )
-        subtitle_lbl.pack(anchor=tk.W, pady=(2, 0))
-
-        stats_lbl = tk.Label(
-            header_frame,
-            text="",
-            font=("TkDefaultFont", 10, "bold"),
-            bg=self.COLORS["panel"],
-            fg=self.COLORS["accent"],
-        )
-        stats_lbl.pack(anchor=tk.W, pady=(4, 0))
-
-        # Styl pro Treeview
+        # Společný styl
         style = ttk.Style(win)
         try:
             style.theme_use("clam")
         except Exception:
             pass
+
+        style.configure(
+            "Rag.TNotebook",
+            background=self.COLORS["panel"],
+            borderwidth=0,
+        )
+        style.configure(
+            "Rag.TNotebook.Tab",
+            background=self.COLORS["panel_alt"],
+            foreground=self.COLORS["text"],
+            padding=[16, 7],
+            font=("TkDefaultFont", 9, "bold"),
+            borderwidth=0,
+        )
+        style.map(
+            "Rag.TNotebook.Tab",
+            background=[("selected", self.COLORS["background"])],
+            foreground=[("selected", self.COLORS["accent"])],
+        )
+
         style.configure(
             "Rag.Treeview",
             background=self.COLORS["panel_alt"],
@@ -1613,36 +1629,100 @@ class AssistantGUI(tk.Tk):
             foreground=[("selected", "white")],
         )
 
-        # Tabulka souborů
-        table_frame = tk.Frame(win, bg=self.COLORS["background"], padx=14, pady=10)
-        table_frame.pack(fill=tk.BOTH, expand=True)
+        # Spodní lišta se stavem a tlačítkem Zavřít
+        bottom_bar = tk.Frame(win, bg=self.COLORS["panel"], padx=14, pady=6)
+        bottom_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
-        columns = ("filename", "chunks", "size", "indexed_at", "path")
-        tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
+        status_bar = tk.Label(
+            bottom_bar,
+            text="Připraveno.",
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["muted"],
+            font=("TkDefaultFont", 9),
+            anchor=tk.W,
+        )
+        status_bar.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Button(
+            bottom_bar,
+            text="Zavřít",
+            command=win.destroy,
+            bg=self.COLORS["background"],
+            fg=self.COLORS["text"],
+            relief=tk.FLAT,
+            padx=12,
+            pady=4,
+            cursor="hand2",
+        ).pack(side=tk.RIGHT)
+
+        # Notebook se záložkami
+        notebook = ttk.Notebook(win, style="Rag.TNotebook")
+        notebook.pack(fill=tk.BOTH, expand=True, padx=6, pady=(6, 0))
+
+        doc_tab = tk.Frame(notebook, bg=self.COLORS["background"])
+        mem_tab = tk.Frame(notebook, bg=self.COLORS["background"])
+
+        notebook.add(doc_tab, text="  📁 Dokumentový RAG  ")
+        notebook.add(mem_tab, text="  🧠 Sémantická paměť (Memory RAG)  ")
+
+        # ==========================================
+        # ZÁLOŽKA 1: DOKUMENTOVÝ RAG
+        # ==========================================
+        doc_header = tk.Frame(doc_tab, bg=self.COLORS["panel"], padx=16, pady=10)
+        doc_header.pack(fill=tk.X)
+
+        tk.Label(
+            doc_header,
+            text="🗂 Lokální RAG Úložiště Dokumentů",
+            font=("TkDefaultFont", 11, "bold"),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["text"],
+        ).pack(anchor=tk.W)
+
+        tk.Label(
+            doc_header,
+            text="Sémantické vyhledávání přes FAISS a CPU embeddings (all-MiniLM-L6-v2) s chytrým překryvem bloků",
+            font=("TkDefaultFont", 9),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["muted"],
+        ).pack(anchor=tk.W, pady=(1, 0))
+
+        doc_stats_lbl = tk.Label(
+            doc_header,
+            text="",
+            font=("TkDefaultFont", 9, "bold"),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["accent"],
+        )
+        doc_stats_lbl.pack(anchor=tk.W, pady=(3, 0))
+
+        doc_table_frame = tk.Frame(doc_tab, bg=self.COLORS["background"], padx=10, pady=8)
+        doc_table_frame.pack(fill=tk.BOTH, expand=True)
+
+        doc_columns = ("filename", "chunks", "size", "indexed_at", "path")
+        doc_tree = ttk.Treeview(
+            doc_table_frame,
+            columns=doc_columns,
             show="headings",
             selectmode="browse",
             style="Rag.Treeview",
         )
+        doc_tree.heading("filename", text="Název souboru")
+        doc_tree.heading("chunks", text="Počet bloků")
+        doc_tree.heading("size", text="Velikost")
+        doc_tree.heading("indexed_at", text="Datum indexace")
+        doc_tree.heading("path", text="Cesta k souboru")
 
-        tree.heading("filename", text="Název souboru")
-        tree.heading("chunks", text="Počet bloků")
-        tree.heading("size", text="Velikost")
-        tree.heading("indexed_at", text="Datum indexace")
-        tree.heading("path", text="Cesta k souboru")
+        doc_tree.column("filename", width=190, anchor=tk.W)
+        doc_tree.column("chunks", width=95, anchor=tk.CENTER)
+        doc_tree.column("size", width=85, anchor=tk.E)
+        doc_tree.column("indexed_at", width=140, anchor=tk.CENTER)
+        doc_tree.column("path", width=260, anchor=tk.W)
 
-        tree.column("filename", width=200, anchor=tk.W)
-        tree.column("chunks", width=95, anchor=tk.CENTER)
-        tree.column("size", width=85, anchor=tk.E)
-        tree.column("indexed_at", width=145, anchor=tk.CENTER)
-        tree.column("path", width=250, anchor=tk.W)
-
-        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
-
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        doc_scroll = ttk.Scrollbar(doc_table_frame, orient=tk.VERTICAL, command=doc_tree.yview)
+        doc_tree.configure(yscrollcommand=doc_scroll.set)
+        doc_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        doc_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         def _format_size(size_bytes: int) -> str:
             if size_bytes < 1024:
@@ -1651,28 +1731,19 @@ class AssistantGUI(tk.Tk):
                 return f"{size_bytes / 1024:.1f} KB"
             return f"{size_bytes / (1024 * 1024):.1f} MB"
 
-        status_bar = tk.Label(
-            win,
-            text="Připraveno.",
-            bg=self.COLORS["background"],
-            fg=self.COLORS["muted"],
-            font=("TkDefaultFont", 9),
-            anchor=tk.W,
-            padx=14,
-            pady=4,
-        )
-        status_bar.pack(fill=tk.X, side=tk.BOTTOM)
-
-        def refresh_table():
-            for item in tree.get_children():
-                tree.delete(item)
+        def refresh_doc_table():
+            for item in doc_tree.get_children():
+                doc_tree.delete(item)
+            if not self.document_service:
+                doc_stats_lbl.configure(text="DocumentService není inicializován.")
+                return
             docs = self.document_service.get_indexed_documents()
             total_chunks = self.document_service.total_chunks()
-            stats_lbl.configure(
+            doc_stats_lbl.configure(
                 text=f"Celkem: {len(docs)} dokumentů | {total_chunks} vektorových bloků (chunků)"
             )
             for doc in docs:
-                tree.insert(
+                doc_tree.insert(
                     "",
                     tk.END,
                     iid=doc["file_path"],
@@ -1686,9 +1757,8 @@ class AssistantGUI(tk.Tk):
                 )
             self.document_label.configure(text=self._get_rag_status_summary())
 
-        # Tlačítková lišta
-        btn_frame = tk.Frame(win, bg=self.COLORS["panel"], padx=14, pady=10)
-        btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        doc_btn_frame = tk.Frame(doc_tab, bg=self.COLORS["panel"], padx=12, pady=8)
+        doc_btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
 
         def add_file():
             path = filedialog.askopenfilename(
@@ -1708,7 +1778,7 @@ class AssistantGUI(tk.Tk):
                 status_bar.configure(text=f"Indexuji {doc_path.name}…", fg=self.COLORS["accent"])
                 win.update_idletasks()
                 count = self.document_service.index_file(doc_path)
-                refresh_table()
+                refresh_doc_table()
                 status_bar.configure(
                     text=f"Dokument '{doc_path.name}' byl úspěšně zindexován ({count} bloků).",
                     fg="#4ade80",
@@ -1718,7 +1788,7 @@ class AssistantGUI(tk.Tk):
                 messagebox.showerror("Chyba indexace", f"Dokument se nepodařilo zindexovat:\n{exc}", parent=win)
 
         def delete_selected():
-            selection = tree.selection()
+            selection = doc_tree.selection()
             if not selection:
                 messagebox.showinfo("Správa dokumentů", "Vyberte dokument ze seznamu, který chcete smazat.", parent=win)
                 return
@@ -1732,7 +1802,7 @@ class AssistantGUI(tk.Tk):
                 return
             success = self.document_service.delete_document(selected_path)
             if success:
-                refresh_table()
+                refresh_doc_table()
                 status_bar.configure(text=f"Dokument '{doc_name}' byl odstraněn z indexu.", fg="#4ade80")
             else:
                 messagebox.showwarning("Chyba", "Dokument se nepodařilo v indexu nalézt.", parent=win)
@@ -1745,7 +1815,7 @@ class AssistantGUI(tk.Tk):
             status_bar.configure(text="Probíhá reindexace všech dokumentů z disku…", fg=self.COLORS["accent"])
             win.update_idletasks()
             results = self.document_service.reindex_all()
-            refresh_table()
+            refresh_doc_table()
             total = sum(v for v in results.values() if v > 0)
             status_bar.configure(text=f"Aktualizace dokončena: {len(results)} souborů, {total} bloků.", fg="#4ade80")
 
@@ -1757,70 +1827,392 @@ class AssistantGUI(tk.Tk):
             ):
                 return
             self.document_service.clear_all()
-            refresh_table()
+            refresh_doc_table()
             status_bar.configure(text="Všechny dokumenty a vektorové bloky byly vymazány.", fg="#f87171")
 
         tk.Button(
-            btn_frame,
+            doc_btn_frame,
             text="➕ Indexovat soubor",
             command=add_file,
             bg=self.COLORS["accent_dark"],
             fg="white",
             relief=tk.FLAT,
             padx=10,
-            pady=6,
+            pady=5,
             cursor="hand2",
         ).pack(side=tk.LEFT, padx=(0, 6))
 
         tk.Button(
-            btn_frame,
+            doc_btn_frame,
             text="🗑 Smazat vybraný",
             command=delete_selected,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["danger"],
             relief=tk.FLAT,
             padx=10,
-            pady=6,
+            pady=5,
             cursor="hand2",
         ).pack(side=tk.LEFT, padx=6)
 
         tk.Button(
-            btn_frame,
+            doc_btn_frame,
             text="🔄 Aktualizovat index",
             command=reindex_all,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
             relief=tk.FLAT,
             padx=10,
-            pady=6,
+            pady=5,
             cursor="hand2",
         ).pack(side=tk.LEFT, padx=6)
 
         tk.Button(
-            btn_frame,
+            doc_btn_frame,
             text="⚠️ Vymazat vše",
             command=clear_database,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["muted"],
             relief=tk.FLAT,
             padx=10,
-            pady=6,
+            pady=5,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=6)
+
+        # ==========================================
+        # ZÁLOŽKA 2: SÉMANTICKÁ PAMĚŤ (MEMORY RAG)
+        # ==========================================
+        mem_header = tk.Frame(mem_tab, bg=self.COLORS["panel"], padx=16, pady=10)
+        mem_header.pack(fill=tk.X)
+
+        tk.Label(
+            mem_header,
+            text="🧠 Sémantická paměť konverzací (Long-Term Vector Memory)",
+            font=("TkDefaultFont", 11, "bold"),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["text"],
+        ).pack(anchor=tk.W)
+
+        tk.Label(
+            mem_header,
+            text="Automatická indexace relací do FAISS (rag_storage/memory/) pro dlouhodobou kontextovou paměť",
+            font=("TkDefaultFont", 9),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["muted"],
+        ).pack(anchor=tk.W, pady=(1, 0))
+
+        mem_stats_lbl = tk.Label(
+            mem_header,
+            text="",
+            font=("TkDefaultFont", 9, "bold"),
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["accent"],
+        )
+        mem_stats_lbl.pack(anchor=tk.W, pady=(3, 0))
+
+        # Sekce pro interaktivní vyhledávání a testování dohledávání
+        mem_search_frame = tk.Frame(mem_tab, bg=self.COLORS["panel_alt"], padx=12, pady=8)
+        mem_search_frame.pack(fill=tk.X, padx=10, pady=(8, 4))
+
+        tk.Label(
+            mem_search_frame,
+            text="🔍 Otestovat paměť:",
+            bg=self.COLORS["panel_alt"],
+            fg=self.COLORS["text"],
+            font=("TkDefaultFont", 9, "bold"),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        mem_query_var = tk.StringVar()
+        mem_search_entry = tk.Entry(
+            mem_search_frame,
+            textvariable=mem_query_var,
+            bg=self.COLORS["background"],
+            fg=self.COLORS["text"],
+            insertbackground="white",
+            relief=tk.FLAT,
+            font=("TkDefaultFont", 9),
+        )
+        mem_search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8), ipady=3)
+
+        # Rozdělení na tabulku relací (horní polovina) a detail výsledků / náhled (dolní polovina)
+        mem_paned = tk.PanedWindow(
+            mem_tab,
+            orient=tk.VERTICAL,
+            bg=self.COLORS["background"],
+            sashrelief=tk.FLAT,
+            sashwidth=4,
+        )
+        mem_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+
+        # Horní panel: Tabulka zindexovaných relací
+        mem_tree_frame = tk.Frame(mem_paned, bg=self.COLORS["background"])
+        mem_paned.add(mem_tree_frame, height=180)
+
+        mem_columns = ("session_id", "title", "chunks", "updated_at")
+        mem_tree = ttk.Treeview(
+            mem_tree_frame,
+            columns=mem_columns,
+            show="headings",
+            selectmode="browse",
+            style="Rag.Treeview",
+        )
+        mem_tree.heading("session_id", text="ID Relace")
+        mem_tree.heading("title", text="Název konverzace / Téma")
+        mem_tree.heading("chunks", text="Vektorové bloky")
+        mem_tree.heading("updated_at", text="Poslední aktualizace")
+
+        mem_tree.column("session_id", width=140, anchor=tk.W)
+        mem_tree.column("title", width=300, anchor=tk.W)
+        mem_tree.column("chunks", width=110, anchor=tk.CENTER)
+        mem_tree.column("updated_at", width=150, anchor=tk.CENTER)
+
+        mem_scroll = ttk.Scrollbar(mem_tree_frame, orient=tk.VERTICAL, command=mem_tree.yview)
+        mem_tree.configure(yscrollcommand=mem_scroll.set)
+        mem_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        mem_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Dolní panel: Náhled výsledků vyhledávání / detail relace
+        mem_preview_frame = tk.Frame(mem_paned, bg=self.COLORS["panel_alt"], padx=8, pady=6)
+        mem_paned.add(mem_preview_frame, height=140)
+
+        mem_preview_title = tk.Label(
+            mem_preview_frame,
+            text="📋 Náhled paměťových bloků / Výsledky vyhledávání:",
+            font=("TkDefaultFont", 8, "bold"),
+            bg=self.COLORS["panel_alt"],
+            fg=self.COLORS["muted"],
+            anchor=tk.W,
+        )
+        mem_preview_title.pack(fill=tk.X, pady=(0, 4))
+
+        from tkinter import scrolledtext
+        mem_preview_text = scrolledtext.ScrolledText(
+            mem_preview_frame,
+            wrap=tk.WORD,
+            bg=self.COLORS["background"],
+            fg=self.COLORS["text"],
+            insertbackground="white",
+            relief=tk.FLAT,
+            font=("TkDefaultFont", 8),
+            height=6,
+        )
+        mem_preview_text.pack(fill=tk.BOTH, expand=True)
+
+        def refresh_mem_table():
+            for item in mem_tree.get_children():
+                mem_tree.delete(item)
+            if not self.memory_service:
+                mem_stats_lbl.configure(text="MemoryService není k dispozici.")
+                return
+            stats = self.memory_service.get_memory_stats()
+            mem_stats_lbl.configure(
+                text=f"Celkem: {stats['total_sessions']} relací | {stats['total_chunks']} paměťových bloků (chunků) | Úložiště: {stats['storage_dir']}"
+            )
+            sessions = self.memory_service.list_indexed_sessions()
+            for s in sessions:
+                sid = s.get("session_id", "")
+                mem_tree.insert(
+                    "",
+                    tk.END,
+                    iid=sid,
+                    values=(
+                        sid,
+                        s.get("title", "Bez názvu"),
+                        f"{s.get('chunk_count', 0)} bloků",
+                        s.get("updated_at", "-"),
+                    ),
+                )
+
+        def on_mem_tree_select(event):
+            sel = mem_tree.selection()
+            if not sel or not self.memory_service:
+                return
+            sid = sel[0]
+            chunks = [c for c in self.memory_service.chunks if c.session_id == sid]
+            mem_preview_text.configure(state=tk.NORMAL)
+            mem_preview_text.delete("1.0", tk.END)
+            if not chunks:
+                mem_preview_text.insert(tk.END, f"Pro relaci '{sid}' nebyly nalezeny žádné vektorové bloky.")
+            else:
+                mem_preview_title.configure(text=f"📋 Bloky relace '{sid}' (celkem {len(chunks)}):")
+                for i, ch in enumerate(chunks, 1):
+                    mem_preview_text.insert(
+                        tk.END,
+                        f"--- BLOK #{i} (index {ch.chunk_index}, {ch.char_count} znaků, {ch.timestamp}) ---\n"
+                        f"{ch.text}\n\n"
+                    )
+            mem_preview_text.configure(state=tk.DISABLED)
+
+        mem_tree.bind("<<TreeviewSelect>>", on_mem_tree_select)
+
+        def run_mem_search():
+            query = mem_query_var.get().strip()
+            if not query:
+                status_bar.configure(text="Zadejte dotaz pro vyhledání v sémantické paměti.", fg="#fbbf24")
+                return
+            if not self.memory_service:
+                return
+            status_bar.configure(text=f"Vyhledávám v paměti: '{query}'…", fg=self.COLORS["accent"])
+            win.update_idletasks()
+            try:
+                results = self.memory_service.search_memory(query, top_k=5, score_threshold=0.20)
+                mem_preview_text.configure(state=tk.NORMAL)
+                mem_preview_text.delete("1.0", tk.END)
+                if not results:
+                    mem_preview_title.configure(text=f"🔍 Výsledky vyhledávání pro '{query}': (0 nalezeno)")
+                    mem_preview_text.insert(tk.END, "V sémantické paměti nebyla nalezena žádná relevantní shoda.")
+                    status_bar.configure(text=f"Žádná shoda v paměti pro '{query}'.", fg=self.COLORS["muted"])
+                else:
+                    mem_preview_title.configure(text=f"🔍 Nalezeno {len(results)} relevantních bloků pro '{query}':")
+                    for i, r in enumerate(results, 1):
+                        mem_preview_text.insert(
+                            tk.END,
+                            f"=== VÝSLEDEK #{i} | Shoda (Cosine): {r['score']:.4f} | Relace: {r['session_title']} ({r['session_id']}) ===\n"
+                            f"{r['text']}\n\n"
+                        )
+                    status_bar.configure(text=f"Nalezeno {len(results)} paměťových bloků.", fg="#4ade80")
+                mem_preview_text.configure(state=tk.DISABLED)
+            except Exception as exc:
+                logger.error("Chyba při testu paměti: %s", exc)
+                status_bar.configure(text=f"Chyba při vyhledávání: {exc}", fg="#f87171")
+
+        def clear_mem_search():
+            mem_query_var.set("")
+            mem_preview_text.configure(state=tk.NORMAL)
+            mem_preview_text.delete("1.0", tk.END)
+            mem_preview_text.configure(state=tk.DISABLED)
+            mem_preview_title.configure(text="📋 Náhled paměťových bloků / Výsledky vyhledávání:")
+            status_bar.configure(text="Připraveno.", fg=self.COLORS["muted"])
+
+        tk.Button(
+            mem_search_frame,
+            text="🔍 Hledat",
+            command=run_mem_search,
+            bg=self.COLORS["accent_dark"],
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=(0, 4))
+
+        tk.Button(
+            mem_search_frame,
+            text="Vyčistit",
+            command=clear_mem_search,
+            bg=self.COLORS["panel"],
+            fg=self.COLORS["text"],
+            relief=tk.FLAT,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+        ).pack(side=tk.LEFT)
+
+        mem_search_entry.bind("<Return>", lambda e: run_mem_search())
+
+        # Tlačítka pro správu paměti
+        mem_btn_frame = tk.Frame(mem_tab, bg=self.COLORS["panel"], padx=12, pady=8)
+        mem_btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
+
+        def reindex_history():
+            if not self.history_repository or not self.memory_service:
+                return
+            status_bar.configure(text="Přeindexovávám všechny chatové relace do paměti…", fg=self.COLORS["accent"])
+            win.update_idletasks()
+            try:
+                res = self.history_repository.reindex_all_to_memory()
+                refresh_mem_table()
+                total_chunks = sum(v for v in res.values() if v > 0)
+                status_bar.configure(
+                    text=f"Historie byla úspěšně přeindexována: {len(res)} relací, {total_chunks} vektorových bloků.",
+                    fg="#4ade80",
+                )
+            except Exception as exc:
+                logger.error("Chyba při přeindexování historie: %s", exc)
+                messagebox.showerror("Chyba", f"Nepodařilo se přeindexovat historii:\n{exc}", parent=win)
+
+        def delete_selected_mem():
+            selection = mem_tree.selection()
+            if not selection:
+                messagebox.showinfo("Sémantická paměť", "Vyberte relaci ze seznamu, kterou chcete smazat z paměti.", parent=win)
+                return
+            selected_sid = selection[0]
+            if not messagebox.askyesno(
+                "Smazat z paměti",
+                f"Opravdu chcete relaci '{selected_sid}' a všechny její vektorové bloky odstranit ze sémantické paměti?",
+                parent=win,
+            ):
+                return
+            if self.memory_service.delete_session(selected_sid):
+                refresh_mem_table()
+                clear_mem_search()
+                status_bar.configure(text=f"Relace '{selected_sid}' byla odstraněna ze sémantické paměti.", fg="#4ade80")
+            else:
+                messagebox.showwarning("Upozornění", "Relaci se nepodařilo v paměti nalézt.", parent=win)
+
+        def clear_all_mem():
+            if not messagebox.askyesno(
+                "Vymazat sémantickou paměť",
+                "Opravdu chcete kompletně vymazat VŠECHNU dlouhodobou sémantickou paměť (FAISS index i registr)?",
+                parent=win,
+            ):
+                return
+            if self.memory_service:
+                self.memory_service.clear_memory()
+                refresh_mem_table()
+                clear_mem_search()
+                status_bar.configure(text="Dlouhodobá sémantická paměť byla kompletně vymazána.", fg="#f87171")
+
+        tk.Button(
+            mem_btn_frame,
+            text="🔄 Přeindexovat celou historii",
+            command=reindex_history,
+            bg=self.COLORS["accent_dark"],
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=(0, 6))
+
+        tk.Button(
+            mem_btn_frame,
+            text="🗑 Smazat relaci z paměti",
+            command=delete_selected_mem,
+            bg=self.COLORS["panel_alt"],
+            fg=self.COLORS["danger"],
+            relief=tk.FLAT,
+            padx=10,
+            pady=5,
             cursor="hand2",
         ).pack(side=tk.LEFT, padx=6)
 
         tk.Button(
-            btn_frame,
-            text="Zavřít",
-            command=win.destroy,
-            bg=self.COLORS["background"],
+            mem_btn_frame,
+            text="⚠️ Vymazat celou paměť",
+            command=clear_all_mem,
+            bg=self.COLORS["panel_alt"],
+            fg=self.COLORS["muted"],
+            relief=tk.FLAT,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=6)
+
+        tk.Button(
+            mem_btn_frame,
+            text="🔄 Obnovit přehled",
+            command=refresh_mem_table,
+            bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
             relief=tk.FLAT,
-            padx=12,
-            pady=6,
+            padx=10,
+            pady=5,
             cursor="hand2",
-        ).pack(side=tk.RIGHT)
+        ).pack(side=tk.LEFT, padx=6)
 
-        refresh_table()
+        # Počáteční načtení dat
+        refresh_doc_table()
+        refresh_mem_table()
 
     def extract_text_from_file(self, file_path: str | Path) -> str:
         """Extract document text synchronously before starting the LLM worker."""

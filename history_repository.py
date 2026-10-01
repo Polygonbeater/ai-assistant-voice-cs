@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
+
+logger = logging.getLogger(__name__)
 
 
 class ChatMessage(TypedDict):
@@ -23,12 +26,26 @@ class SessionSummary(TypedDict):
 class HistoryRepository:
     """Thread-safe local repository for independent chat sessions."""
 
-    def __init__(self, path: str | Path = "chat_history.txt"):
+    def __init__(self, path: str | Path = "chat_history.txt", memory_service=None):
         legacy_path = Path(path)
         self.sessions_dir = legacy_path.parent / "sessions"
         self.legacy_path = legacy_path
+        self.memory_service = memory_service
         self._lock = threading.RLock()
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    def set_memory_service(self, memory_service) -> None:
+        """Nastaví instanci sémantické paměti pro automatickou indexaci."""
+        with self._lock:
+            self.memory_service = memory_service
+
+    def _safe_index_session(self, session_id: str, title: str, messages: list[dict], updated_at: str) -> None:
+        """Asynchronně a bezpečně zindexuje relaci do sémantické paměti."""
+        try:
+            if self.memory_service and messages:
+                self.memory_service.index_session(session_id, title, messages, updated_at=updated_at)
+        except Exception as exc:
+            logger.exception("Chyba při automatické indexaci relace %s do sémantické paměti: %s", session_id, exc)
 
     def create_session(self, title: str = "Nový chat") -> SessionSummary:
         with self._lock:
@@ -77,6 +94,14 @@ class HistoryRepository:
             session["updated_at"] = message["timestamp"]
             self._write_session(session_id, session)
 
+            # Automatická sémantická indexace po dokončení odpovědi asistenta (neblokující na pozadí)
+            if self.memory_service and role == "assistant":
+                threading.Thread(
+                    target=self._safe_index_session,
+                    args=(session_id, session["title"], list(session["messages"]), session["updated_at"]),
+                    daemon=True,
+                ).start()
+
     def clear(self, session_id: str) -> None:
         with self._lock:
             session = self._read_session(session_id)
@@ -84,7 +109,11 @@ class HistoryRepository:
             session["title"] = "Nový chat"
             session["updated_at"] = self._now()
             self._write_session(session_id, session)
-
+            if self.memory_service:
+                try:
+                    self.memory_service.delete_session(session_id)
+                except Exception:
+                    pass
 
     def delete_session(self, session_id: str) -> bool:
         with self._lock:
@@ -92,10 +121,21 @@ class HistoryRepository:
             if path.is_file():
                 try:
                     path.unlink()
+                    if self.memory_service:
+                        try:
+                            self.memory_service.delete_session(session_id)
+                        except Exception:
+                            pass
                     return True
                 except OSError:
                     pass
             return False
+
+    def reindex_all_to_memory(self) -> dict[str, int]:
+        """Projde všechny existující relace a zindexuje je do sémantické paměti."""
+        if not self.memory_service:
+            return {}
+        return self.memory_service.reindex_all_sessions(self.sessions_dir)
 
     def delete_empty_sessions(self) -> int:
         removed = 0

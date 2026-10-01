@@ -597,3 +597,432 @@ class DocumentService:
                 continue
         with path.open("r", encoding="utf-8", errors="replace") as f:
             return f.read()
+
+    def get_embedding_model(self):
+        """Vrátí instanci CPU embedding modelu pro sdílení s ConversationMemoryService."""
+        return self._ensure_model()
+
+
+@dataclass
+class MemoryChunk:
+    """Reprezentuje sémantický blok z minulé konverzace."""
+    session_id: str
+    session_title: str
+    chunk_index: int
+    text: str
+    timestamp: str
+    char_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "session_title": self.session_title,
+            "chunk_index": self.chunk_index,
+            "text": self.text,
+            "timestamp": self.timestamp,
+            "char_count": self.char_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> MemoryChunk:
+        return cls(
+            session_id=data.get("session_id", ""),
+            session_title=data.get("session_title", ""),
+            chunk_index=int(data.get("chunk_index", 0)),
+            text=data.get("text", ""),
+            timestamp=data.get("timestamp", ""),
+            char_count=int(data.get("char_count", len(data.get("text", "")))),
+        )
+
+
+class ConversationMemoryService:
+    """
+    Sémantická paměť konverzací (Long-Term Vector Memory).
+    Spravuje lokální FAISS vektorovou databázi pro minulá sezení v podadresáři `rag_storage/memory/`.
+    Automaticky indexuje zprávy relací, provádí smart chunking s překryvem a poskytuje
+    rychlé sémantické dohledávání relevantních informací ze starších konverzací.
+    """
+
+    def __init__(
+        self,
+        config: dict | None = None,
+        storage_dir: str | Path | None = None,
+        embedding_model: str = "all-MiniLM-L6-v2",
+        chunk_size: int = 400,
+        chunk_overlap: int = 50,
+        top_k: int = 2,
+        shared_model=None,
+    ):
+        rag_cfg = (config or {}).get("rag", {})
+        default_dir = Path(rag_cfg.get("storage_dir", "rag_storage")) / "memory"
+        self.storage_dir = Path(storage_dir or rag_cfg.get("memory_storage_dir", default_dir))
+        self.embedding_model_name = rag_cfg.get("embedding_model", embedding_model)
+        self.chunk_size = int(rag_cfg.get("chunk_size", chunk_size))
+        self.chunk_overlap = int(rag_cfg.get("chunk_overlap", chunk_overlap))
+        self.top_k = int(rag_cfg.get("memory_top_k", top_k))
+        self.enabled = bool(rag_cfg.get("enabled", True))
+
+        self.embedding_dim = 384
+        self._model = shared_model
+        self._index = None
+        self.chunks: list[MemoryChunk] = []
+        self.registry: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+        self._load_storage()
+
+    def _ensure_model(self):
+        """Zajistí načtení CPU embedding modelu."""
+        if self._model is None:
+            with self._lock:
+                if self._model is None:
+                    try:
+                        from sentence_transformers import SentenceTransformer
+                        logger.info("Načítám CPU embedding model pro paměť: %s", self.embedding_model_name)
+                        self._model = SentenceTransformer(self.embedding_model_name, device="cpu")
+                    except ImportError as exc:
+                        raise RuntimeError(
+                            "Pro vektorové embeddings nainstalujte: pip install sentence-transformers"
+                        ) from exc
+        return self._model
+
+    def _ensure_index(self):
+        """Zajistí existenci FAISS indexu."""
+        if self._index is None:
+            try:
+                import faiss
+                self._index = faiss.IndexFlatIP(self.embedding_dim)
+            except ImportError as exc:
+                raise RuntimeError("Pro vektorové vyhledávání nainstalujte: pip install faiss-cpu") from exc
+        return self._index
+
+    def _load_storage(self) -> None:
+        """Načte paměťový FAISS index a metadata z disku."""
+        try:
+            import faiss
+            index_path = self.storage_dir / "index.faiss"
+            chunks_path = self.storage_dir / "chunks.json"
+            registry_path = self.storage_dir / "registry.json"
+
+            if index_path.is_file() and chunks_path.is_file():
+                self._index = faiss.read_index(str(index_path))
+                with chunks_path.open("r", encoding="utf-8") as f:
+                    raw_chunks = json.load(f)
+                    self.chunks = [MemoryChunk.from_dict(c) for c in raw_chunks]
+
+                if registry_path.is_file():
+                    with registry_path.open("r", encoding="utf-8") as f:
+                        self.registry = json.load(f)
+                else:
+                    self._reconstruct_registry()
+
+                logger.info(
+                    "Sémantická paměť načtena z %s: %d relací, %d vektorových bloků",
+                    self.storage_dir,
+                    len(self.registry),
+                    len(self.chunks),
+                )
+            else:
+                self._index = faiss.IndexFlatIP(self.embedding_dim)
+                self.chunks = []
+                self.registry = {}
+        except Exception as exc:
+            logger.warning("Nepodařilo se načíst existující paměťové úložiště (%s), vytvářím čisté.", exc)
+            self.chunks = []
+            self.registry = {}
+            try:
+                import faiss
+                self._index = faiss.IndexFlatIP(self.embedding_dim)
+            except ImportError:
+                self._index = None
+
+    def _save_storage(self) -> None:
+        """Uloží paměťový index a metadata na disk."""
+        try:
+            import faiss
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            index_path = self.storage_dir / "index.faiss"
+            chunks_path = self.storage_dir / "chunks.json"
+            registry_path = self.storage_dir / "registry.json"
+
+            if self._index is not None:
+                faiss.write_index(self._index, str(index_path))
+
+            with chunks_path.open("w", encoding="utf-8") as f:
+                json.dump([c.to_dict() for c in self.chunks], f, ensure_ascii=False, indent=2)
+
+            with registry_path.open("w", encoding="utf-8") as f:
+                json.dump(self.registry, f, ensure_ascii=False, indent=2)
+
+            logger.info("Sémantická paměť uložena do %s (%d bloků)", self.storage_dir, len(self.chunks))
+        except Exception as exc:
+            logger.error("Chyba při ukládání sémantické paměti: %s", exc)
+
+    def _reconstruct_registry(self) -> None:
+        """Zrekonstruuje registr relací ze seznamu paměťových bloků."""
+        self.registry = {}
+        for chunk in self.chunks:
+            sid = chunk.session_id
+            if sid not in self.registry:
+                self.registry[sid] = {
+                    "session_id": sid,
+                    "title": chunk.session_title,
+                    "chunk_count": 0,
+                    "updated_at": chunk.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            self.registry[sid]["chunk_count"] += 1
+
+    def format_session_messages(self, title: str, messages: list[dict[str, Any]]) -> str:
+        """Převede zprávy relace do textového formátu pro chytrý chunking."""
+        if not messages:
+            return ""
+        lines = [f"=== TÉMA KONVERZACE: {title} ==="]
+        for msg in messages:
+            role = msg.get("role", "")
+            content = str(msg.get("content", "")).strip()
+            if not content:
+                continue
+            lbl = "Uživatel" if role == "user" else "Asistent"
+            lines.append(f"[{lbl}]: {content}")
+        return "\n\n".join(lines)
+
+    def index_session(
+        self,
+        session_id: str,
+        title: str,
+        messages: list[dict[str, Any]],
+        updated_at: str = "",
+    ) -> int:
+        """
+        Zindexuje zprávy zadané relace: rozdělí na smart chunky, spočítá embeddings
+        a uloží do FAISS indexu paměti. Pokud relace již byla zindexována, staré bloky
+        jsou nahrazeny novými (aktualizace).
+        """
+        if not messages:
+            self.delete_session(session_id)
+            return 0
+
+        text = self.format_session_messages(title, messages)
+        if not text.strip():
+            return 0
+
+        raw_chunks = smart_chunk_text(text, chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
+        if not raw_chunks:
+            return 0
+
+        stamp = updated_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_chunks = [
+            MemoryChunk(
+                session_id=session_id,
+                session_title=title,
+                chunk_index=i,
+                text=ch,
+                timestamp=stamp,
+                char_count=len(ch),
+            )
+            for i, ch in enumerate(raw_chunks)
+        ]
+
+        model = self._ensure_model()
+        import numpy as np
+
+        texts = [c.text for c in new_chunks]
+        embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        ).astype(np.float32)
+
+        with self._lock:
+            # Odstraníme staré bloky dané relace, pokud existovaly
+            has_old = any(c.session_id == session_id for c in self.chunks)
+            if has_old:
+                # Rekonstruujeme index bez starých bloků
+                remaining = [c for c in self.chunks if c.session_id != session_id]
+                import faiss
+                self._index = faiss.IndexFlatIP(self.embedding_dim)
+                self.chunks = remaining
+                if remaining:
+                    rem_texts = [c.text for c in remaining]
+                    rem_emb = model.encode(
+                        rem_texts,
+                        normalize_embeddings=True,
+                        convert_to_numpy=True,
+                        show_progress_bar=False,
+                    ).astype(np.float32)
+                    self._index.add(rem_emb)
+
+            # Přidáme nové bloky
+            idx = self._ensure_index()
+            idx.add(embeddings)
+            self.chunks.extend(new_chunks)
+
+            # Aktualizace registru
+            self.registry[session_id] = {
+                "session_id": session_id,
+                "title": title,
+                "chunk_count": len(new_chunks),
+                "updated_at": stamp,
+            }
+
+            self._save_storage()
+
+        logger.info(
+            "Relace '%s' (%s) zindexována do paměti: %d bloků (celkem v paměti: %d bloků)",
+            title,
+            session_id,
+            len(new_chunks),
+            len(self.chunks),
+        )
+        return len(new_chunks)
+
+    def search_memory(
+        self,
+        query: str,
+        top_k: int | None = None,
+        score_threshold: float = 0.30,
+        exclude_session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Sémantické vyhledávání v dlouhodobé paměti.
+        Vrací nejrelevantnější bloky z minulých konverzací.
+        """
+        clean_query = query.strip()
+        if not clean_query:
+            return []
+
+        with self._lock:
+            if not self.chunks or self._index is None or self._index.ntotal == 0:
+                return []
+
+            # Zjistíme počet kandidátů k prohledání (hledáme více, pokud vylučujeme session_id)
+            k_target = top_k or self.top_k
+            fetch_k = min(k_target * 3 if exclude_session_id else k_target, self._index.ntotal)
+            if fetch_k <= 0:
+                return []
+
+            model = self._ensure_model()
+            import numpy as np
+
+            q_vec = model.encode(
+                [clean_query],
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+                show_progress_bar=False,
+            ).astype(np.float32)
+
+            distances, indices = self._index.search(q_vec, fetch_k)
+
+            results: list[dict[str, Any]] = []
+            for score, idx in zip(distances[0], indices[0]):
+                if idx == -1 or idx >= len(self.chunks):
+                    continue
+                score_val = float(score)
+                if score_val < score_threshold:
+                    continue
+                chunk = self.chunks[idx]
+                if exclude_session_id and chunk.session_id == exclude_session_id:
+                    continue
+                results.append({
+                    "session_id": chunk.session_id,
+                    "session_title": chunk.session_title,
+                    "chunk_index": chunk.chunk_index,
+                    "text": chunk.text,
+                    "timestamp": chunk.timestamp,
+                    "score": round(score_val, 4),
+                    "char_count": chunk.char_count,
+                })
+                if len(results) >= k_target:
+                    break
+
+            return results
+
+    def format_memory_for_prompt(self, memories: list[dict[str, Any]]) -> str:
+        """Zformátuje dohledanou paměť do přehledného bloku pro prompt LLM."""
+        if not memories:
+            return ""
+        formatted = ["RELEVANTNÍ HISTORICKÁ PAMĚŤ:"]
+        for i, m in enumerate(memories, 1):
+            title = m.get("session_title", "Předchozí konverzace")
+            score = m.get("score", 0.0)
+            text = m.get("text", "").strip()
+            formatted.append(f"--- Záznam #{i} [Téma: „{title}“, relevance: {score:.2f}] ---\n{text}")
+        return "\n\n".join(formatted)
+
+    def delete_session(self, session_id: str) -> bool:
+        """Odstraní relaci z FAISS paměti i registru."""
+        with self._lock:
+            if session_id not in self.registry and not any(c.session_id == session_id for c in self.chunks):
+                return False
+
+            remaining = [c for c in self.chunks if c.session_id != session_id]
+            import faiss
+            self._index = faiss.IndexFlatIP(self.embedding_dim)
+            self.chunks = remaining
+            self.registry.pop(session_id, None)
+
+            if remaining:
+                model = self._ensure_model()
+                import numpy as np
+                rem_texts = [c.text for c in remaining]
+                rem_emb = model.encode(
+                    rem_texts,
+                    normalize_embeddings=True,
+                    convert_to_numpy=True,
+                    show_progress_bar=False,
+                ).astype(np.float32)
+                self._index.add(rem_emb)
+
+            self._save_storage()
+            logger.info("Relace %s byla odstraněna ze sémantické paměti", session_id)
+            return True
+
+    def clear_memory(self) -> None:
+        """Kompletně vyčistí vektorovou paměť."""
+        with self._lock:
+            try:
+                import faiss
+                self._index = faiss.IndexFlatIP(self.embedding_dim)
+            except Exception:
+                self._index = None
+            self.chunks = []
+            self.registry = {}
+            self._save_storage()
+            logger.info("Sémantická paměť byla kompletně vymazána")
+
+    def get_memory_stats(self) -> dict[str, Any]:
+        """Vrátí statistiky sémantické paměti."""
+        with self._lock:
+            return {
+                "total_sessions": len(self.registry),
+                "total_chunks": len(self.chunks),
+                "storage_dir": str(self.storage_dir),
+                "embedding_model": self.embedding_model_name,
+            }
+
+    def list_indexed_sessions(self) -> list[dict[str, Any]]:
+        """Vrátí seznam všech zindexovaných relací."""
+        with self._lock:
+            return sorted(list(self.registry.values()), key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    def reindex_all_sessions(self, sessions_dir: str | Path) -> dict[str, int]:
+        """Projde všechny .json soubory v sessions_dir a znovu je zindexuje do paměti."""
+        s_dir = Path(sessions_dir)
+        if not s_dir.is_dir():
+            return {}
+        results = {}
+        for path in sorted(s_dir.glob("*.json")):
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                sid = data.get("session_id", path.stem)
+                title = data.get("title", "Bez názvu")
+                messages = data.get("messages", [])
+                updated = data.get("updated_at", "")
+                if messages:
+                    count = self.index_session(sid, title, messages, updated_at=updated)
+                    results[sid] = count
+            except Exception as e:
+                logger.error("Chyba při indexaci relace %s do paměti: %s", path.name, e)
+        return results

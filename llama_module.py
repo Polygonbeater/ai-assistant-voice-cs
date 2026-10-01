@@ -735,12 +735,14 @@ def handle_blender_command(
     callback_on_token=None,
     stop_event=None,
     status_callback=None,
+    memory_context: str | None = None,
 ):
     """
     Vygeneruje Python kód pro Blender (bpy) na základě uživatelského pokynu
     a odešle ho přes lokální TCP socket do běžící instance Blenderu.
     Obsahuje Self-Healing Blender Loop – při chybě (Exception) zachytí traceback
     a nechá LLM kód automaticky opravit (až 2 pokusy o opravu).
+    Využívá případnou dlouhodobou sémantickou paměť pro návaznost na minulý kód.
     """
     from blender_connector import send_code_to_blender, is_blender_available
 
@@ -770,8 +772,12 @@ def handle_blender_command(
             yield tts_alert
             return
 
+        blender_sys = BLENDER_SYSTEM_PROMPT
+        if memory_context:
+            blender_sys = f"{blender_sys}\n\n{memory_context}"
+
         messages = [
-            {"role": "system", "content": BLENDER_SYSTEM_PROMPT},
+            {"role": "system", "content": blender_sys},
             {"role": "user", "content": f"Příkaz: {prompt}"}
         ]
 
@@ -1047,11 +1053,15 @@ def generate_response(
     stop_event=None,
     chat_history: list = None,
     status_callback=None,
+    memory_service=None,
+    memory_context: str | None = None,
+    active_session_id: str | None = None,
     **kwargs
 ):
     """
     Generuje odpověď přes Chat API modelu a vrací (yield) text po ucelených větách / logických úsecích.
     Zároveň průběžně volá callback_on_token pro okamžité vykreslování jednotlivých tokenů v GUI.
+    Automaticky vyhledává v dlouhodobé sémantické paměti minulých rozhovorů.
     """
     math_result = _try_evaluate_math(prompt)
     if math_result:
@@ -1059,6 +1069,26 @@ def generate_response(
             callback_on_token(math_result)
         yield math_result
         return
+
+    # Sémantické dohledání v dlouhodobé paměti konverzací (Long-Term Vector Memory)
+    if not memory_context and memory_service:
+        try:
+            rag_cfg = config.get("rag", {})
+            mem_top_k = int(rag_cfg.get("memory_top_k", 2))
+            mem_thresh = float(rag_cfg.get("memory_score_threshold", 0.35))
+            memories = memory_service.search_memory(
+                prompt,
+                top_k=mem_top_k,
+                score_threshold=mem_thresh,
+                exclude_session_id=active_session_id,
+            )
+            if memories:
+                memory_context = memory_service.format_memory_for_prompt(memories)
+                if status_callback:
+                    status_callback(f"● Nalezena historická paměť ({len(memories)} záznamů)…")
+                logging.info("Sémantická paměť: nalezeno %d úseků", len(memories))
+        except Exception as exc:
+            logging.warning("Chyba při prohledávání sémantické paměti: %s", exc)
 
     # Detekce a zpracování inspekce 3D scény pro Blender (Viewport Inspection)
     if is_blender_inspection_query(prompt, config):
@@ -1083,6 +1113,7 @@ def generate_response(
             callback_on_token=callback_on_token,
             stop_event=stop_event,
             status_callback=status_callback,
+            memory_context=memory_context,
         ):
             yield chunk
         return
@@ -1205,6 +1236,19 @@ def generate_response(
                 "- Na ÚPLNÝ KONEC své odpovědi VŽDY přidej sekci '### Použité zdroje:' s číslovaným seznamem klikatelných odkazů ve formátu [Titulek](URL)."
             )
             system_prompt = f"{system_prompt}{multi_rag_rules}"
+
+        # Injektování dlouhodobé sémantické paměti minulých rozhovorů
+        if memory_context:
+            mem_instructions = (
+                f"\n\n{memory_context}\n\n"
+                "POKYNY PRO HISTORICKOU PAMĚŤ:\n"
+                "- Výše uvedené záznamy pocházejí z předchozích rozhovorů s uživatelem v minulosti.\n"
+                "- Využij je jako kontext pro zachování kontinuity, starších domluvených parametrů, "
+                "kódu nebo specifických preferencí uživatele.\n"
+                "- Pokud uživatel navazuje slovy jako 'minule', 'jako minule', 'jak jsme se bavili', "
+                "vycházej přímo z těchto historických informací."
+            )
+            system_prompt = f"{system_prompt}{mem_instructions}"
 
         # Sestavení kontextového okna (historie chatu)
         messages = [{"role": "system", "content": system_prompt}]
