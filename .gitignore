@@ -20,6 +20,9 @@ config.json
 debug_recording.wav
 *.wav
 
+# Lokální RAG vektorové úložiště
+rag_storage/
+
 # Python virtuální prostředí a cache
 venv/
 __pycache__/

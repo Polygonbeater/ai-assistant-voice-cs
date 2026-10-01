@@ -29,6 +29,13 @@
     "enabled": true,
     "host": "127.0.0.1",
     "port": 9876
+  },
+  "rag": {
+    "enabled": true,
+    "embedding_model": "all-MiniLM-L6-v2",
+    "chunk_size": 450,
+    "chunk_overlap": 50,
+    "top_k": 3,
+    "storage_dir": "rag_storage"
   }
 }
-
