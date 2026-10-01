@@ -48,20 +48,109 @@ def load_analytical_prompt(
         raise OSError(f"Analytickou metodiku nelze načíst: {prompt_path}") from exc
 
 
-def initialize_llama(config: dict) -> Llama:
-    """Inicializuje Llama model s GPU akcelerací."""
+def get_physical_cpu_cores() -> int:
+    """
+    Zjišťuje přesný počet fyzických jader procesoru (nikoliv logických/SMT vláken).
+    Pro inferenci v llama.cpp na CPU je použití počtu vláken rovného počtu fyzických jader
+    nejrychlejší konfigurací – zamezuje thread contention a soutěžení o FPU/AVX2 jednotky.
+    """
     try:
-        model_path = config['llama']['model']
-        logging.info(f"Načítám Llama model z: {model_path}")
+        import psutil
+        physical = psutil.cpu_count(logical=False)
+        if physical and physical > 0:
+            return physical
+    except Exception:
+        pass
+
+    try:
+        total = os.cpu_count() or 4
+        # Standardní fallback pro procesory s hyperthreadingem (2 vlákna na jádro)
+        return max(1, total // 2 if total > 2 else total)
+    except Exception:
+        return 4
+
+
+def resolve_optimal_context_size(model_path: str, user_n_ctx: int | str | None = None) -> int:
+    """
+    Určuje optimální velikost kontextového okna (n_ctx) pro modely Qwen2.5 a GLM-4,
+    aby KV cache zbytečně neobsazovala operační paměť RAM.
+    """
+    if user_n_ctx is not None and str(user_n_ctx).strip().lower() not in ("auto", "0", ""):
+        try:
+            val = int(user_n_ctx)
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+
+    model_lower = (model_path or "").lower()
+    # GLM-4 (40 vrstev, větší skrytý rozměr) – 3072 tokenů plně pokryje web search i analýzu a šetří RAM
+    if "glm-4" in model_lower or "chatglm" in model_lower:
+        return 3072
+    # Qwen2.5 (28 vrstev, efektivní GQA) – 4096 tokenů poskytne velký prostor pro kontext s nízkou režií
+    elif "qwen" in model_lower:
+        return 4096
+    else:
+        return 2048
+
+
+def initialize_llama(config: dict) -> Llama:
+    """Inicializuje Llama model s optimalizací parametrů pro maximální rychlost na CPU."""
+    try:
+        llama_cfg = config.get('llama', {})
+        model_path = llama_cfg.get('model', '')
+        if not model_path:
+            raise ValueError("V konfiguraci není specifikována cesta k modelu ('llama.model').")
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Soubor modelu nebyl nalezen: '{model_path}'")
+
+        # 1. Dynamické zjištění počtu fyzických jader CPU
+        physical_cores = get_physical_cpu_cores()
+        configured_threads = llama_cfg.get('n_threads')
+        if configured_threads and str(configured_threads).isdigit() and int(configured_threads) > 0:
+            n_threads = int(configured_threads)
+        else:
+            n_threads = physical_cores
+
+        n_threads_batch = int(llama_cfg.get('n_threads_batch', n_threads))
+
+        # 2. Optimalizace velikosti kontextu pro model
+        n_ctx = resolve_optimal_context_size(model_path, llama_cfg.get('n_ctx'))
+
+        # 3. Dávkování (batching) pro CPU
+        n_batch = int(llama_cfg.get('n_batch', 512))
+        n_ubatch = int(llama_cfg.get('n_ubatch', 256))
+
+        # 4. Paměťové mapování a uzamčení
+        use_mmap = bool(llama_cfg.get('use_mmap', True))
+        use_mlock = bool(llama_cfg.get('use_mlock', False))
+
+        # 5. GPU vrstvy (pro CPU je výchozí 0)
+        n_gpu_layers = int(llama_cfg.get('n_gpu_layers', 0))
+
+        logging.info(
+            f"Načítám Llama model z: {model_path} | "
+            f"n_threads={n_threads} (fyzická jádra={physical_cores}), "
+            f"n_ctx={n_ctx}, n_batch={n_batch}, n_ubatch={n_ubatch}, "
+            f"use_mmap={use_mmap}, use_mlock={use_mlock}, n_gpu_layers={n_gpu_layers}"
+        )
+
         llm = Llama(
-        model_path=model_path,
-        n_ctx=4096,
-        n_gpu_layers=16,
-        n_batch=512,
-        n_threads=7,
-        verbose=False
-    )
-        logging.info("Llama model inicializován (GPU vrstvy zapojeny).")
+            model_path=model_path,
+            n_ctx=n_ctx,
+            n_gpu_layers=n_gpu_layers,
+            n_batch=n_batch,
+            n_ubatch=n_ubatch,
+            n_threads=n_threads,
+            n_threads_batch=n_threads_batch,
+            use_mmap=use_mmap,
+            use_mlock=use_mlock,
+            verbose=False,
+        )
+        logging.info(
+            f"Llama model úspěšně inicializován na CPU "
+            f"({n_threads} fyzických vláken, n_ctx={n_ctx})."
+        )
         return llm
     except Exception as e:
         logging.error(f"Chyba při inicializaci Llama modelu: {e}")
