@@ -125,7 +125,10 @@
         <div class="chat-header">
           <div class="chat-header-title-group">
             <span class="chat-title-editable" id="active-session-title" contenteditable="true" data-i18n-title="click_to_rename" title="Click to rename session" data-i18n="chat_loading">Loading...</span>
-            <span class="chat-tools-count" data-i18n="chat_tools_count">22 Tools Active</span>
+            <button class="chat-tools-btn" id="btn-tools" type="button" data-i18n-title="btn_tools_title" title="Open Tools Inspector & Registered Tools">
+              <svg class="tools-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+              <span id="tools-count-text" class="chat-tools-count-text" data-i18n="chat_tools_count">22 Tools Active</span>
+            </button>
           </div>
 
           <div class="chat-controls-group">
@@ -489,6 +492,46 @@
         </div>
       </aside>
 
+    </div>
+  </div>
+
+  <!-- MODAL: TOOLS INSPECTOR -->
+  <div class="modal-backdrop" id="modal-tools" style="display: none;">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+          </svg>
+          <h3 data-i18n="modal_tools_title">Registered Tools & Integrations</h3>
+        </div>
+        <div class="modal-header-actions">
+          <span class="modal-tools-badge" id="modal-active-tools-count">22 / 22 Active</span>
+          <button class="modal-close-btn" id="btn-close-tools-modal" data-i18n-title="close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+      </div>
+      <div class="modal-body modal-body-scrollable">
+        <p class="modal-desc" data-i18n="modal_tools_desc">Overview of registered tools dynamically provided to the assistant. 3D & Blender tools automatically activate when Blender is connected or 3D Workspace is open.</p>
+
+        <div class="tools-quick-actions">
+          <button class="secondary-btn btn-sm" id="btn-enable-all-tools" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+            <span data-i18n="btn_enable_all_tools">Enable All</span>
+          </button>
+          <button class="secondary-btn btn-sm" id="btn-disable-all-tools" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"></line></svg>
+            <span data-i18n="btn_disable_all_tools">Disable All</span>
+          </button>
+          <button class="secondary-btn btn-sm" id="btn-reset-tools-defaults" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+            <span data-i18n="btn_reset_tools">Reset Defaults</span>
+          </button>
+        </div>
+
+        <div class="tools-categories-list" id="tools-categories-container">
+          <!-- Dynamically populated categories -->
+        </div>
+      </div>
     </div>
   </div>
 

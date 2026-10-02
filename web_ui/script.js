@@ -37,7 +37,222 @@
     // Blender polling
     blenderConnected: false,
     blenderPollInterval: null,
+
+    // Tools Inspector & Registry
+    toolsConfig: {},
+    toolsRegistry: [],
   };
+
+  // ===========================================================================
+  // TOOLS REGISTRY (22 Registered Tools)
+  // ===========================================================================
+  const TOOLS_REGISTRY = [
+    // Web & Rešerše (3)
+    {
+      name: 'search_web',
+      category: 'web',
+      title_cs: 'Webové vyhledávání (DuckDuckGo)',
+      title_en: 'Web Search (DuckDuckGo)',
+      desc_cs: 'Živé online vyhledávání na internetu pro aktuální zprávy, čerstvé události a fakta v reálném čase.',
+      desc_en: 'Live web search for breaking news, real-time events, documentation, and live facts.',
+      requires_blender: false,
+    },
+    {
+      name: 'query_local_rag',
+      category: 'web',
+      title_cs: 'Lokální báze dokumentů (RAG)',
+      title_en: 'Local Document Base (RAG)',
+      desc_cs: 'Sémantické vyhledávání v lokálně nahraných dokumentech (PDF, DOCX, texty) pomocí FAISS vektorové databáze.',
+      desc_en: 'Semantic search across locally uploaded documents (PDF, DOCX, code) using FAISS vector database.',
+      requires_blender: false,
+    },
+    {
+      name: 'query_memory_rag',
+      category: 'web',
+      title_cs: 'Sémantická paměť konverzací',
+      title_en: 'Semantic Conversation Memory',
+      desc_cs: 'Prohledávání dlouhodobé sémantické paměti minulých rozhovorů s uživatelem (dohody, parametry, skripty).',
+      desc_en: 'Retrieval from persistent semantic long-term memory of previous user sessions and preferences.',
+      requires_blender: false,
+    },
+
+    // Systém & Vision (1)
+    {
+      name: 'analyze_viewport_image',
+      category: 'system',
+      title_cs: 'Multimodální analýza viewportu',
+      title_en: 'Viewport Vision Analysis',
+      desc_cs: 'Pořízení snímku obrazovky nebo 3D viewportu a jeho detailní multimodální kognitivní analýza.',
+      desc_en: 'Capturing viewport screenshot and performing deep multimodal vision understanding.',
+      requires_blender: false,
+    },
+
+    // 3D & Blender (18)
+    {
+      name: 'execute_blender_code',
+      category: '3d',
+      title_cs: 'Spuštění Python skriptu (bpy)',
+      title_en: 'Execute Blender Script (bpy)',
+      desc_cs: 'Spuštění libovolného Python skriptu přímo v běžící instanci Blenderu s automatickou opravou chyb.',
+      desc_en: 'Direct execution of Python/bpy scripts inside active Blender instance with self-healing loop.',
+      requires_blender: true,
+    },
+    {
+      name: 'inspect_blender_scene',
+      category: '3d',
+      title_cs: 'Inspekce 3D scény',
+      title_en: 'Inspect 3D Scene',
+      desc_cs: 'Získání detailního přehledu o scéně v Blenderu: hierarchie objektů, počty polygonů, materiály a kamery.',
+      desc_en: 'Detailed inspection of Blender scene hierarchy, polygon counts, materials, and active cameras.',
+      requires_blender: true,
+    },
+    {
+      name: 'mesh_doctor_audit',
+      category: '3d',
+      title_cs: 'Mesh Doctor - Audit geometrie',
+      title_en: 'Mesh Doctor Geometry Audit',
+      desc_cs: 'Kompletní geometrický a topologický audit 3D meshů (non-manifold hrany, n-gony, překryté vertexy).',
+      desc_en: 'Comprehensive geometric topology audit (non-manifold edges, n-gons, overlapping vertices).',
+      requires_blender: true,
+    },
+    {
+      name: 'mesh_doctor_repair',
+      category: '3d',
+      title_cs: 'Mesh Doctor - Automatická oprava',
+      title_en: 'Mesh Doctor Auto-Repair',
+      desc_cs: 'Automatické čištění a chirurgická oprava mesh defektů (sloučení vrcholů, recalculate normals, planarizace).',
+      desc_en: 'Automated mesh cleanup and repair (merge by distance, recalculate normals, planarization).',
+      requires_blender: true,
+    },
+    {
+      name: 'create_product_studio',
+      category: '3d',
+      title_cs: '3D Produktové studio & nasvícení',
+      title_en: '3D Product Studio & Lighting',
+      desc_cs: 'Automatické vybudování fotorealistického 3D produktového studia (bezešvé pozadí cyklorámy, 3-bodové světlo).',
+      desc_en: 'Automated photorealistic product studio setup (seamless cyclorama backdrop, 3-point key/fill/rim lights).',
+      requires_blender: true,
+    },
+    {
+      name: 'create_procedural_shader',
+      category: '3d',
+      title_cs: 'Procedurální PBR shadery',
+      title_en: 'Procedural PBR Shaders',
+      desc_cs: 'Vytvoření fotorealistického procedurálního PBR materiálu pomocí Shader Nodes (kov, autolak, sklo, plast).',
+      desc_en: 'Generation of photorealistic procedural PBR materials via Shader Nodes (metal, car paint, glass, plastic).',
+      requires_blender: true,
+    },
+    {
+      name: 'uv_texel_audit',
+      category: '3d',
+      title_cs: 'Audit UV map & hustoty texelů',
+      title_en: 'UV Texel Density Audit',
+      desc_cs: 'Hloubková kontrola UV map a konzistence hustoty texelů (px/m) napříč všemi objekty scény.',
+      desc_en: 'In-depth inspection of UV maps and texel density consistency (px/m) across scene meshes.',
+      requires_blender: true,
+    },
+    {
+      name: 'smart_uv_pack',
+      category: '3d',
+      title_cs: 'Smart UV Unwrap & Pack',
+      title_en: 'Smart UV Unwrap & Pack',
+      desc_cs: 'Inteligentní automatické rozbalení a optimální sbalení UV ostrovů bez překryvů s nastaveným okrajem.',
+      desc_en: 'Intelligent automated unwrapping and optimal packing of UV islands with custom margins.',
+      requires_blender: true,
+    },
+    {
+      name: 'generate_parametric_model',
+      category: '3d',
+      title_cs: 'Parametrické generování modelů',
+      title_en: 'Parametric Model Generator',
+      desc_cs: 'Procedurální parametrické generování 3D modelů (mechanické krabičky, ozubená kola, schodiště, rámy).',
+      desc_en: 'Procedural parametric generation of 3D models (enclosures, gears, staircases, structural frames).',
+      requires_blender: true,
+    },
+    {
+      name: 'apply_modifier_stack',
+      category: '3d',
+      title_cs: 'Správa stacku modifikátorů',
+      title_en: 'Modifier Stack Management',
+      desc_cs: 'Přidání a konfigurace modifikátorů (Subdivision Surface, Bevel, Boolean, Mirror, Solidify, Array).',
+      desc_en: 'Configuration and chaining of mesh modifiers (Subdivision, Bevel, Boolean, Mirror, Solidify, Array).',
+      requires_blender: true,
+    },
+    {
+      name: 'create_geometry_nodes_bridge',
+      category: '3d',
+      title_cs: 'Geometry Nodes procedurální síť',
+      title_en: 'Geometry Nodes Bridge',
+      desc_cs: 'Vygenerování a propojení stromu procedurálních Geometry Nodes (distribuce instancí, křivky, pole).',
+      desc_en: 'Procedural generation and wiring of Geometry Nodes modifier graphs (scattering, curves, mesh arrays).',
+      requires_blender: true,
+    },
+    {
+      name: 'apply_fcurve_animation',
+      category: '3d',
+      title_cs: 'Parametrická F-Curve animace',
+      title_en: 'F-Curve Parametric Animation',
+      desc_cs: 'Vytvoření parametrické animace objektů, kamer nebo světel pomocí klíčových snímků a interpolačních křivek.',
+      desc_en: 'Creation of parametric keyframe animation with mathematical interpolation curves and noise modifiers.',
+      requires_blender: true,
+    },
+    {
+      name: 'create_motion_node_setup',
+      category: '3d',
+      title_cs: 'Motion Nodes procedurální pohyb',
+      title_en: 'Motion Nodes Kinematics',
+      desc_cs: 'Pokročilá procedurální animace pomocí animačních uzlů a kinetických driverů (cyklická rotace, drift).',
+      desc_en: 'Advanced procedural kinetics and mathematical drivers (continuous rotation, bobbing, kinetic drift).',
+      requires_blender: true,
+    },
+    {
+      name: 'setup_blueprint_reference',
+      category: '3d',
+      title_cs: 'Ustavení referenčních blueprintů',
+      title_en: 'Technical Blueprint References',
+      desc_cs: 'Načtení a přesné ustavení technických výkresů nebo referenčních obrázků do ortografických rovin X/Y/Z.',
+      desc_en: 'Placement and alignment of technical drawings or reference images onto orthographic planes.',
+      requires_blender: true,
+    },
+    {
+      name: 'vectorize_image_to_3d',
+      category: '3d',
+      title_cs: 'Vektorizace 2D grafiky do 3D',
+      title_en: '2D to 3D Vectorization',
+      desc_cs: 'Převedení 2D bitmapového obrázku nebo loga na čisté 3D křivky a polygonální modely s hloubkou a zkosením.',
+      desc_en: 'Conversion of 2D bitmap logos or drawings into clean extruded 3D curves and beveled geometry.',
+      requires_blender: true,
+    },
+    {
+      name: 'setup_compositor',
+      category: '3d',
+      title_cs: 'Compositor post-processing',
+      title_en: 'Compositor Post-Processing',
+      desc_cs: 'Nastavení post-processing nodů v Blender Compositoru (glare bloom, chromatická aberace, vinětace).',
+      desc_en: 'Setup of post-processing nodes in Blender Compositor (glare bloom, chromatic aberration, vignette).',
+      requires_blender: true,
+    },
+    {
+      name: 'generate_local_ai_mesh',
+      category: '3d',
+      title_cs: 'Lokální AI Mesh generátor',
+      title_en: 'Local AI Mesh Generator',
+      desc_cs: 'Generování 3D modelů pomocí lokálních AI difuzních a rekonstrukčních modelů z referenčního obrázku.',
+      desc_en: 'Neural 3D mesh generation using local AI reconstruction models from image reference.',
+      requires_blender: true,
+    },
+    {
+      name: 'auto_rig_and_skin',
+      category: '3d',
+      title_cs: 'Auto-Rigging & Skinning koster',
+      title_en: 'Auto-Rigging & Skinning',
+      desc_cs: 'Automatické vytvoření armatury (kostry) a skinning zvoleného mesh modelu s automatickými vahami.',
+      desc_en: 'Automatic generation of skeletal armature and vertex group skinning with automatic weights.',
+      requires_blender: true,
+    },
+  ];
+
+  state.toolsRegistry = TOOLS_REGISTRY;
 
   // ===========================================================================
   // DOM ELEMENTS
@@ -78,8 +293,15 @@
     agentStepsTimeline: document.getElementById('agent-steps-timeline'),
     btnClearAgentSteps: document.getElementById('btn-clear-agent-steps'),
 
-    // Chat
+    // Chat & Tools
     activeSessionTitle: document.getElementById('active-session-title'),
+    btnTools: document.getElementById('btn-tools'),
+    toolsCountText: document.getElementById('tools-count-text'),
+    modalTools: document.getElementById('modal-tools'),
+    btnCloseToolsModal: document.getElementById('btn-close-tools-modal'),
+    btnEnableAllTools: document.getElementById('btn-enable-all-tools'),
+    btnDisableAllTools: document.getElementById('btn-disable-all-tools'),
+    btnResetToolsDefaults: document.getElementById('btn-reset-tools-defaults'),
     selectPreset: document.getElementById('select-preset'),
     toggleOnline: document.getElementById('toggle-online'),
     toggleRag: document.getElementById('toggle-rag'),
@@ -178,6 +400,18 @@
       chat_loading: 'Loading...',
       click_to_rename: 'Click to rename session',
       chat_tools_count: '22 Tools Active',
+      btn_tools_title: 'Open Tools Inspector & Registered Tools',
+      modal_tools_title: 'Registered Tools & Integrations',
+      modal_tools_desc: 'Overview of registered tools dynamically provided to the assistant. 3D & Blender tools automatically activate when Blender is connected or 3D Workspace is open.',
+      btn_enable_all_tools: 'Enable All',
+      btn_disable_all_tools: 'Disable All',
+      btn_reset_tools: 'Reset Defaults',
+      category_3d: '3D & Blender',
+      category_web: 'Web & Research',
+      category_system: 'System & Vision',
+      tool_status_active: 'Active',
+      tool_status_context_off: 'Context Off',
+      tool_status_disabled: 'Disabled',
       select_preset_label: 'Methodology',
       select_preset_title: 'Select expert analytical framework',
       preset_standard: '🧠 Standard Assistant (Off)',
@@ -327,6 +561,18 @@
       chat_loading: 'Načítám...',
       click_to_rename: 'Klikněte pro přejmenování relace',
       chat_tools_count: '22 Nástrojů aktivních',
+      btn_tools_title: 'Otevřít inspektor nástrojů a registrace',
+      modal_tools_title: 'Inspektor nástrojů & Registrace',
+      modal_tools_desc: 'Přehled registrovaných nástrojů předávaných modelu do systémového promptu. 3D nástroje se dynamicky aktivují pouze při dostupném Blenderu nebo v 3D režimu.',
+      btn_enable_all_tools: 'Povolit vše',
+      btn_disable_all_tools: 'Zakázat vše',
+      btn_reset_tools: 'Výchozí',
+      category_3d: '3D & Blender',
+      category_web: 'Web & Rešerše',
+      category_system: 'Systém & Vision',
+      tool_status_active: 'Aktivní',
+      tool_status_context_off: 'Kontextově vypnuto',
+      tool_status_disabled: 'Vypnuto',
       select_preset_label: 'Metodika',
       select_preset_title: 'Vyberte expertní analytický rámec',
       preset_standard: '🧠 Standardní asistent (Vypnuto)',
@@ -557,6 +803,10 @@
 
     applyTranslations(lang);
     renderSessionsList();
+    updateActiveToolsBadge();
+    if (el.modalTools && el.modalTools.style.display !== 'none') {
+      renderToolsInspector();
+    }
     refreshBlenderStatus();
     refreshSystemStatus();
     logConsole(lang === 'cs' ? 'Jazyk rozhraní přepnut na češtinu.' : 'Interface language set to English.', 'info');
@@ -633,6 +883,11 @@
         localStorage.setItem('polygon_active_right_tab', active);
       } catch (e) {}
     }
+
+    updateActiveToolsBadge();
+    if (el.modalTools && el.modalTools.style.display !== 'none') {
+      renderToolsInspector();
+    }
   }
 
   function loadStoredPreferences() {
@@ -693,6 +948,16 @@
       // 6. Active Inspector tab (3d, research, agent)
       const storedTab = localStorage.getItem('polygon_active_right_tab') || '3d';
       switchInspectorTab(storedTab, false);
+
+      // 7. Tools Inspector manual toggles configuration
+      const storedTools = localStorage.getItem('polygon_tools_config');
+      if (storedTools) {
+        try {
+          state.toolsConfig = JSON.parse(storedTools) || {};
+        } catch (e) {
+          state.toolsConfig = {};
+        }
+      }
     } catch (e) {
       // Ignore localStorage read errors
     }
@@ -857,6 +1122,9 @@
         card.style.height = '';
       });
 
+      localStorage.removeItem('polygon_tools_config');
+      state.toolsConfig = {};
+
       if (el.toggleOnline) el.toggleOnline.classList.add('active');
       if (el.toggleRag) el.toggleRag.classList.add('active');
       if (el.toggleTts) el.toggleTts.classList.remove('active');
@@ -869,11 +1137,211 @@
 
       switchInspectorTab('3d', false);
       setLanguage('en');
+      updateActiveToolsBadge();
       closeSettingsModal();
       logConsole('Factory reset complete. Defaults restored (EN).', 'info');
     } catch (err) {
       logConsole(`Reset error: ${err.message}`, 'error');
     }
+  }
+
+  // ===========================================================================
+  // TOOLS INSPECTOR & CONTEXTUAL FILTERING
+  // ===========================================================================
+  function isStandardPreset(preset) {
+    if (!preset) return false;
+    const p = String(preset).trim().toLowerCase();
+    return p === 'standard' || p.includes('standard') || p === 'none' || p === 'null' || p === 'vypnuto (standardní chat)' || p === 'standard assistant (off)';
+  }
+
+  function isToolEffectiveActive(toolName) {
+    if (state.toolsConfig[toolName] === false) return false;
+
+    const tool = state.toolsRegistry.find(t => t.name === toolName);
+    const cat = tool ? tool.category : 'system';
+
+    if (cat === 'web') {
+      if (toolName === 'search_web' && !state.onlineMode) return false;
+      if ((toolName === 'query_local_rag' || toolName === 'query_memory_rag') && !state.ragEnabled) return false;
+      return true;
+    }
+
+    if (cat === '3d') {
+      if (isStandardPreset(state.selectedPreset)) return false;
+      const is3dAllowed = Boolean(state.blenderConnected) || (state.activeRightTab === '3d');
+      return is3dAllowed;
+    }
+
+    return true;
+  }
+
+  function getEffectiveActiveToolNames() {
+    return state.toolsRegistry
+      .filter(t => isToolEffectiveActive(t.name))
+      .map(t => t.name);
+  }
+
+  function updateActiveToolsBadge() {
+    const activeList = getEffectiveActiveToolNames();
+    const count = activeList.length;
+    const total = state.toolsRegistry.length;
+    const isCs = (state.language === 'cs');
+
+    let text = '';
+    if (isCs) {
+      if (count === 1) text = '1 Nástroj aktivní';
+      else if (count >= 2 && count <= 4) text = `${count} Nástroje aktivní`;
+      else text = `${count} Nástrojů aktivních`;
+    } else {
+      text = (count === 1) ? '1 Tool Active' : `${count} Tools Active`;
+    }
+
+    if (el.toolsCountText) {
+      el.toolsCountText.textContent = text;
+    }
+    const modalBadge = document.getElementById('modal-active-tools-count');
+    if (modalBadge) {
+      modalBadge.textContent = isCs ? `${count} / ${total} Aktivních` : `${count} / ${total} Active`;
+    }
+  }
+
+  function openToolsModal() {
+    renderToolsInspector();
+    if (el.modalTools) {
+      el.modalTools.style.display = 'flex';
+    }
+  }
+
+  function closeToolsModal() {
+    if (el.modalTools) {
+      el.modalTools.style.display = 'none';
+    }
+  }
+
+  function renderToolsInspector() {
+    const container = document.getElementById('tools-categories-container');
+    if (!container) return;
+
+    const isCs = (state.language === 'cs');
+    updateActiveToolsBadge();
+
+    const categories = [
+      {
+        id: '3d',
+        name: isCs ? '3D & Blender' : '3D & Blender',
+        icon: '<path d="m21.12 6.4-6.05-4.06a2 2 0 0 0-2.17-.05L2.95 8.41a2 2 0 0 0-.95 1.7v8.58a2 2 0 0 0 1.05 1.76l6.05 4.07a2 2 0 0 0 2.16.05l9.89-6.12a2 2 0 0 0 .95-1.7V9.17a2 2 0 0 0-1-.77ZM12 4.14l7.63 5.12L12 14.36 4.37 9.26 12 4.14Z"></path>',
+        statusInfo: isCs
+          ? (state.blenderConnected ? '✓ Blender připojen' : (state.activeRightTab === '3d' ? '⚡ 3D Režim aktivní' : '⚠️ Offline (v klidu neaktivní)'))
+          : (state.blenderConnected ? '✓ Blender online' : (state.activeRightTab === '3d' ? '⚡ 3D Tab active' : '⚠️ Offline (inactive in idle)')),
+      },
+      {
+        id: 'web',
+        name: isCs ? 'Web & Rešerše' : 'Web & Research',
+        icon: '<circle cx="12" cy="12" r="10"></circle><line x1="2" x2="22" y1="12" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>',
+        statusInfo: isCs
+          ? `${state.onlineMode ? '✓ Web zapnut' : '✕ Web vypnut'} • ${state.ragEnabled ? '✓ RAG zapnut' : '✕ RAG vypnut'}`
+          : `${state.onlineMode ? '✓ Web on' : '✕ Web off'} • ${state.ragEnabled ? '✓ RAG on' : '✕ RAG off'}`,
+      },
+      {
+        id: 'system',
+        name: isCs ? 'Systém' : 'System',
+        icon: '<rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line>',
+        statusInfo: isCs ? '✓ Připraveno' : '✓ Ready',
+      },
+    ];
+
+    let html = '';
+    categories.forEach(cat => {
+      const toolsInCat = state.toolsRegistry.filter(t => t.category === cat.id);
+      const activeInCat = toolsInCat.filter(t => isToolEffectiveActive(t.name)).length;
+
+      html += `
+        <div class="tool-category-group" data-category="${cat.id}">
+          <div class="tool-category-header">
+            <div class="tool-category-title-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${cat.icon}</svg>
+              <span>${escapeHtml(cat.name)}</span>
+              <span class="tool-category-status-note" style="font-size: 11px; font-weight: normal; color: var(--text-secondary); margin-left: 8px;">(${escapeHtml(cat.statusInfo)})</span>
+            </div>
+            <span class="tool-category-badge">${activeInCat} / ${toolsInCat.length}</span>
+          </div>
+          <div class="tool-category-items">
+      `;
+
+      toolsInCat.forEach(tool => {
+        const isManualEnabled = (state.toolsConfig[tool.name] !== false);
+        const isEffective = isToolEffectiveActive(tool.name);
+        const title = isCs ? tool.title_cs : tool.title_en;
+        const desc = isCs ? tool.desc_cs : tool.desc_en;
+
+        let pillClass = 'active';
+        let pillText = isCs ? 'Aktivní' : 'Active';
+        if (!isManualEnabled) {
+          pillClass = 'manual-disabled';
+          pillText = isCs ? 'Vypnuto' : 'Disabled';
+        } else if (!isEffective) {
+          pillClass = 'context-disabled';
+          pillText = isCs ? 'Kontextově vypnuto' : 'Context Off';
+        }
+
+        html += `
+          <div class="tool-item-card" data-tool="${tool.name}">
+            <div class="tool-item-info">
+              <div class="tool-item-header">
+                <span class="tool-item-title">${escapeHtml(title)}</span>
+                <code class="tool-item-name">${tool.name}()</code>
+                <span class="tool-status-pill ${pillClass}">${pillText}</span>
+              </div>
+              <div class="tool-item-desc">${escapeHtml(desc)}</div>
+            </div>
+            <label class="tool-switch" title="${isCs ? 'Přepnout aktivaci nástroje' : 'Toggle tool activation'}">
+              <input type="checkbox" class="tool-toggle-checkbox" data-tool-name="${tool.name}" ${isManualEnabled ? 'checked' : ''}>
+              <span class="tool-slider"></span>
+            </label>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('.tool-toggle-checkbox').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const tName = e.target.getAttribute('data-tool-name');
+        const val = e.target.checked;
+        state.toolsConfig[tName] = val;
+        try {
+          localStorage.setItem('polygon_tools_config', JSON.stringify(state.toolsConfig));
+        } catch (err) {}
+        renderToolsInspector();
+        updateActiveToolsBadge();
+      });
+    });
+  }
+
+  function setAllToolsEnabled(enableVal) {
+    state.toolsRegistry.forEach(t => {
+      state.toolsConfig[t.name] = Boolean(enableVal);
+    });
+    try {
+      localStorage.setItem('polygon_tools_config', JSON.stringify(state.toolsConfig));
+    } catch (err) {}
+    renderToolsInspector();
+    updateActiveToolsBadge();
+  }
+
+  function resetToolsToDefaults() {
+    state.toolsConfig = {};
+    try {
+      localStorage.removeItem('polygon_tools_config');
+    } catch (err) {}
+    renderToolsInspector();
+    updateActiveToolsBadge();
   }
 
   // ===========================================================================
@@ -1770,6 +2238,8 @@
         online_mode: Boolean(state.onlineMode),
         tools_enabled: Boolean(state.onlineMode),
         rag_enabled: Boolean(state.ragEnabled),
+        active_tools: getEffectiveActiveToolNames(),
+        mode_3d: (state.activeRightTab === '3d'),
         language: state.language || 'en',
       };
 
@@ -2115,10 +2585,19 @@
         el.viewportBadge.className = `card-badge ${data.connected ? 'badge-online' : 'badge-offline'}`;
         el.viewportBadge.textContent = data.connected ? t('viewport_active') : t('viewport_offline');
       }
+
+      updateActiveToolsBadge();
+      if (el.modalTools && el.modalTools.style.display !== 'none') {
+        renderToolsInspector();
+      }
     } catch (e) {
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = 'status-indicator offline';
         el.blenderStatusText.textContent = `Blender: ${t('blender_offline')}`;
+      }
+      updateActiveToolsBadge();
+      if (el.modalTools && el.modalTools.style.display !== 'none') {
+        renderToolsInspector();
       }
     }
   }
@@ -2586,6 +3065,10 @@
         try {
           localStorage.setItem('polygon_selected_preset', state.selectedPreset);
         } catch (err) {}
+        updateActiveToolsBadge();
+        if (el.modalTools && el.modalTools.style.display !== 'none') {
+          renderToolsInspector();
+        }
         logConsole(`Methodology: ${state.selectedPreset}`, 'info');
       });
     }
@@ -2598,6 +3081,10 @@
         try {
           localStorage.setItem('polygon_online_enabled', state.onlineMode ? 'true' : 'false');
         } catch (err) {}
+        updateActiveToolsBadge();
+        if (el.modalTools && el.modalTools.style.display !== 'none') {
+          renderToolsInspector();
+        }
         logConsole(`Web Tools: ${state.onlineMode ? 'ON' : 'OFF'}`, 'info');
       });
     }
@@ -2609,6 +3096,10 @@
         try {
           localStorage.setItem('polygon_rag_enabled', state.ragEnabled ? 'true' : 'false');
         } catch (err) {}
+        updateActiveToolsBadge();
+        if (el.modalTools && el.modalTools.style.display !== 'none') {
+          renderToolsInspector();
+        }
         logConsole(`RAG: ${state.ragEnabled ? 'ON' : 'OFF'}`, 'info');
       });
     }
@@ -2683,6 +3174,12 @@
     }
 
     // Modals open/close
+    if (el.btnTools) el.btnTools.addEventListener('click', openToolsModal);
+    if (el.btnCloseToolsModal) el.btnCloseToolsModal.addEventListener('click', closeToolsModal);
+    if (el.btnEnableAllTools) el.btnEnableAllTools.addEventListener('click', () => setAllToolsEnabled(true));
+    if (el.btnDisableAllTools) el.btnDisableAllTools.addEventListener('click', () => setAllToolsEnabled(false));
+    if (el.btnResetToolsDefaults) el.btnResetToolsDefaults.addEventListener('click', resetToolsToDefaults);
+
     if (el.btnOpenRag) el.btnOpenRag.addEventListener('click', openRagModal);
     if (el.btnCloseRagModal) el.btnCloseRagModal.addEventListener('click', closeRagModal);
     if (el.btnOpenSettings) el.btnOpenSettings.addEventListener('click', openSettingsModal);
@@ -2700,6 +3197,7 @@
 
     // Close modals when clicking backdrop
     window.addEventListener('click', (e) => {
+      if (e.target === el.modalTools) closeToolsModal();
       if (e.target === el.modalRag) closeRagModal();
       if (e.target === el.modalSettings) closeSettingsModal();
       if (e.target === el.imageLightbox) el.imageLightbox.style.display = 'none';
@@ -2760,6 +3258,7 @@
       if (e.key === 'Escape') {
         closeRagModal();
         closeSettingsModal();
+        closeToolsModal();
         if (el.imageLightbox) el.imageLightbox.style.display = 'none';
       }
     });
@@ -2773,6 +3272,7 @@
     initSidebarResizers();
     initVerticalResizers();
     applyTranslations(state.language);
+    updateActiveToolsBadge();
     setupEventListeners();
 
     logConsole(state.language === 'cs' ? 'Inicializuji Polygon Beater Web UI klienta...' : 'Initializing Polygon Beater Web UI client...', 'info');

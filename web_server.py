@@ -187,6 +187,10 @@ class ChatRequest(BaseModel):
     toolsEnabled: Optional[bool] = None
     rag_enabled: Optional[bool] = None
     ragEnabled: Optional[bool] = None
+    active_tools: Optional[list[str]] = None
+    activeTools: Optional[list[str]] = None
+    mode_3d: Optional[bool] = None
+    mode3d: Optional[bool] = None
 
 class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -433,6 +437,17 @@ async def chat_stream(req: ChatRequest, request: Request):
     req_config["language"] = req_lang
     req_config["llama"]["language"] = req_lang
     req_config["llama"]["online_mode"] = online_active
+    req_config["llama"]["rag_enabled"] = rag_active
+
+    b_cfg = config.get("blender", {})
+    b_online = is_blender_available(b_cfg.get("host", "127.0.0.1"), int(b_cfg.get("port", 9876)))
+    req_config["llama"]["blender_online"] = b_online
+    req_config["llama"]["mode_3d"] = bool(req.mode_3d if req.mode_3d is not None else req.mode3d)
+    if req.active_tools is not None:
+        req_config["llama"]["active_tools"] = req.active_tools
+    elif req.activeTools is not None:
+        req_config["llama"]["active_tools"] = req.activeTools
+
     if preset:
         req_config["llama"]["analytical_preset"] = preset
 
@@ -599,6 +614,43 @@ async def chat_stream(req: ChatRequest, request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+# ------------------------------------------------------------------------------
+# Endpoints: Registered Tools Inspector & Integrations
+# ------------------------------------------------------------------------------
+
+@app.get("/api/tools")
+def get_tools_list():
+    """Vrací seznam všech registrovaných nástrojů rozdělených do kategorií pro UI inspektor."""
+    try:
+        from llama_module import TOOL_SCHEMAS, TOOL_CATEGORIES, BLENDER_TOOL_NAMES
+        blender_cfg = config.get("blender", {})
+        b_host = blender_cfg.get("host", "127.0.0.1")
+        b_port = int(blender_cfg.get("port", 9876))
+        b_online = is_blender_available(b_host, b_port)
+
+        tools = []
+        for s in TOOL_SCHEMAS:
+            fn = s.get("function", {})
+            name = fn.get("name", "")
+            cat = TOOL_CATEGORIES.get(name, "system")
+            tools.append({
+                "name": name,
+                "category": cat,
+                "description": fn.get("description", ""),
+                "parameters": fn.get("parameters", {}),
+                "requires_blender": (name in BLENDER_TOOL_NAMES),
+            })
+        return {
+            "status": "ok",
+            "blender_online": b_online,
+            "total": len(tools),
+            "tools": tools,
+        }
+    except Exception as exc:
+        logger.error("Chyba při načítání seznamu nástrojů: %s", exc)
+        return {"status": "error", "message": str(exc), "tools": []}
+
 
 # ------------------------------------------------------------------------------
 # Endpoints: 3D Blender Bridge & Telemetrie

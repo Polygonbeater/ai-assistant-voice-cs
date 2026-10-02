@@ -1883,10 +1883,115 @@ ALLOWED_TOOL_NAMES = {
     "auto_rig_and_skin",
 }
 
+TOOL_CATEGORIES: dict[str, str] = {
+    # Web & Rešerše
+    "search_web": "web",
+    "query_local_rag": "web",
+    "query_memory_rag": "web",
+    # Systém
+    "analyze_viewport_image": "system",
+    # 3D & Blender
+    "execute_blender_code": "3d",
+    "inspect_blender_scene": "3d",
+    "mesh_doctor_audit": "3d",
+    "mesh_doctor_repair": "3d",
+    "create_product_studio": "3d",
+    "create_procedural_shader": "3d",
+    "uv_texel_audit": "3d",
+    "smart_uv_pack": "3d",
+    "generate_parametric_model": "3d",
+    "apply_modifier_stack": "3d",
+    "create_geometry_nodes_bridge": "3d",
+    "apply_fcurve_animation": "3d",
+    "create_motion_node_setup": "3d",
+    "setup_blueprint_reference": "3d",
+    "vectorize_image_to_3d": "3d",
+    "setup_compositor": "3d",
+    "generate_local_ai_mesh": "3d",
+    "auto_rig_and_skin": "3d",
+}
+
+BLENDER_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "3d"}
+WEB_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "web"}
+SYSTEM_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "system"}
+
+STANDARD_CHAT_PRESETS = {
+    "standard",
+    "vypnuto (standardní chat)",
+    "standard assistant (off)",
+    "none",
+    "null",
+    "off",
+    "",
+}
+
+
+def get_contextual_tools(
+    tools: list[dict[str, Any]] | None = None,
+    preset: str | None = None,
+    blender_online: bool | None = None,
+    mode_3d: bool = False,
+    active_tool_names: list[str] | set[str] | None = None,
+    online_mode: bool = True,
+    rag_enabled: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Kontextové filtrování nástrojů předávaných LLM modelu do systémového promptu:
+    - Pokud je aktivní profil 'Standardní chat' nebo je Blender offline (a v UI není aktivní 3D režim),
+      vyloučí 3D/Blender nástroje. Ponechá aktivní pouze obecné nástroje (např. search_web).
+    - 3D nástroje aktivuje pouze tehdy, když je Blender připojený nebo je v rozhraní aktivován 3D režim
+      (a zároveň není aktivní profil Standardní chat).
+    - Respektuje manuální zapnutí/vypnutí jednotlivých nástrojů (active_tool_names),
+      vypnutí webových nástrojů (online_mode=False) i RAG (rag_enabled=False).
+    """
+    all_schemas = TOOL_SCHEMAS if tools is None else tools
+    preset_clean = str(preset or "").strip().lower()
+    is_standard = (preset_clean in STANDARD_CHAT_PRESETS) or ("standard" in preset_clean)
+
+    # Zjištění dostupnosti Blenderu, pokud nebyla předána
+    if blender_online is None:
+        try:
+            from blender_connector import is_blender_available
+            blender_online = is_blender_available()
+        except Exception:
+            blender_online = False
+
+    # 3D nástroje jsou povoleny pouze pokud profil NENÍ Standardní chat A ZÁROVEŇ (Blender je online NEBO je aktivní 3D režim v UI)
+    allow_3d = (not is_standard) and (bool(blender_online) or bool(mode_3d))
+
+    allowed_set = set(active_tool_names) if active_tool_names is not None else None
+
+    filtered_schemas: list[dict[str, Any]] = []
+    for schema in all_schemas:
+        fn_data = schema.get("function", {})
+        tool_name = fn_data.get("name", "")
+        if not tool_name:
+            continue
+
+        # 1. Uživatelský výběr z UI inspektoru (pokud byl předán explicitní seznam)
+        if allowed_set is not None and tool_name not in allowed_set:
+            continue
+
+        # 2. Web search toggle
+        if tool_name == "search_web" and not online_mode:
+            continue
+
+        # 3. RAG toggles
+        if tool_name in ("query_local_rag", "query_memory_rag") and not rag_enabled:
+            continue
+
+        # 4. Kontextové filtrování 3D / Blender nástrojů
+        if tool_name in BLENDER_TOOL_NAMES and not allow_3d:
+            continue
+
+        filtered_schemas.append(schema)
+
+    return filtered_schemas
+
 
 def build_tool_use_prompt(tools: list[dict[str, Any]] | None = None) -> str:
     """Sestaví systémové instrukce a JSON schémata pro nativní Function Calling."""
-    tools = tools or TOOL_SCHEMAS
+    tools = TOOL_SCHEMAS if tools is None else tools
     schemas_json = json.dumps(tools, ensure_ascii=False, indent=2)
     return (
         "## DOSTUPNÉ NÁSTROJE (TOOLS):\n"
@@ -4843,9 +4948,26 @@ def generate_response(
         )
     system_prompt = f"{system_prompt}{cas_info}"
 
-    # Injektování definic nástrojů, pokud jsou nástroje povoleny
+    # Injektování definic nástrojů, pokud jsou nástroje povoleny (dynamické kontextové filtrování)
     if tools_enabled:
-        system_prompt = f"{system_prompt}\n\n{build_tool_use_prompt()}"
+        llama_cfg = config.get("llama", {})
+        blender_online_flag = llama_cfg.get("blender_online")
+        mode_3d_flag = bool(llama_cfg.get("mode_3d", False))
+        active_tools_selection = llama_cfg.get("active_tools")
+        online_flag = bool(llama_cfg.get("online_mode", True))
+        rag_flag = bool(llama_cfg.get("rag_enabled", True))
+
+        active_schemas = get_contextual_tools(
+            tools=TOOL_SCHEMAS,
+            preset=preset_name,
+            blender_online=blender_online_flag,
+            mode_3d=mode_3d_flag,
+            active_tool_names=active_tools_selection,
+            online_mode=online_flag,
+            rag_enabled=rag_flag,
+        )
+        if active_schemas:
+            system_prompt = f"{system_prompt}\n\n{build_tool_use_prompt(active_schemas)}"
 
     # Předběžná sémantická paměť (pokud je předána zvenčí nebo nástroje nejsou aktivní)
     if memory_context:
