@@ -1529,10 +1529,16 @@
               fullText = data.content || fullText;
               bodyEl.innerHTML = renderMarkdown(fullText);
               scrollToBottom();
+              state.isStreaming = false;
+              updateStreamingUi(false);
+              break;
             } else if (data.type === 'error') {
               bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
               addAgentStep(`Error: ${data.content}`, 'error', 'ERROR');
               logConsole(`Error: ${data.content}`, 'error');
+              state.isStreaming = false;
+              updateStreamingUi(false);
+              break;
             }
           } catch (e) {
             // parsing error fallback
@@ -1574,6 +1580,8 @@
       if (state.abortController) {
         state.abortController.abort();
       }
+      state.isStreaming = false;
+      updateStreamingUi(false);
       const sid = state.sessionId || '';
       await fetch('/api/chat/stop', {
         method: 'POST',
@@ -1586,12 +1594,24 @@
   }
 
   function updateStreamingUi(isStreaming) {
-    if (el.btnSend && el.btnStop && el.liveStatusBadge) {
+    if (el.btnSend) {
       el.btnSend.style.display = isStreaming ? 'none' : 'flex';
+      el.btnSend.disabled = isStreaming;
+    }
+    if (el.btnStop) {
       el.btnStop.style.display = isStreaming ? 'flex' : 'none';
+      el.btnStop.disabled = !isStreaming;
+    }
+    if (el.liveStatusBadge) {
       el.liveStatusBadge.style.display = isStreaming ? 'inline-flex' : 'none';
-      if (isStreaming) {
+      if (isStreaming && el.liveStatusText) {
         el.liveStatusText.textContent = t('thinking_status');
+      }
+    }
+    if (el.promptInput) {
+      el.promptInput.disabled = isStreaming;
+      if (!isStreaming) {
+        setTimeout(() => el.promptInput.focus(), 50);
       }
     }
     if (el.sessionsContainer) {

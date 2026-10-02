@@ -1260,8 +1260,11 @@ pre {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   gap: 12px;
+  justify-content: flex-start;
+  align-items: stretch;
 }
 
 .inspector-tab-pane:not(.active) {
@@ -1279,6 +1282,7 @@ pre {
   color: var(--text-muted);
   font-size: 11.5px;
   text-align: center;
+  flex: 1;
 }
 .tab-empty-state svg {
   width: 20px;
@@ -1293,8 +1297,10 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
-  max-height: 280px;
 }
 
 .research-source-item {
@@ -1306,6 +1312,7 @@ pre {
   flex-direction: column;
   gap: 4px;
   font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .research-source-link {
@@ -1343,6 +1350,7 @@ pre {
   flex-direction: column;
   gap: 4px;
   font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .rag-snippet-meta {
@@ -1390,6 +1398,7 @@ pre {
   margin-top: 4px;
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .tab-action-btn {
@@ -1425,6 +1434,7 @@ pre {
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .agent-step-time {
@@ -1483,33 +1493,28 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 90px;
+  flex: 0 0 auto;
+  min-height: 80px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .inspector-card[style*="height"] {
+  flex: 0 0 auto !important;
+}
+
+.inspector-card .card-header {
   flex-shrink: 0;
 }
-.inspector-card[style*="height"] #console-output,
-.inspector-card[style*="height"] .console-box {
-  flex: 1;
-  height: auto;
-  min-height: 60px;
-}
-.inspector-card[style*="height"] .quick-actions-list {
-  flex: 1;
-  overflow-y: auto;
-}
-.inspector-card[style*="height"] .viewport-image-box {
-  flex: 1;
-  min-height: 90px;
-  aspect-ratio: auto;
+
+.inspector-card .card-v-resizer {
+  flex-shrink: 0;
 }
 
 .card-v-resizer {
   height: 10px;
   cursor: row-resize;
-  margin: 6px -12px -12px -12px;
+  margin: 4px -12px -12px -12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1520,6 +1525,7 @@ pre {
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
   z-index: 5;
+  flex-shrink: 0;
 }
 
 .card-v-resizer:hover,
@@ -1570,6 +1576,8 @@ pre {
 .viewport-image-box {
   position: relative;
   width: 100%;
+  flex: 1;
+  min-height: 90px;
   aspect-ratio: 16 / 10;
   background: var(--bg-canvas);
   border-radius: 6px;
@@ -1616,6 +1624,9 @@ pre {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .metric-item {
   background: var(--bg-canvas);
@@ -1644,6 +1655,9 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .quick-action-btn {
   display: flex;
@@ -1657,6 +1671,7 @@ pre {
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 .quick-action-btn:hover {
   background: var(--bg-surface-hover);
@@ -1703,7 +1718,8 @@ pre {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 8px 10px;
-  height: 120px;
+  flex: 1;
+  min-height: 80px;
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: 11px;
