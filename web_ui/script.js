@@ -233,7 +233,7 @@
       modal_indexed_docs_header: 'Indexed Documents:',
       no_indexed_docs: 'No documents indexed yet.',
       btn_delete_doc: 'Delete',
-      btn_reindex_memory: '🔄 Reindex Semantic Memory',
+      btn_reindex_memory: 'Reindex Semantic Memory',
 
       modal_settings_title: 'AI Assistant Configuration',
       cfg_language: 'Interface Language:',
@@ -250,7 +250,7 @@
       copy_code: 'Copy',
       copied_code: 'Copied!',
       you: 'You',
-      stopped_pill: '⏹ Generation stopped',
+      stopped_pill: 'Generation stopped',
       rag_status_files: 'RAG: {docs} files ({chunks} chunks)',
       blender_connected: 'Connected',
       blender_offline: 'Offline',
@@ -359,7 +359,7 @@
       modal_indexed_docs_header: 'Indexované dokumenty:',
       no_indexed_docs: 'Zatím nejsou indexovány žádné dokumenty.',
       btn_delete_doc: 'Odstranit',
-      btn_reindex_memory: '🔄 Reindexovat sémantickou paměť',
+      btn_reindex_memory: 'Reindexovat sémantickou paměť',
 
       modal_settings_title: 'Konfigurace AI asistenta',
       cfg_language: 'Jazyk rozhraní:',
@@ -376,7 +376,7 @@
       copy_code: 'Kopírovat',
       copied_code: 'Zkopírováno!',
       you: 'Vy',
-      stopped_pill: '⏹ Generování zastaveno',
+      stopped_pill: 'Generování zastaveno',
       rag_status_files: 'RAG: {docs} souborů ({chunks} úseků)',
       blender_connected: 'Připojen',
       blender_offline: 'Offline',
@@ -775,24 +775,62 @@
       .replace(/'/g, '&#039;');
   }
 
+  // Global handler for copying code snippets
+  window.copyCode = (btn) => {
+    if (!btn) return;
+    const code = btn.dataset.code || '';
+    const checkSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    const copySvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
+    const copyLabel = escapeHtml(t('copy_code'));
+    const copiedLabel = escapeHtml(t('copied_code'));
+
+    navigator.clipboard.writeText(code).then(() => {
+      btn.innerHTML = `${checkSvg} <span>${copiedLabel}</span>`;
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.innerHTML = `${copySvg} <span>${copyLabel}</span>`;
+        btn.classList.remove('copied');
+      }, 2000);
+    }).catch(() => {});
+  };
+
   function renderMarkdown(rawText) {
     if (!rawText) return '';
 
-    // Code blocks extraction
+    // Code blocks extraction with Highlight.js
     const codeBlocks = [];
     let text = rawText.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
       const idx = codeBlocks.length;
-      const cleanLang = lang.trim() || 'code';
-      const cleanCode = escapeHtml(code.trim());
-      const copyText = escapeHtml(t('copy_code'));
-      const copiedText = escapeHtml(t('copied_code'));
+      const rawCode = code.trim();
+      const cleanLang = (lang || '').trim().toLowerCase();
+      let highlightedCode = '';
+
+      if (window.hljs) {
+        try {
+          if (cleanLang && window.hljs.getLanguage(cleanLang)) {
+            highlightedCode = window.hljs.highlight(rawCode, { language: cleanLang, ignoreIllegals: true }).value;
+          } else {
+            const autoRes = window.hljs.highlightAuto(rawCode);
+            highlightedCode = autoRes.value;
+          }
+        } catch (e) {
+          highlightedCode = escapeHtml(rawCode);
+        }
+      } else {
+        highlightedCode = escapeHtml(rawCode);
+      }
+
+      const displayLang = cleanLang || 'code';
+      const copyLabel = escapeHtml(t('copy_code'));
+      const copySvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
+
       codeBlocks.push(
         `<div class="code-block">` +
           `<div class="code-block-header">` +
-            `<span class="code-block-lang">${cleanLang}</span>` +
-            `<button class="copy-code-btn" onclick="navigator.clipboard.writeText(this.dataset.code); this.textContent='${copiedText}'; setTimeout(() => this.textContent='${copyText}', 2000);" data-code="${escapeHtml(code.trim())}">${copyText}</button>` +
+            `<span class="code-block-lang">${escapeHtml(displayLang)}</span>` +
+            `<button class="copy-code-btn" onclick="window.copyCode(this)" data-code="${escapeHtml(rawCode)}">${copySvg} <span>${copyLabel}</span></button>` +
           `</div>` +
-          `<pre><code>${cleanCode}</code></pre>` +
+          `<pre><code class="hljs ${cleanLang ? `language-${escapeHtml(cleanLang)}` : ''}">${highlightedCode}</code></pre>` +
         `</div>`
       );
       return `@@@CODEBLOCK_${idx}@@@`;
@@ -838,7 +876,7 @@
 
     // Viewport preview snapshot link detection
     text = text.replace(/(\/tmp\/[a-zA-Z0-9_\-]+\.png)/g, (match) => {
-      return `<div class="chat-viewport-embed"><img src="/api/blender/viewport-image?t=${Date.now()}" alt="Viewport Screenshot" class="clickable-snapshot" onclick="window.openLightbox(this.src)" /><span class="embed-caption">📸 ${match}</span></div>`;
+      return `<div class="chat-viewport-embed"><img src="/api/blender/viewport-image?t=${Date.now()}" alt="Viewport Screenshot" class="clickable-snapshot" onclick="window.openLightbox(this.src)" /><span class="embed-caption"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg> <span>${match}</span></span></div>`;
     });
 
     // Paragraph breaks
@@ -918,7 +956,7 @@
         </div>
         <div class="session-actions">
           <button class="session-action-btn delete-btn" title="${escapeHtml(t('delete_session_title'))}" data-action="delete">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x1="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
           </button>
         </div>
       `;
@@ -1282,7 +1320,7 @@
               bodyEl.innerHTML = renderMarkdown(fullText);
               scrollToBottom();
             } else if (data.type === 'error') {
-              bodyEl.innerHTML += `<div class="error-badge">⚠️ ${escapeHtml(data.content)}</div>`;
+              bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
               logConsole(`Error: ${data.content}`, 'error');
             }
           } catch (e) {
@@ -1306,10 +1344,10 @@
     } catch (err) {
       if (err.name === 'AbortError') {
         logConsole('Generation interrupted by user.', 'warn');
-        bodyEl.innerHTML += `<div class="tool-status-pill abort-pill">${escapeHtml(t('stopped_pill'))}</div>`;
+        bodyEl.innerHTML += `<div class="tool-status-pill abort-pill"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"></rect></svg> <span>${escapeHtml(t('stopped_pill'))}</span></div>`;
       } else {
         logConsole(`Backend communication error: ${err.message}`, 'error');
-        bodyEl.innerHTML += `<div class="error-badge">Connection Error: ${escapeHtml(err.message)}</div>`;
+        bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>Connection Error: ${escapeHtml(err.message)}</span></div>`;
       }
     } finally {
       state.isStreaming = false;
@@ -1532,11 +1570,11 @@
 
         const title = document.createElement('div');
         title.className = 'doc-item-title';
-        title.textContent = `📄 ${doc}`;
+        title.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" x2="8" y1="13" y2="13"></line><line x1="16" x2="8" y1="17" y2="17"></line><line x1="10" x2="8" y1="9" y2="9"></line></svg> <span>${escapeHtml(doc)}</span>`;
 
         const removeButton = document.createElement('button');
         removeButton.className = 'doc-delete-btn';
-        removeButton.textContent = t('btn_delete_doc');
+        removeButton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg> <span>${escapeHtml(t('btn_delete_doc'))}</span>`;
         removeButton.addEventListener('click', () => window.deleteRagDoc(doc));
 
         item.append(title, removeButton);
