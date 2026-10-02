@@ -605,7 +605,7 @@
       if (el.selectPreset) el.selectPreset.value = 'Vypnuto (Standardní chat)';
 
       if (el.cfgTemp) el.cfgTemp.value = 0.7;
-      if (el.cfgTokens) el.cfgTokens.value = 750;
+      if (el.cfgTokens) el.cfgTokens.value = 1024;
       if (el.cfgSysprompt) el.cfgSysprompt.value = '';
       if (el.cfgLanguage) el.cfgLanguage.value = 'en';
 
@@ -1440,7 +1440,7 @@
       const llama = cfg.llama || {};
 
       if (el.cfgTemp) el.cfgTemp.value = llama.temperature ?? 0.7;
-      if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 750;
+      if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 1024;
       if (el.cfgSysprompt) el.cfgSysprompt.value = llama.system_prompt ?? data.default_system_prompt ?? '';
     } catch (e) {
       logConsole(`Error loading config: ${e.message}`, 'error');
@@ -1458,7 +1458,7 @@
       }
       const payload = {
         temperature: parseFloat(el.cfgTemp.value) || 0.7,
-        max_tokens: parseInt(el.cfgTokens.value, 10) || 750,
+        max_tokens: parseInt(el.cfgTokens.value, 10) || 1024,
         system_prompt: el.cfgSysprompt.value,
       };
 

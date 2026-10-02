@@ -171,26 +171,28 @@ def get_physical_cpu_cores() -> int:
 
 def resolve_optimal_context_size(model_path: str, user_n_ctx: int | str | None = None) -> int:
     """
-    Určuje optimální velikost kontextového okna (n_ctx) pro modely Qwen2.5 a GLM-4,
-    aby KV cache zbytečně neobsazovala operační paměť RAM.
+    Určuje optimální velikost kontextového okna (n_ctx) pro modely Llama.cpp.
+    Systémový prompt, historie a rozsáhlé definice nástrojů přesahují 9500 tokenů,
+    proto je minimální výchozí velikost kontextového okna nastavena na 16384 tokenů.
     """
-    if user_n_ctx is not None and str(user_n_ctx).strip().lower() not in ("auto", "0", ""):
+    if user_n_ctx is not None and str(user_n_ctx).strip().lower() not in ("auto", ""):
         try:
             val = int(user_n_ctx)
             if val > 0:
-                return val
+                return max(val, 16384)
         except ValueError:
             pass
 
     model_lower = (model_path or "").lower()
-    # GLM-4 (40 vrstev, větší skrytý rozměr) – 3072 tokenů plně pokryje web search i analýzu a šetří RAM
+    # Modely Qwen2.5 i GLM-4 podporují rozsáhlý kontext (až 128k tokenů).
+    # Nastavení n_ctx=16384 bezpečně pojme komplexní systémové prompty a definice nástrojů
+    # při velmi rozumné spotřebě paměti KV cache (~930 MB RAM).
     if "glm-4" in model_lower or "chatglm" in model_lower:
-        return 3072
-    # Qwen2.5 (28 vrstev, efektivní GQA) – 4096 tokenů poskytne velký prostor pro kontext s nízkou režií
+        return 16384
     elif "qwen" in model_lower:
-        return 4096
+        return 16384
     else:
-        return 2048
+        return 16384
 
 
 def initialize_llama(config: dict) -> Llama:
@@ -4729,12 +4731,14 @@ def generate_response(
     # Určení maximálního počtu tokenů
     raw_max = llama_config.get('max_tokens', 'auto')
     if str(raw_max).strip().lower() in ('auto', '0', ''):
-        max_tokens = 2048 if analytical_prompt else 1536
+        max_tokens = 2048 if analytical_prompt else 1024
     else:
         try:
             max_tokens = int(raw_max)
+            if max_tokens <= 0:
+                max_tokens = 1024
         except ValueError:
-            max_tokens = 1536
+            max_tokens = 1024
 
     temperature = float(llama_config.get("temperature", 0.7))
 
@@ -4742,7 +4746,7 @@ def generate_response(
         # --- 1. TAH: Detekce volání nástroje vs. přímá odpověď ---
         first_stream = llm.create_chat_completion(
             messages=messages,
-            max_tokens=max_tokens if not tools_enabled else min(max_tokens, 750),
+            max_tokens=max_tokens if not tools_enabled else min(max_tokens, 1024),
             temperature=0.1 if tools_enabled else temperature,
             stream=True,
         )

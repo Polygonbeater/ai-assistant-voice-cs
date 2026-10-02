@@ -5,7 +5,8 @@
   },
   "llama": {
     "model": "models/glm-4-9b-chat.Q4_K_M.gguf",
-    "max_tokens": 150
+    "n_ctx": 16384,
+    "max_tokens": 1024
   },
   "tts": {
     "model_name": "tts_models/cs/cv/vits",

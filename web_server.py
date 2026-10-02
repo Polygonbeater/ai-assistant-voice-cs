@@ -194,6 +194,7 @@ class SettingsUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    n_ctx: Optional[int] = None
     analytical_preset: Optional[str] = None
     online_mode: Optional[bool] = None
     system_prompt: Optional[str] = None
@@ -760,6 +761,8 @@ def update_config(req: SettingsUpdateRequest):
         llama_cfg["temperature"] = req.temperature
     if req.max_tokens is not None:
         llama_cfg["max_tokens"] = req.max_tokens
+    if req.n_ctx is not None:
+        llama_cfg["n_ctx"] = req.n_ctx
     if req.analytical_preset is not None:
         llama_cfg["analytical_preset"] = req.analytical_preset
     if req.online_mode is not None:
