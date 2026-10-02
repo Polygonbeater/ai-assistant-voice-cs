@@ -228,6 +228,8 @@
             <!-- INPUT TEXTAREA -->
             <textarea 
               id="prompt-input" 
+              spellcheck="true"
+              lang="en"
               data-i18n-placeholder="prompt_placeholder"
               placeholder="Type a query or Blender command... (Enter to send, Shift+Enter for newline)" 
               rows="1"
@@ -243,6 +245,10 @@
 
                 <button class="action-btn mic-btn" id="btn-mic" data-i18n-title="mic_btn_title" title="Voice recording (Whisper STT)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
+                </button>
+
+                <button class="action-btn proofread-btn" id="btn-proofread" data-i18n-title="proofread_btn_title" title="Check spelling and style (AI)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 16 6-12 6 12"></path><path d="M8 12h8"></path><path d="m16 20 2 2 4-4"></path></svg>
                 </button>
                 
                 <span class="prompt-shortcut-hint" data-i18n="prompt_shortcut_hint">Enter to send • Shift+Enter for new line</span>

@@ -95,6 +95,7 @@
     btnStop: document.getElementById('btn-stop'),
     fileInput: document.getElementById('file-input'),
     btnMic: document.getElementById('btn-mic'),
+    btnProofread: document.getElementById('btn-proofread'),
     attachedFileBanner: document.getElementById('attached-file-banner'),
     attachedFileName: document.getElementById('attached-file-name'),
     btnRemoveAttachment: document.getElementById('btn-remove-attachment'),
@@ -212,6 +213,8 @@
       prompt_placeholder: 'Type a query or Blender command... (Enter to send, Shift+Enter for newline)',
       attach_file_title: 'Attach document for RAG (PDF, TXT, DOCX)',
       mic_btn_title: 'Voice recording (Whisper STT)',
+      proofread_btn_title: 'Check spelling and style (AI)',
+      proofread_empty_hint: 'Please write or paste text to proofread first.',
       prompt_shortcut_hint: 'Enter to send • Shift+Enter for new line',
       send_btn_title: 'Send message',
       stop_btn_title: 'Stop generation',
@@ -356,6 +359,8 @@
       prompt_placeholder: 'Napište dotaz nebo příkaz pro Blender... (Enter pro odeslání, Shift+Enter pro nový řádek)',
       attach_file_title: 'Připojit dokument pro RAG (PDF, TXT, DOCX)',
       mic_btn_title: 'Hlasový záznam (přepis přes Whisper)',
+      proofread_btn_title: 'Zkontrolovat pravopis a stylistiku (AI)',
+      proofread_empty_hint: 'Nejprve napište nebo vložte text ke korektuře.',
       prompt_shortcut_hint: 'Enter pro odeslání • Shift+Enter pro nový řádek',
       send_btn_title: 'Odeslat zprávu',
       stop_btn_title: 'Zastavit generování',
@@ -514,6 +519,12 @@
     if (el.selectPreset && state.selectedPreset) {
       el.selectPreset.value = state.selectedPreset;
     }
+
+    // Nativní kontrola pravopisu - dynamická aktualizace atributů lang a spellcheck
+    if (el.promptInput) {
+      el.promptInput.setAttribute('lang', lang);
+      el.promptInput.setAttribute('spellcheck', 'true');
+    }
   }
 
   function setLanguage(lang) {
@@ -522,6 +533,13 @@
     try {
       localStorage.setItem('polygon_language', lang);
     } catch (e) {}
+
+    // Dynamická aktualizace jazyka a slovníku pro nativní spellcheck
+    if (el.promptInput) {
+      el.promptInput.setAttribute('lang', lang);
+      el.promptInput.setAttribute('spellcheck', 'true');
+    }
+
     applyTranslations(lang);
     renderSessionsList();
     refreshBlenderStatus();
@@ -1386,12 +1404,55 @@
   }
 
   // ===========================================================================
-  // CHAT STREAMING (SSE POST /api/chat)
+  // AI PROOFREADING & SPELLCHECK ACTION
   // ===========================================================================
-  async function sendMessage() {
+  function showPromptHint(msg) {
+    let hint = document.getElementById('prompt-hint-toast');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'prompt-hint-toast';
+      hint.className = 'prompt-hint-toast';
+      const box = document.querySelector('.prompt-box');
+      if (box) box.appendChild(hint);
+    }
+    hint.textContent = msg;
+    hint.classList.add('show');
+    clearTimeout(hint._timer);
+    hint._timer = setTimeout(() => {
+      hint.classList.remove('show');
+    }, 2800);
+  }
+
+  async function triggerAiProofreading() {
     if (state.isStreaming) return;
 
-    const rawPrompt = el.promptInput.value.trim();
+    const rawText = el.promptInput ? el.promptInput.value.trim() : '';
+    if (!rawText) {
+      const hint = t('proofread_empty_hint');
+      showPromptHint(hint);
+      if (el.promptInput) el.promptInput.focus();
+      return;
+    }
+
+    const isCs = (state.language === 'cs');
+    const instruction = isCs
+      ? 'Proveď jazykovou, gramatickou a stylistickou korekturu následujícího textu (oprav překlepy, interpunkci a slovosled, zachovej původní význam a tón). Vypiš opravenou verzi a pod ní ve stručných odrážkách uveď provedené změny:'
+      : 'Perform linguistic, grammatical, and stylistic proofreading of the following text (fix typos, punctuation, and phrasing, preserving original meaning and tone). Output the corrected version, followed by a concise bulleted summary of changes made:';
+
+    const fullPrompt = `${instruction}\n\n"${rawText}"`;
+    await sendMessage(fullPrompt);
+  }
+
+  // ===========================================================================
+  // CHAT STREAMING (SSE POST /api/chat)
+  // ===========================================================================
+  async function sendMessage(overridePrompt = null) {
+    if (state.isStreaming) return;
+
+    const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
+      ? overridePrompt.trim()
+      : (el.promptInput ? el.promptInput.value.trim() : '');
+
     if (!rawPrompt && !state.attachedFile) return;
 
     // Default prompt when sending attachment with empty input
@@ -1406,8 +1467,10 @@
     }
 
     const promptText = effectivePrompt;
-    el.promptInput.value = '';
-    el.promptInput.style.height = 'auto';
+    if (el.promptInput) {
+      el.promptInput.value = '';
+      el.promptInput.style.height = 'auto';
+    }
 
     // Ensure valid session exists
     if (!state.sessionId) {
@@ -1743,6 +1806,16 @@
       el.btnNewChat.disabled = isStreaming;
       el.btnNewChat.style.opacity = isStreaming ? '0.5' : '1';
       el.btnNewChat.style.pointerEvents = isStreaming ? 'none' : 'auto';
+    }
+    if (el.btnProofread) {
+      el.btnProofread.disabled = isStreaming;
+      el.btnProofread.style.opacity = isStreaming ? '0.5' : '1';
+      el.btnProofread.style.pointerEvents = isStreaming ? 'none' : 'auto';
+    }
+    if (el.btnMic) {
+      el.btnMic.disabled = isStreaming;
+      el.btnMic.style.opacity = isStreaming ? '0.5' : '1';
+      el.btnMic.style.pointerEvents = isStreaming ? 'none' : 'auto';
     }
   }
 
@@ -2338,6 +2411,9 @@
 
     // Microphone toggle
     if (el.btnMic) el.btnMic.addEventListener('click', toggleMicrophoneRecording);
+
+    // AI Proofreading action
+    if (el.btnProofread) el.btnProofread.addEventListener('click', triggerAiProofreading);
 
     // Context Workspace tabs
     if (el.tabBtn3d) el.tabBtn3d.addEventListener('click', () => switchInspectorTab('3d'));

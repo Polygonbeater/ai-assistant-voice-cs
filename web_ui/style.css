@@ -962,6 +962,7 @@ pre {
 }
 
 .prompt-box {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-muted);
   border-radius: 12px;
@@ -1098,6 +1099,34 @@ pre {
 .mic-btn.recording {
   color: var(--rose-accent);
   animation: pulse 1s infinite;
+}
+.proofread-btn:hover {
+  color: var(--cyan-primary);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.prompt-hint-toast {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg-surface-elevated, #1e293b);
+  color: var(--cyan-primary, #38bdf8);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  white-space: nowrap;
+}
+.prompt-hint-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .prompt-shortcut-hint {
