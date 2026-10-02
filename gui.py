@@ -2242,7 +2242,7 @@ def load_config(path: str = "config.json") -> dict:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="AI Assistant Voice CS — GUI Launcher")
-    parser.add_argument("--web", action="store_true", help="Spustit moderní webové rozhraní Antigravity namísto desktopového GUI")
+    parser.add_argument("--web", action="store_true", help="Spustit moderní webové rozhraní Polygon Beater namísto desktopového GUI")
     args, unknown = parser.parse_known_args()
 
     if args.web:

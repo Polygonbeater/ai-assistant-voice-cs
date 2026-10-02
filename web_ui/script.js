@@ -1,5 +1,5 @@
 /**
- * ANTIGRAVITY — AI Assistant Voice CS
+ * POLYGON BEATER — AI Assistant Voice CS
  * Frontend Client Controller (script.js)
  * 100% Vanilla JavaScript, bez externích závislostí, optimalizováno pro lokální offline běh.
  */
@@ -239,7 +239,8 @@
       renderSessionsList();
 
       if (state.sessions.length > 0) {
-        const idToSelect = targetSelectId || state.sessionId || state.sessions[0].id;
+        const first = state.sessions[0];
+        const idToSelect = targetSelectId || state.sessionId || (first ? (first.session_id || first.id) : null);
         await selectSession(idToSelect);
       } else {
         await createNewSession();
@@ -264,9 +265,10 @@
     }
 
     filtered.forEach(s => {
+      const sid = s.session_id || s.id;
       const item = document.createElement('div');
-      item.className = `session-item ${s.id === state.sessionId ? 'active' : ''}`;
-      item.dataset.id = s.id;
+      item.className = `session-item ${sid === state.sessionId ? 'active' : ''}`;
+      item.dataset.id = sid;
 
       const dateStr = s.updated_at ? new Date(s.updated_at).toLocaleDateString() : '';
 
@@ -285,10 +287,10 @@
       item.addEventListener('click', (e) => {
         if (e.target.closest('[data-action="delete"]')) {
           e.stopPropagation();
-          deleteSession(s.id);
+          deleteSession(sid);
           return;
         }
-        selectSession(s.id);
+        selectSession(sid);
       });
 
       el.sessionsContainer.appendChild(item);
@@ -301,9 +303,10 @@
       if (!res.ok) throw new Error('Nepodařilo se vytvořit relaci');
       const newSess = await res.json();
       state.sessions.unshift(newSess);
-      await selectSession(newSess.id);
+      const sid = newSess.session_id || newSess.id;
+      await selectSession(sid);
       renderSessionsList();
-      logConsole(`Vytvořena nová relace: ${newSess.id}`, 'info');
+      logConsole(`Vytvořena nová relace: ${sid}`, 'info');
       el.promptInput.focus();
     } catch (err) {
       logConsole(`Chyba vytvoření relace: ${err.message}`, 'error');
@@ -325,7 +328,7 @@
       if (!res.ok) throw new Error('Relace nenalezena');
       const data = await res.json();
       
-      const current = state.sessions.find(s => s.id === sessionId);
+      const current = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (el.activeSessionTitle) {
         el.activeSessionTitle.textContent = current ? (current.title || 'Nepojmenovaná relace') : 'Konverzace';
       }
@@ -341,11 +344,12 @@
     try {
       const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Chyba při mazání relace');
-      state.sessions = state.sessions.filter(s => s.id !== sessionId);
+      state.sessions = state.sessions.filter(s => (s.session_id !== sessionId && s.id !== sessionId));
       if (state.sessionId === sessionId) {
         state.sessionId = null;
         if (state.sessions.length > 0) {
-          await selectSession(state.sessions[0].id);
+          const nextFirst = state.sessions[0];
+          await selectSession(nextFirst.session_id || nextFirst.id);
         } else {
           await createNewSession();
         }
@@ -367,7 +371,7 @@
         body: JSON.stringify({ title: clean }),
       });
       if (!res.ok) throw new Error('Nepodařilo se přejmenovat');
-      const target = state.sessions.find(s => s.id === sessionId);
+      const target = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (target) target.title = clean;
       renderSessionsList();
       logConsole(`Relace přejmenována na: ${clean}`, 'info');
@@ -420,7 +424,7 @@
 
     const isUser = role === 'user';
     const avatarLetter = isUser ? 'U' : 'A';
-    const authorName = isUser ? 'Vy' : 'Antigravity Core';
+    const authorName = isUser ? 'Vy' : 'Polygon Beater Core';
 
     card.innerHTML = `
       <div class="message-card-header">
@@ -463,6 +467,26 @@
 
     const promptText = rawPrompt;
 
+    // Zajistit platné ID aktivní relace
+    if (!state.sessionId) {
+      if (state.sessions && state.sessions.length > 0) {
+        const first = state.sessions[0];
+        state.sessionId = first.session_id || first.id;
+      } else {
+        try {
+          const sRes = await fetch('/api/sessions?title=Nov%C3%BD%20chat', { method: 'POST' });
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            state.sessionId = sData.session_id || sData.id;
+            state.sessions.unshift(sData);
+            renderSessionsList();
+          }
+        } catch (e) {
+          // fallback
+        }
+      }
+    }
+
     // Vložení uživatelské zprávy
     appendMessageCard('user', promptText, false);
 
@@ -478,21 +502,34 @@
     state.abortController = new AbortController();
 
     try {
+      const payload = {
+        session_id: state.sessionId || '',
+        sessionId: state.sessionId || '',
+        prompt: promptText,
+        message: promptText,
+        analytical_preset: state.selectedPreset || '',
+        methodology: state.selectedPreset || '',
+        online_mode: Boolean(state.onlineMode),
+        tools_enabled: Boolean(state.onlineMode),
+        rag_enabled: Boolean(state.ragEnabled),
+      };
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: state.sessionId,
-          prompt: promptText,
-          analytical_preset: state.selectedPreset,
-          online_mode: state.onlineMode,
-          rag_enabled: state.ragEnabled,
-        }),
+        body: JSON.stringify(payload),
         signal: state.abortController.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let errDetail = response.statusText;
+        try {
+          const errJson = await response.json();
+          errDetail = errJson.detail || JSON.stringify(errJson);
+        } catch (e) {
+          // ignore
+        }
+        throw new Error(`HTTP ${response.status}: ${errDetail}`);
       }
 
       const reader = response.body.getReader();
@@ -514,7 +551,11 @@
           try {
             const data = JSON.parse(jsonStr);
 
-            if (data.type === 'token') {
+            if (data.type === 'session_id') {
+              if (data.content && (!state.sessionId || state.sessionId !== data.content)) {
+                state.sessionId = data.content;
+              }
+            } else if (data.type === 'token') {
               fullText += data.content;
               bodyEl.innerHTML = renderMarkdown(fullText);
               scrollToBottom();
@@ -548,7 +589,7 @@
       }
 
       // Aktualizace názvu relace, pokud jde o první zprávu
-      const current = state.sessions.find(s => s.id === state.sessionId);
+      const current = state.sessions.find(s => (s.session_id === state.sessionId || s.id === state.sessionId));
       if (current && (current.title === 'Nový chat' || current.title === 'Nepojmenovaná relace')) {
         const autoTitle = promptText.slice(0, 32).trim() + (promptText.length > 32 ? '…' : '');
         renameSession(state.sessionId, autoTitle);
@@ -1168,7 +1209,7 @@
   // START APLIKACE
   // ===========================================================================
   async function init() {
-    logConsole('Inicializuji Antigravity Web UI klienta...', 'info');
+    logConsole('Inicializuji Polygon Beater Web UI klienta...', 'info');
     setupEventListeners();
     await loadSessions();
     await refreshSystemStatus();
@@ -1176,7 +1217,7 @@
 
     // Pravidelný polling Blenderu každých 8 sekund
     state.blenderPollInterval = setInterval(refreshBlenderStatus, 8000);
-    logConsole('Antigravity klient plně připraven k práci.', 'info');
+    logConsole('Polygon Beater klient plně připraven k práci.', 'info');
   }
 
   // Spuštění po načtení DOM

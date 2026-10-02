@@ -23,7 +23,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from blender_connector import (
     is_blender_available,
@@ -97,7 +97,7 @@ active_stop_event = threading.Event()
 # ------------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Antigravity Voice CS — Local Web Engine",
+    title="Polygon Beater Voice CS — Local Web Engine",
     description="Autonomní webové rozhraní pro lokálního hlasového a 3D asistenta.",
     version="2.3.0",
 )
@@ -115,16 +115,28 @@ app.add_middleware(
 # ------------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
-    session_id: str
-    prompt: str
+    model_config = ConfigDict(extra="allow")
+
+    session_id: Optional[str] = None
+    sessionId: Optional[str] = None
+    prompt: Optional[str] = None
+    message: Optional[str] = None
     analytical_preset: Optional[str] = None
-    online_mode: Optional[bool] = True
-    rag_enabled: Optional[bool] = True
+    analyticalPreset: Optional[str] = None
+    methodology: Optional[str] = None
+    online_mode: Optional[bool] = None
+    onlineMode: Optional[bool] = None
+    tools_enabled: Optional[bool] = None
+    toolsEnabled: Optional[bool] = None
+    rag_enabled: Optional[bool] = None
+    ragEnabled: Optional[bool] = None
 
 class SessionRenameRequest(BaseModel):
-    title: str
+    model_config = ConfigDict(extra="allow")
+    title: Optional[str] = "Přejmenovaný chat"
 
 class SettingsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     analytical_preset: Optional[str] = None
@@ -148,7 +160,7 @@ def get_system_status():
 
     return {
         "status": "online",
-        "engine": "Antigravity Local Engine v2.3",
+        "engine": "Polygon Beater Local Engine v2.3",
         "llm_loaded": _llm_instance is not None,
         "blender": {
             "connected": blender_online,
@@ -169,18 +181,27 @@ def get_system_status():
 # Endpoints: Konverzace & Relace (Sessions)
 # ------------------------------------------------------------------------------
 
+def _normalize_session_summary(s: dict) -> dict:
+    sid = s.get("session_id") or s.get("id") or ""
+    return {
+        "id": sid,
+        "session_id": sid,
+        "title": s.get("title", "Nový chat"),
+        "updated_at": s.get("updated_at", ""),
+    }
+
 @app.get("/api/sessions")
 def list_sessions():
     sessions = history_repository.list_sessions()
     if not sessions:
         new_sess = history_repository.create_session("Nový chat")
         sessions = [new_sess]
-    return {"sessions": sessions}
+    return {"sessions": [_normalize_session_summary(s) for s in sessions]}
 
 @app.post("/api/sessions")
 def create_session(title: str = "Nový chat"):
     sess = history_repository.create_session(title)
-    return sess
+    return _normalize_session_summary(sess)
 
 @app.get("/api/sessions/{session_id}")
 def get_session(session_id: str):
@@ -237,18 +258,62 @@ async def chat_stream(req: ChatRequest):
     global active_stop_event
     active_stop_event.clear()
 
-    session_id = req.session_id
-    user_prompt = req.prompt.strip()
+    # 1. Bezpečná resoluce session_id
+    session_id = (req.session_id or req.sessionId or "").strip()
+    if not session_id:
+        existing = history_repository.list_sessions()
+        if existing and (existing[0].get("session_id") or existing[0].get("id")):
+            session_id = existing[0].get("session_id") or existing[0].get("id")
+        else:
+            new_sess = history_repository.create_session("Nový chat")
+            session_id = new_sess.get("session_id") or new_sess.get("id")
+    else:
+        # Ověříme, že relace existuje na disku, jinak ji vytvoříme
+        try:
+            session_file = history_repository.sessions_dir / f"{session_id}.json"
+            if not session_file.exists():
+                session_data = {
+                    "session_id": session_id,
+                    "title": "Nový chat",
+                    "created_at": history_repository._now(),
+                    "updated_at": history_repository._now(),
+                    "messages": [],
+                }
+                history_repository._write_session(session_id, session_data)
+        except Exception as exc:
+            logger.warning("Inicializace souboru relace %s selhala: %s", session_id, exc)
+
+    # 2. Bezpečná resoluce promptu
+    user_prompt = (req.prompt or req.message or "").strip()
     if not user_prompt:
         raise HTTPException(status_code=400, detail="Prázdný dotaz.")
 
-    # 1. Uložení zprávy uživatele do historie
+    # 3. Uložení zprávy uživatele do historie
     history_repository.append(session_id, "user", user_prompt)
 
-    # 2. Příprava RAG kontextu, pokud je zapnut
+    # 4. Resoluce příznaků (RAG, Web Tools, Metodika)
+    rag_active = True
+    if req.rag_enabled is not None:
+        rag_active = bool(req.rag_enabled)
+    elif req.ragEnabled is not None:
+        rag_active = bool(req.ragEnabled)
+
+    online_active = True
+    if req.online_mode is not None:
+        online_active = bool(req.online_mode)
+    elif req.onlineMode is not None:
+        online_active = bool(req.onlineMode)
+    elif req.tools_enabled is not None:
+        online_active = bool(req.tools_enabled)
+    elif req.toolsEnabled is not None:
+        online_active = bool(req.toolsEnabled)
+
+    preset = req.analytical_preset or req.analyticalPreset or req.methodology
+
+    # 5. Příprava RAG kontextu, pokud je zapnut
     retrieved_chunks = []
     rag_context = ""
-    if req.rag_enabled and document_service and document_service.total_chunks() > 0:
+    if rag_active and document_service and document_service.total_chunks() > 0:
         try:
             retrieved_chunks = document_service.search(user_prompt, top_k=document_service.top_k)
             if retrieved_chunks:
@@ -265,17 +330,16 @@ async def chat_stream(req: ChatRequest):
             f"DOTAZ UŽIVATELE:\n{user_prompt}"
         )
 
-    # 3. Příprava historie (posledních 6 zpráv)
+    # 6. Příprava historie (posledních 6 zpráv)
     raw_history = history_repository.load_session(session_id) or []
     chat_history = raw_history[:-1][-6:] if len(raw_history) > 1 else []
 
-    # 4. Dočasné nastavení konfigurace pro request
+    # 7. Dočasné nastavení konfigurace pro request
     req_config = json.loads(json.dumps(config))
     req_config.setdefault("llama", {})
-    if req.online_mode is not None:
-        req_config["llama"]["online_mode"] = req.online_mode
-    if req.analytical_preset:
-        req_config["llama"]["analytical_preset"] = req.analytical_preset
+    req_config["llama"]["online_mode"] = online_active
+    if preset:
+        req_config["llama"]["analytical_preset"] = preset
 
     # Fronta pro přenos událostí z worker vlákna do SSE streamu
     event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
@@ -284,6 +348,7 @@ async def chat_stream(req: ChatRequest):
 
     def worker():
         llm = get_llm()
+        event_queue.put({"type": "session_id", "content": session_id})
         preset_now = req_config.get("llama", {}).get("analytical_preset", "")
 
         # Auto-detekce metodiky

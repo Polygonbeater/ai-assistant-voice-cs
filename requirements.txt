@@ -76,7 +76,7 @@ psutil>=5.9.0
 PyYAML>=6.0.0
 
 # ------------------------------------------------------------------------------
-# 7. LOCAL WEB UI & SSE API (ANTIGRAVITY WEB INTERFACE)
+# 7. LOCAL WEB UI & SSE API (POLYGON BEATER WEB INTERFACE)
 # ------------------------------------------------------------------------------
 fastapi>=0.110.0
 uvicorn>=0.28.0

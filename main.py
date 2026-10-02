@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AI Assistant Voice CS — Antigravity Web Interface Launcher
-Spouští lokální FastAPI backend a otevírá webové rozhraní Antigravity v prohlížeči.
+AI Assistant Voice CS — Polygon Beater Web Interface Launcher
+Spouští lokální FastAPI backend a otevírá webové rozhraní Polygon Beater v prohlížeči.
 """
 
 from __future__ import annotations
@@ -10,33 +10,60 @@ import argparse
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
 BANNER = r"""
-    ___    _   ___________ ________  ___ _    ________________  __
-   /   |  / | / /_  __/  _/ ____/ __ \/   | |  / /  _/_  __/\ \/ /
-  / /| | /  |/ / / /  / / // /_  / /_/ / /| | | / // /  / /    \  / 
- / ___ |/ /|  / / / _/ / // __/ / _, _/ ___ | |/ // /  / /     / /  
-/_/  |_/_/ |_/ /_/ /___//_/    /_/ |_/_/  |_|___/___/ /_/     /_/   
-                  Local Voice & 3D Assistant v2.3
+  ____   ____  _  __   ______  ___  _   _   ____  _____    _  _____ _____ ____  
+ |  _ \ / __ \| | \ \ / / ___|/ _ \| \ | | | __ )| ____|  / \|_   _| ____|  _ \ 
+ | |_) | |  | | |  \ V / |  _| | | |  \| | |  _ \|  _|   / _ \ | | |  _| | |_) |
+ |  __/| |__| | |___| || |_| | |_| | |\  | | |_) | |___ / ___ \| | | |___|  _ < 
+ |_|    \____/|_____|_| \____|\___/|_| \_| |____/|_____/_/   \_\_| |_____|_| \_\
+                     Local Voice & 3D Assistant v2.3
 """
 
-def open_browser_delayed(url: str, delay: float = 1.0) -> None:
-    """Otevře URL v prohlížeči po zadané prodlevě, aby server stihl nastartovat."""
+def wait_and_open_browser(url: str, check_url: str | None = None, poll_interval: float = 1.0, max_attempts: int = 60) -> None:
+    """
+    Aktivně dotazuje backend (urllib.request) a otevře prohlížeč až v momentě,
+    kdy server vrátí úspěšnou HTTP 200 odpověď (inicializace modelů hotova).
+    """
+    if check_url is None:
+        check_url = f"{url.rstrip('/')}/api/status"
+
     def _target():
-        time.sleep(delay)
-        print(f"\n[Antigravity] Otevírám rozhraní v prohlížeči: {url}")
+        print(f"[*] Sleduji inicializaci serveru ({check_url})...")
+        attempts = 0
+        while attempts < max_attempts:
+            time.sleep(poll_interval)
+            attempts += 1
+            try:
+                req = urllib.request.Request(check_url, headers={"User-Agent": "PolygonBeaterLauncher/2.3"})
+                with urllib.request.urlopen(req, timeout=2.0) as resp:
+                    if resp.status == 200:
+                        print(f"\n[Polygon Beater] Backend je plně připraven (HTTP 200). Otevírám rozhraní v prohlížeči: {url}")
+                        webbrowser.open_new_tab(url)
+                        return
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+                # Server ještě nenastartoval nebo inicializuje modely, zkusíme za 1s
+                continue
+            except Exception as exc:
+                print(f"[Polygon Beater] Chyba při testování dostupnosti ({exc})")
+                continue
+
+        # Fallback po vypršení maximálního počtu pokusů
+        print(f"\n[Polygon Beater] Timeout dotazování serveru. Otevírám prohlížeč: {url}")
         try:
             webbrowser.open_new_tab(url)
         except Exception as exc:
-            print(f"[Antigravity] Automatické otevření prohlížeče selhalo ({exc}). Otevřete ručně: {url}")
+            print(f"[Polygon Beater] Otevření prohlížeče selhalo: {exc}")
 
     thread = threading.Thread(target=_target, daemon=True)
     thread.start()
 
 def main():
-    parser = argparse.ArgumentParser(description="Antigravity Voice CS — Web Interface Launcher")
+    parser = argparse.ArgumentParser(description="Polygon Beater Voice CS — Web Interface Launcher")
     parser.add_argument("--host", default="127.0.0.1", help="Host rozhraní (výchozí: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Port rozhraní (výchozí: 8000)")
     parser.add_argument("--no-browser", action="store_true", help="Neotevírat automaticky webový prohlížeč")
@@ -44,12 +71,15 @@ def main():
     args = parser.parse_args()
 
     print(BANNER)
-    print(f"[*] Inicializuji lokální Antigravity engine na http://{args.host}:{args.port}")
+    print(f"[*] Inicializuji lokální Polygon Beater engine na http://{args.host}:{args.port}")
     print("[*] 100% Soukromé & Lokální prostředí (LLM, Blender Bridge, RAG Paměť, STT/TTS)")
     print("[*] Stiskněte Ctrl+C pro ukončení serveru.\n")
 
     if not args.no_browser:
-        open_browser_delayed(f"http://{args.host}:{args.port}")
+        browser_host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
+        browser_url = f"http://{browser_host}:{args.port}"
+        status_url = f"http://{browser_host}:{args.port}/api/status"
+        wait_and_open_browser(browser_url, check_url=status_url, poll_interval=1.0)
 
     import uvicorn
     uvicorn.run(

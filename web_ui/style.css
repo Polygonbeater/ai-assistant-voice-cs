@@ -1,5 +1,5 @@
 /* ==============================================================================
-   ANTIGRAVITY THEME — Precision Dark Clone for AI Assistant Voice CS
+   POLYGON BEATER THEME — Precision Dark Interface for AI Assistant Voice CS
    Matné šedé/černé pozadí, bezrámečkový třísloupcový layout, monospace pro kód.
    ============================================================================== */
 
@@ -114,10 +114,12 @@ html, body {
 }
 
 .orbital-icon {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   color: var(--cyan-primary);
-  filter: drop-shadow(0 0 6px var(--cyan-glow));
+  fill: currentColor;
+  filter: drop-shadow(0 0 8px var(--cyan-glow));
+  flex-shrink: 0;
 }
 
 .brand-title {
@@ -491,6 +493,7 @@ html, body {
   gap: 8px;
 }
 
+.polygon-select,
 .antigravity-select {
   background: var(--bg-surface);
   color: var(--text-secondary);
@@ -501,6 +504,7 @@ html, body {
   outline: none;
   cursor: pointer;
 }
+.polygon-select:focus,
 .antigravity-select:focus {
   border-color: var(--cyan-primary);
 }
@@ -571,10 +575,12 @@ html, body {
 }
 
 .hero-emblem svg {
-  width: 72px;
-  height: 72px;
-  margin-bottom: 16px;
-  filter: drop-shadow(0 0 16px var(--cyan-glow));
+  width: 86px;
+  height: 86px;
+  margin-bottom: 20px;
+  color: var(--cyan-primary);
+  fill: currentColor;
+  filter: drop-shadow(0 0 22px var(--cyan-glow));
 }
 
 .hero-heading {
@@ -985,8 +991,11 @@ pre {
   color: var(--text-secondary);
 }
 .inspector-title-group svg {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
+  color: var(--cyan-primary);
+  fill: currentColor;
+  flex-shrink: 0;
 }
 
 .icon-refresh-btn {

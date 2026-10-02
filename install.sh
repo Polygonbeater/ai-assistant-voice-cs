@@ -348,7 +348,7 @@ echo -e "  A) ${BOLD}Přes aplikaci / plochu:${NC} Poklepejte na ikonu ${CYAN}AI
 echo "  B) ${BOLD}Z terminálu:${NC}"
 echo -e "     1. ${CYAN}source venv/bin/activate${NC}"
 echo -e "     2. V Blenderu 4.2.1 LTS spusťte ${CYAN}blender_receiver.py${NC} (Alt + P)"
-echo -e "     3. ${CYAN}python main.py${NC} (Spustí moderní Antigravity Web UI na http://127.0.0.1:8000)"
+echo -e "     3. ${CYAN}python main.py${NC} (Spustí moderní Polygon Beater Web UI na http://127.0.0.1:8000)"
 echo -e "        (Případně ${CYAN}python gui.py${NC} pro starší desktopové okno)"
 echo ""
 echo -e "${PURPLE}Autor: Vítězslav Koneval (Polygon Beater)${NC}"
