@@ -1223,6 +1223,45 @@ pre {
   transform: translateX(-50%) translateY(0);
 }
 
+/* Global Floating Toast Notification */
+.global-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--text-primary);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  max-width: 380px;
+  line-height: 1.4;
+}
+.global-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.global-toast.warn {
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fbbf24;
+}
+.global-toast.error {
+  border-color: rgba(244, 63, 94, 0.6);
+  color: var(--rose-accent);
+}
+.global-toast.info {
+  border-color: rgba(56, 189, 248, 0.6);
+  color: var(--cyan-primary);
+}
+
 /* Smooth glow highlight on input when text is applied */
 @keyframes inputGlowPulse {
   0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }

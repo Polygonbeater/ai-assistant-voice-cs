@@ -495,54 +495,60 @@
 
       card_quick_actions: 'QUICK 3D COMMANDS (BLENDER)',
       qa_offline_banner: 'Blender is offline. Commands will pre-fill into chat prompt. Connect Blender to run directly.',
+      qa_offline_warning: 'Blender is offline. Commands will prefill prompt.',
+      qa_offline_toast: 'Blender is offline. Start the receiver script (blender_receiver.py) in Blender to execute directly.',
       qa_group_cad: '1. Geometry & Parametric CAD',
-      qa_group_mesh: '2. Topology Audit & 3D Print (Mesh Doctor)',
-      qa_group_materials: '3. Materials, Shaders & UV',
-      qa_group_scene: '4. Scene, Studio & Lighting',
+      qa_group_mesh: '2. Topology & 3D Print Audit (Mesh Doctor)',
+      qa_group_materials: '3. Materials, UV & Textures',
+      qa_group_scene: '4. Scene, Studio & Compositor',
       qa_group_animation: '5. Rigging & Animation',
       qa_group_executor: '6. Direct Code Execution',
 
       qa_cad_model_title: 'Parametric Model',
-      qa_cad_model_desc: 'Generate precise mechanical parts, boxes and forms by dimensions (generate_parametric_model)',
+      qa_cad_model_desc: 'Generate a parametric 3D model with following dimensions (generate_parametric_model)',
+      qa_modifiers_title: 'Apply Modifiers',
       qa_modifier_stack_title: 'Apply Modifiers',
-      qa_modifier_stack_desc: 'Optimize and collapse active modifier stack (apply_modifier_stack)',
-      qa_geonodes_title: 'Geometry Nodes',
-      qa_geonodes_desc: 'Procedurally build geometry node modifier setups (create_geometry_nodes_bridge)',
-      qa_vectorize_title: 'Vector/SVG to 3D',
-      qa_vectorize_desc: 'Extrude 2D SVG or vector curves into 3D geometry (vectorize_image_to_3d)',
+      qa_modifiers_desc: 'Apply and optimize modifier stack on the selected object (apply_modifier_stack)',
+      qa_modifier_stack_desc: 'Apply and optimize modifier stack on the selected object (apply_modifier_stack)',
+      qa_geonodes_title: 'Geometry Nodes Bridge',
+      qa_geonodes_desc: 'Create a procedural Geometry Nodes setup (create_geometry_nodes_bridge)',
+      qa_vectorize_title: 'Vector to 3D',
+      qa_vectorize_desc: 'Convert vector curve or SVG image into extruded 3D geometry (vectorize_image_to_3d)',
+      qa_aimesh_title: 'TripoSR AI Mesh',
       qa_ai_mesh_title: 'TripoSR AI Mesh',
-      qa_ai_mesh_desc: 'Fast 3D concept mesh from reference image (generate_local_ai_mesh)',
+      qa_aimesh_desc: 'Generate conceptual 3D mesh from input image via TripoSR AI (generate_local_ai_mesh)',
+      qa_ai_mesh_desc: 'Generate conceptual 3D mesh from input image via TripoSR AI (generate_local_ai_mesh)',
 
-      qa_mesh_audit_title: 'Topology Audit',
-      qa_mesh_audit_desc: 'Detect non-manifold edges, holes, self-intersections (mesh_doctor_audit)',
-      qa_mesh_repair_title: 'Auto-Repair Mesh',
-      qa_mesh_repair_desc: 'Heal holes, fix normals, dissolve degenerates (mesh_doctor_repair)',
-      qa_inspect_scene_title: 'Inspect 3D Scene',
-      qa_inspect_scene_desc: 'Full scene diagnostics, object list and telemetry (inspect_blender_scene)',
+      qa_mesh_audit_title: 'Audit Mesh Topology',
+      qa_mesh_audit_desc: 'Immediate audit of non-manifold geometry, wall thickness and holes for slicer (mesh_doctor_audit)',
+      qa_mesh_repair_title: 'Repair Mesh',
+      qa_mesh_repair_desc: 'Repair defective topology, cap holes and clean mesh for 3D print (mesh_doctor_repair)',
+      qa_inspect_scene_title: 'Inspect Scene',
+      qa_inspect_scene_desc: 'Immediate overview of objects, hierarchy, dimensions and polygon counts (inspect_blender_scene)',
 
-      qa_shader_title: 'Procedural Shader',
-      qa_shader_desc: 'Generate Principled BSDF procedural materials (create_procedural_shader)',
-      qa_texel_audit_title: 'UV Texel Audit',
-      qa_texel_audit_desc: 'Check texture resolution uniformity and UV stretching (uv_texel_audit)',
+      qa_shader_title: 'Procedural PBR Shader',
+      qa_shader_desc: 'Create procedural PBR material node tree including Principled BSDF (create_procedural_shader)',
+      qa_texel_audit_title: 'Texel Density Audit',
+      qa_texel_audit_desc: 'Immediate measurement and report of texel density across selected models (uv_texel_audit)',
       qa_smart_uv_title: 'Smart UV Pack',
-      qa_smart_uv_desc: 'Automatic unwrap and optimal island packing (smart_uv_pack)',
+      qa_smart_uv_desc: 'Perform smart UV unwrap and optimal island packing with margin (smart_uv_pack)',
 
-      qa_studio_title: 'Product Studio',
-      qa_studio_desc: '3-point studio lighting with cyclorama backdrop (create_product_studio)',
-      qa_blueprint_title: 'Blueprint Reference',
-      qa_blueprint_desc: 'Load orthographic reference sheets to side/front/top planes (setup_blueprint_reference)',
-      qa_compositor_title: 'Setup Compositor',
-      qa_compositor_desc: 'Post-processing pipeline with glare, lens distortion, color balance (setup_compositor)',
+      qa_studio_title: 'Product Photo Studio',
+      qa_studio_desc: 'Create product photo studio with backdrop, camera and 3-point lighting (create_product_studio)',
+      qa_blueprint_title: 'Blueprint References',
+      qa_blueprint_desc: 'Set up blueprint reference planes in orthographic views (setup_blueprint_reference)',
+      qa_compositor_title: 'Compositor Setup',
+      qa_compositor_desc: 'Set up render compositor passes including denoiser node (setup_compositor)',
 
       qa_autorig_title: 'Auto-Rig & Skinning',
-      qa_autorig_desc: 'Automatic armature bones setup with skin weights (auto_rig_and_skin)',
-      qa_fcurve_title: 'FCurve Animation',
-      qa_fcurve_desc: 'Procedural rotation, turntable and bobbing animation (apply_fcurve_animation)',
-      qa_motion_nodes_title: 'Motion Setup',
-      qa_motion_nodes_desc: 'Dynamic particle motion and simulation networks (create_motion_node_setup)',
+      qa_autorig_desc: 'Apply auto-rig (ARMATURE_AUTO) and vertex skinning to active mesh (auto_rig_and_skin)',
+      qa_fcurve_title: 'F-Curves & Interpolation',
+      qa_fcurve_desc: 'Apply animation keyframes and smooth F-curves (apply_fcurve_animation)',
+      qa_motion_nodes_title: 'Motion Nodes Setup',
+      qa_motion_nodes_desc: 'Configure procedural motion nodes and kinematic constraints (create_motion_node_setup)',
 
-      qa_blender_code_title: 'Execute Python Script (bpy)',
-      qa_blender_code_desc: 'Directly send and execute Python/bpy script in Blender (execute_blender_code)',
+      qa_blender_code_title: 'Run Python in Blender',
+      qa_blender_code_desc: 'Open editor dialog to directly send and execute Python code in Blender (execute_blender_code)',
       modal_blender_code_title: 'Execute Python Code in Blender',
       modal_blender_code_desc: 'Directly execute Python / bpy code in the running Blender session via TCP socket (port 9876).',
       blender_code_output_header: 'Blender Execution Output:',
@@ -704,54 +710,60 @@
 
       card_quick_actions: 'RYCHLÉ 3D PŘÍKAZY (BLENDER)',
       qa_offline_banner: 'Blender je offline. Příkazy se předvyplní do chatu. Pro přímé provedení spusťte skript v Blenderu.',
+      qa_offline_warning: 'Blender je offline. Příkazy předvyplní prompt.',
+      qa_offline_toast: 'Blender je offline. Pro přímé provedení spusťte skript (blender_receiver.py) v Blenderu.',
       qa_group_cad: '1. Geometrie a parametrické CAD modelování',
-      qa_group_mesh: '2. Audit topologie a příprava na 3D tisk (Mesh Doctor)',
+      qa_group_mesh: '2. Topologie a příprava na 3D tisk (Mesh Doctor)',
       qa_group_materials: '3. Materiály, UV a textury',
-      qa_group_scene: '4. Scéna, osvětlení a kompozitor',
+      qa_group_scene: '4. Scéna, studio a kompozitor',
       qa_group_animation: '5. Rigging a Animace',
-      qa_group_executor: '6. Přímý exekutor (Python API)',
+      qa_group_executor: '6. Přímý exekutor',
 
       qa_cad_model_title: 'Parametrický model',
-      qa_cad_model_desc: 'Generování přesných dílů, boxů a tvarů dle rozměrů (generate_parametric_model)',
+      qa_cad_model_desc: 'Vygenerování parametrického 3D modelu dílu dle rozměrů (generate_parametric_model)',
+      qa_modifiers_title: 'Aplikovat modifikátory',
       qa_modifier_stack_title: 'Aplikovat modifikátory',
-      qa_modifier_stack_desc: 'Optimalizace a sloučení zásobníku modifikátorů (apply_modifier_stack)',
+      qa_modifiers_desc: 'Aplikace a optimalizace zásobníku modifikátorů na vybraném objektu (apply_modifier_stack)',
+      qa_modifier_stack_desc: 'Aplikace a optimalizace zásobníku modifikátorů na vybraném objektu (apply_modifier_stack)',
       qa_geonodes_title: 'Geometry Nodes můstek',
-      qa_geonodes_desc: 'Procedurální generování geometrických nodů (create_geometry_nodes_bridge)',
-      qa_vectorize_title: 'Vektor / Křivka do 3D',
-      qa_vectorize_desc: 'Převedení 2D SVG/obrázku na vysunutou 3D geometrii (vectorize_image_to_3d)',
+      qa_geonodes_desc: 'Vytvoření procedurálního Geometry Nodes setupu (create_geometry_nodes_bridge)',
+      qa_vectorize_title: 'Vektor do 3D',
+      qa_vectorize_desc: 'Převedení vektorového nákresu či SVG na vysunutou 3D geometrii (vectorize_image_to_3d)',
+      qa_aimesh_title: 'TripoSR AI Mesh',
       qa_ai_mesh_title: 'TripoSR AI Mesh',
-      qa_ai_mesh_desc: 'Rychlý 3D koncept z obrázku (generate_local_ai_mesh)',
+      qa_aimesh_desc: 'Vygenerování konceptuálního 3D meshe z podkladového obrázku přes TripoSR AI (generate_local_ai_mesh)',
+      qa_ai_mesh_desc: 'Vygenerování konceptuálního 3D meshe z podkladového obrázku přes TripoSR AI (generate_local_ai_mesh)',
 
-      qa_mesh_audit_title: 'Audit topologie & tloušťky',
-      qa_mesh_audit_desc: 'Detekce non-manifold hran, děr a tenkých stěn (mesh_doctor_audit)',
-      qa_mesh_repair_title: 'Automatická oprava meshe',
-      qa_mesh_repair_desc: 'Zacelení děr, otočení normál a vyčištění degenerovaných ploch (mesh_doctor_repair)',
+      qa_mesh_audit_title: 'Audit topologie & stěn',
+      qa_mesh_audit_desc: 'Okamžité spuštění auditu non-manifold geometrie, tloušťky stěn a děr pro slicer (mesh_doctor_audit)',
+      qa_mesh_repair_title: 'Oprava meshe',
+      qa_mesh_repair_desc: 'Oprava vadné topologie, zacelení děr a vyčištění meshe pro 3D tisk (mesh_doctor_repair)',
       qa_inspect_scene_title: 'Inspekce scény',
-      qa_inspect_scene_desc: 'Kompletní výpis objektů, hierarchie a telemetrie (inspect_blender_scene)',
+      qa_inspect_scene_desc: 'Okamžitý přehled objektů, hierarchie, rozměrů a počtu polygonů (inspect_blender_scene)',
 
-      qa_shader_title: 'Procedurální shader',
-      qa_shader_desc: 'Tvorba fotorealistických materiálů (kov, sklo, plast, dřevo) (create_procedural_shader)',
-      qa_texel_audit_title: 'Audit UV & Texel density',
-      qa_texel_audit_desc: 'Kontrola rovnoměrnosti rozlišení textur a deformací mapování (uv_texel_audit)',
-      qa_smart_uv_title: 'Smart UV rozbalení & Pack',
-      qa_smart_uv_desc: 'Automatické rozbalení a optimální uspořádání UV ostrůvků (smart_uv_pack)',
+      qa_shader_title: 'Procedurální PBR shader',
+      qa_shader_desc: 'Vytvoření procedurálního PBR materiálu včetně Principled BSDF nodů (create_procedural_shader)',
+      qa_texel_audit_title: 'Audit hustoty texelů',
+      qa_texel_audit_desc: 'Okamžité přeměření a report hustoty texelů napříč vybranými modely (uv_texel_audit)',
+      qa_smart_uv_title: 'Smart UV Pack',
+      qa_smart_uv_desc: 'Chytré UV rozbalení a optimální uspořádání ostrovů s mezerami (smart_uv_pack)',
 
-      qa_studio_title: 'Produktové studio & Světla',
-      qa_studio_desc: 'Tříbodové nasvícení scény a nekonečné studiové pozadí (create_product_studio)',
-      qa_blueprint_title: 'Blueprint & Reference',
-      qa_blueprint_desc: 'Nastavení referenčních technických výkresů do ortografických pohledů (setup_blueprint_reference)',
-      qa_compositor_title: 'Kompozitor & Glare',
-      qa_compositor_desc: 'Postprodukční nodový strom (glare, korekce barev, vinětace) (setup_compositor)',
+      qa_studio_title: 'Produktové studio',
+      qa_studio_desc: 'Vytvoření produktového studia s nekonečným pozadím, kamerou a 3bodovým světlem (create_product_studio)',
+      qa_blueprint_title: 'Technické výkresy',
+      qa_blueprint_desc: 'Umístění referenčních technických výkresů do ortografických pohledů (setup_blueprint_reference)',
+      qa_compositor_title: 'Postprodukce & Kompozitor',
+      qa_compositor_desc: 'Nastavení kompozitoru pro finální render včetně denoise nodu (setup_compositor)',
 
       qa_autorig_title: 'Auto-Rig & Skinning',
-      qa_autorig_desc: 'Generování kostry a navázání vah na aktivní mesh (auto_rig_and_skin)',
-      qa_fcurve_title: 'FCurve animace (Turntable)',
-      qa_fcurve_desc: 'Plynulá rotace objektu nebo kamery, pulzování a oscilace (apply_fcurve_animation)',
-      qa_motion_nodes_title: 'Dynamika & Pohyb',
-      qa_motion_nodes_desc: 'Nodová simulace pohybu a dynamiky částic (create_motion_node_setup)',
+      qa_autorig_desc: 'Aplikace automatického auto-rigu (ARMATURE_AUTO) a skinningu na aktivní mesh (auto_rig_and_skin)',
+      qa_fcurve_title: 'Animační křivky (F-Curves)',
+      qa_fcurve_desc: 'Aplikace animace a vyhlazení F-křivek pro pohyb či rotaci (apply_fcurve_animation)',
+      qa_motion_nodes_title: 'Motion Nodes Setup',
+      qa_motion_nodes_desc: 'Nastavení procedurálních vazeb a pohybových nodů pro dynamiku (create_motion_node_setup)',
 
-      qa_blender_code_title: 'Spustit Python skript (bpy)',
-      qa_blender_code_desc: 'Přímé odeslání a spuštění Python/bpy skriptu v Blenderu (execute_blender_code)',
+      qa_blender_code_title: 'Spustit Python skript',
+      qa_blender_code_desc: 'Otevře editor nebo dialog pro přímé zadání Python skriptu do Blender API (execute_blender_code)',
       modal_blender_code_title: 'Spustit Python kód v Blenderu',
       modal_blender_code_desc: 'Přímé spuštění Python / bpy kódu v běžícím Blenderu přes TCP socket (port 9876).',
       blender_code_output_header: 'Výstup z Blenderu:',
@@ -825,42 +837,42 @@
 
   const QA_PREFILL_PROMPTS = {
     en: {
-      'btn-qa-cad-model': 'Create a parametric CAD model (generate_parametric_model) [part type: box / cylinder / flange, dimensions X=100mm, Y=50mm, Z=20mm]: ',
-      'btn-qa-modifier-stack': 'Apply and optimize modifier stack (apply_modifier_stack) on the active mesh.',
-      'btn-qa-geonodes': 'Create a procedural Geometry Nodes setup (create_geometry_nodes_bridge) [setup: scatter / instance array / mesh deformation]: ',
-      'btn-qa-vectorize': 'Vectorize image or SVG curve into 3D geometry (vectorize_image_to_3d) [file path / extrusion depth]: ',
-      'btn-qa-ai-mesh': 'Generate local AI mesh from reference image (generate_local_ai_mesh) [image path]: ',
-      'btn-qa-mesh-audit': 'Perform a mesh topology audit (mesh_doctor_audit), checking non-manifold geometry, holes and 3D print readiness.',
-      'btn-qa-mesh-repair': 'Perform automatic mesh repair (mesh_doctor_repair) for the active object - heal holes and fix normals.',
-      'btn-qa-inspect-scene': 'Inspect current Blender scene (inspect_blender_scene), retrieve object hierarchy and telemetry.',
-      'btn-qa-shader': 'Create a procedural Principled BSDF shader (create_procedural_shader) [material: brushed metal / glass / matte plastic / wood]: ',
-      'btn-qa-texel-audit': 'Audit UV mapping and texel density (uv_texel_audit) for the active object [target texture resolution: 2048px]: ',
-      'btn-qa-smart-uv': 'Unwrap and pack UV islands (smart_uv_pack) for the active mesh with optimal texture space utilization.',
-      'btn-qa-studio': 'Set up a clean product studio scene (create_product_studio) in Blender with three-point lighting and backdrop.',
-      'btn-qa-blueprint': 'Set up orthographic blueprint reference planes (setup_blueprint_reference) [path to blueprint image]: ',
-      'btn-qa-compositor': 'Configure compositor post-processing nodes (setup_compositor) with glare effect, color grading and vignette.',
-      'btn-qa-autorig': 'Generate an automatic armature skeleton and skin weights (auto_rig_and_skin) for the active mesh.',
-      'btn-qa-fcurve': 'Apply procedural FCurve animation (apply_fcurve_animation) [type: 360° turntable rotation / bobbing / levitation]: ',
-      'btn-qa-motion-nodes': 'Create dynamic motion setup or particle simulation (create_motion_node_setup) [type: particles / dynamics / turbulence]: ',
+      'btn-qa-cad-model': 'Generate a parametric 3D model with following dimensions: ',
+      'btn-qa-modifier-stack': 'Apply and optimize modifier stack on the selected object.',
+      'btn-qa-geonodes': 'Create a procedural Geometry Nodes setup for: ',
+      'btn-qa-vectorize': 'Convert vector curve/image into extruded 3D geometry.',
+      'btn-qa-ai-mesh': 'Generate conceptual 3D mesh from input image.',
+      'btn-qa-mesh-audit': 'Audit mesh topology and wall thickness for 3D printing (non-manifold geometry, holes for slicer).',
+      'btn-qa-mesh-repair': 'Repair defective topology, cap holes and clean mesh for 3D print.',
+      'btn-qa-inspect-scene': 'Inspect scene in Blender and report object hierarchy, dimensions, and polygon counts.',
+      'btn-qa-shader': 'Create procedural PBR material (type, color, roughness): ',
+      'btn-qa-texel-audit': 'Measure and report texel density across selected models.',
+      'btn-qa-smart-uv': 'Perform smart UV unwrap and optimal island packing with margin: ',
+      'btn-qa-studio': 'Create product photo studio with backdrop, camera and 3-point lighting.',
+      'btn-qa-blueprint': 'Set up blueprint reference planes in orthographic views.',
+      'btn-qa-compositor': 'Set up render compositor passes including denoiser.',
+      'btn-qa-autorig': 'Apply auto-rig (ARMATURE_AUTO) and vertex skinning to active mesh.',
+      'btn-qa-fcurve': 'Apply animation keyframes and smooth F-curves for: ',
+      'btn-qa-motion-nodes': 'Configure procedural motion nodes and constraints for: ',
     },
     cs: {
-      'btn-qa-cad-model': 'Vytvoř parametrický CAD model (generate_parametric_model) [typ dílu: box / válec / příruba, rozměry X=100mm, Y=50mm, Z=20mm]: ',
-      'btn-qa-modifier-stack': 'Aplikuj a optimalizuj zásobník modifikátorů (apply_modifier_stack) na aktivní mesh.',
-      'btn-qa-geonodes': 'Vytvoř procedurální Geometry Nodes setup (create_geometry_nodes_bridge) [nastavení: scatter / pole instancí / deformace]: ',
-      'btn-qa-vectorize': 'Převeď vektorovou křivku nebo SVG do 3D geometrie (vectorize_image_to_3d) [cesta k souboru / tloušťka vysunutí]: ',
-      'btn-qa-ai-mesh': 'Vygeneruj lokální AI mesh z referenčního obrázku (generate_local_ai_mesh) [cesta k obrázku]: ',
-      'btn-qa-mesh-audit': 'Proveď topologický audit meshe (mesh_doctor_audit), zkontroluj non-manifold hrany, díry a připravenost na 3D tisk.',
-      'btn-qa-mesh-repair': 'Proveď automatickou opravu geometrie (mesh_doctor_repair) pro aktivní mesh – zacel díry a oprav normály.',
-      'btn-qa-inspect-scene': 'Prozkoumej aktuální scénu v Blenderu (inspect_blender_scene), zjisti hierarchii objektů a telemetrii.',
-      'btn-qa-shader': 'Vytvoř procedurální Principled BSDF shader (create_procedural_shader) [materiál: kartáčovaný kov / sklo / matný plast / dřevo]: ',
-      'btn-qa-texel-audit': 'Zkontroluj UV mapování a texel density (uv_texel_audit) pro aktivní objekt [cílové rozlišení: 2048px]: ',
-      'btn-qa-smart-uv': 'Rozbal a zabal UV ostrůvky (smart_uv_pack) pro aktivní mesh s optimálním využitím plochy.',
-      'btn-qa-studio': 'Vytvoř v Blenderu produktové studio (create_product_studio) s tříbodovým osvětlením a studiovým pozadím.',
-      'btn-qa-blueprint': 'Nastav referenční technické výkresy (setup_blueprint_reference) do ortografických pohledů [cesta k výkresu]: ',
-      'btn-qa-compositor': 'Nastav postprodukční uzly v kompozitoru (setup_compositor) pro glare efekt, korekci barev a vinětaci.',
-      'btn-qa-autorig': 'Vygeneruj automatickou kostru armature a navaž váhy (auto_rig_and_skin) na aktivní mesh.',
-      'btn-qa-fcurve': 'Aplikuj FCurve procedurální animaci (apply_fcurve_animation) [typ: turntable rotace 360° / pulzování / levitace]: ',
-      'btn-qa-motion-nodes': 'Vytvoř dynamickou simulaci pohybu nebo částicový systém (create_motion_node_setup) [typ: částice / dynamika / turbulence]: ',
+      'btn-qa-cad-model': 'Vygeneruj parametrický 3D model dílu s těmito rozměry: ',
+      'btn-qa-modifier-stack': 'Aplikuj a optimalizuj zásobník modifikátorů na vybraném objektu.',
+      'btn-qa-geonodes': 'Vytvoř procedurální Geometry Nodes setup pro: ',
+      'btn-qa-vectorize': 'Převeď vektorový nákres na vysunutou 3D geometrii.',
+      'btn-qa-ai-mesh': 'Vygeneruj konceptuální 3D mesh z podkladového obrázku.',
+      'btn-qa-mesh-audit': 'Proveď audit topologie a stěn meshe pro 3D tisk (non-manifold hrany, díry pro slicer).',
+      'btn-qa-mesh-repair': 'Oprav vadnou topologii, zacel díry a vyčisti mesh pro 3D tisk.',
+      'btn-qa-inspect-scene': 'Prozkoumej scénu v Blenderu a vypiš přehled objektů, hierarchii, rozměry a počet polygonů.',
+      'btn-qa-shader': 'Vytvoř procedurální PBR materiál (typ, barva, drsnost): ',
+      'btn-qa-texel-audit': 'Přeměř a vypiš report hustoty texelů (Texel Density) napříč vybranými modely.',
+      'btn-qa-smart-uv': 'Proveď chytré UV rozbalení a optimální uspořádání ostrovů s mezerami: ',
+      'btn-qa-studio': 'Vytvoř produktové studio s nekonečným pozadím, kamerou a 3bodovým světlem.',
+      'btn-qa-blueprint': 'Umísti referenční technické výkresy do ortografických pohledů (přední, boční, horní).',
+      'btn-qa-compositor': 'Nastav kompozitor pro finální render včetně denoise nodu.',
+      'btn-qa-autorig': 'Aplikuj automatický auto-rig (ARMATURE_AUTO) a skinning na aktivní mesh.',
+      'btn-qa-fcurve': 'Aplikuj animaci a vyhlaď F-křivky pro: ',
+      'btn-qa-motion-nodes': 'Nastav procedurální vazby a pohybové nody pro: ',
     }
   };
 
@@ -2152,6 +2164,23 @@
     }, 2800);
   }
 
+  function showToast(msg, type = 'info') {
+    let toast = document.getElementById('global-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'global-toast';
+      document.body.appendChild(toast);
+    }
+    toast.className = `global-toast ${type}`;
+    toast.textContent = msg;
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3800);
+  }
+
   function extractCorrectedText(text) {
     if (!text || typeof text !== 'string') return null;
 
@@ -2864,9 +2893,7 @@
   const DIRECT_3D_ACTIONS = {
     'btn-qa-inspect-scene': () => takeBlenderInspection(),
     'btn-qa-mesh-audit': () => executeQuick3DAction('/api/blender/mesh-doctor?action=audit', 'Mesh Doctor Audit'),
-    'btn-qa-mesh-repair': () => executeQuick3DAction('/api/blender/mesh-doctor?action=repair', 'Mesh Doctor Repair'),
-    'btn-qa-studio': () => executeQuick3DAction('/api/blender/product-studio', 'Product Studio'),
-    'btn-qa-autorig': () => executeQuick3DAction('/api/blender/auto-rig', 'Auto-Rig & Skinning')
+    'btn-qa-texel-audit': () => executeQuick3DAction('/api/blender/uv-audit', 'Texel Density Audit')
   };
 
   function openBlenderCodeModal() {
@@ -3446,13 +3473,36 @@ print(f"Active object: {act.name if act else 'None'}")
     document.querySelectorAll('.qa-tool-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.id;
+
+        // Visual toast warning in offline mode
+        if (!state.blenderConnected) {
+          showToast(t('qa_offline_toast'), 'warn');
+          if (id === 'btn-qa-blender-code') {
+            openBlenderCodeModal();
+            return;
+          }
+          const lang = state.language || 'en';
+          const prefill = (QA_PREFILL_PROMPTS[lang] && QA_PREFILL_PROMPTS[lang][id])
+            || (QA_PREFILL_PROMPTS['en'] && QA_PREFILL_PROMPTS['en'][id])
+            || btn.dataset.prompt;
+
+          if (prefill) {
+            setPromptInputAndFocus(prefill);
+            logConsole(lang === 'cs'
+              ? 'Blender je offline. Příkaz byl předvyplněn do chatu pro asistenta.'
+              : 'Blender is offline. Command was pre-filled into chat for assistant.', 'info');
+          }
+          return;
+        }
+
+        // Online mode execution
         if (id === 'btn-qa-blender-code') {
           openBlenderCodeModal();
           return;
         }
 
         const isDirect = Boolean(DIRECT_3D_ACTIONS[id]);
-        if (isDirect && state.blenderConnected) {
+        if (isDirect) {
           DIRECT_3D_ACTIONS[id]();
           return;
         }
@@ -3465,11 +3515,6 @@ print(f"Active object: {act.name if act else 'None'}")
 
         if (prefill) {
           setPromptInputAndFocus(prefill);
-          if (!state.blenderConnected && isDirect) {
-            logConsole(lang === 'cs'
-              ? 'Blender je offline. Příkaz byl předvyplněn do chatu pro asistenta.'
-              : 'Blender is offline. Command was pre-filled into chat for assistant.', 'info');
-          }
         }
       });
     });

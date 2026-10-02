@@ -36,6 +36,7 @@ from blender_connector import (
     request_procedural_shader,
     request_product_studio,
     request_scene_inspection,
+    request_uv_audit,
     send_code_to_blender,
 )
 from document_service import ConversationMemoryService, DocumentService
@@ -704,6 +705,13 @@ def blender_procedural_shader(shader_type: str = "brushed_metal", material_name:
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
     return request_procedural_shader(material_name=material_name, shader_type=shader_type, host=host, port=port)
+
+@app.post("/api/blender/uv-audit")
+def blender_uv_audit(texture_res: int = 2048):
+    b_cfg = config.get("blender", {})
+    host = b_cfg.get("host", "127.0.0.1")
+    port = int(b_cfg.get("port", 9876))
+    return request_uv_audit(host=host, port=port, texture_res=texture_res)
 
 class BlenderExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
