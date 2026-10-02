@@ -385,12 +385,18 @@ def initialize_llama(config: dict) -> Llama:
             n_threads_batch=n_threads_batch,
             use_mmap=use_mmap,
             use_mlock=use_mlock,
-            verbose=False,
+            verbose=bool(llama_cfg.get('verbose', False)),
         )
-        logging.info(
-            f"Llama model úspěšně inicializován na CPU "
-            f"({n_threads} fyzických vláken, n_ctx={n_ctx})."
-        )
+        if n_gpu_layers > 0:
+            logging.info(
+                f"Llama model úspěšně inicializován v hybridním režimu (Vulkan GPU offload: {n_gpu_layers} vrstev, "
+                f"CPU: {n_threads} fyzických vláken, n_ctx={n_ctx})."
+            )
+        else:
+            logging.info(
+                f"Llama model úspěšně inicializován na CPU "
+                f"({n_threads} fyzických vláken, n_ctx={n_ctx})."
+            )
         return llm
     except Exception as e:
         logging.error(f"Chyba při inicializaci Llama modelu: {e}")
@@ -2243,7 +2249,7 @@ class UnifiedToolDispatcher:
         from web_search import search_web_multi_source
         try:
             context, sources = search_web_multi_source(
-                query, max_sources=3, max_total_chars=3600, max_chars_per_source=1200, return_sources=True
+                query, max_sources=3, max_total_chars=1050, max_chars_per_source=350, return_sources=True
             )
             return {
                 "status": "success",

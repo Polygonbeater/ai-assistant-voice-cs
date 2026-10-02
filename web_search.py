@@ -384,8 +384,8 @@ async def _fetch_and_clean_article_async(
 async def search_multi_source_async(
     queries: list[str],
     max_sources: int = 3,
-    max_total_chars: int = 3600,
-    max_chars_per_source: int = 1200
+    max_total_chars: int = 1050,
+    max_chars_per_source: int = 350
 ) -> tuple[str, list[dict]]:
     """
     Kompletní asynchronní Multi-Source vyhledávací pipeline:
@@ -474,8 +474,8 @@ async def search_multi_source_async(
     # 4. Dynamické přizpůsobení délky obsahu (budgeting) proti přetečení kontextu LLM
     valid_sources = valid_sources[:max_sources]
     n_sources = len(valid_sources)
-    # Přísný limit: max 1 200 znaků na zdroj a celkem nejvýše max_total_chars (3600 znaků)
-    per_source_max = min(max_chars_per_source, max(500, max_total_chars // max(1, n_sources))) if n_sources else max_chars_per_source
+    # Přísný limit pro rychlou syntézu: max. 350 znaků na zdroj a celkem nejvýše max_total_chars (1050 znaků)
+    per_source_max = min(max_chars_per_source, max(150, max_total_chars // max(1, n_sources))) if n_sources else max_chars_per_source
 
     formatted_docs = []
     for idx, src in enumerate(valid_sources, start=1):
@@ -490,7 +490,7 @@ async def search_multi_source_async(
             f"<source_content>\n{trimmed_content}\n</source_content>"
         )
         formatted_docs.append(doc_block)
-        src["snippet"] = trimmed_content[:250].strip()
+        src["snippet"] = trimmed_content[:350].strip()
 
     # 5. Sestavení instrukcí pro LLM syntézu
     header = (
@@ -517,8 +517,8 @@ async def search_multi_source_async(
 def search_web_multi_source(
     queries: list[str] | str,
     max_sources: int = 3,
-    max_total_chars: int = 3600,
-    max_chars_per_source: int = 1200,
+    max_total_chars: int = 1050,
+    max_chars_per_source: int = 350,
     return_sources: bool = False,
 ) -> str | tuple[str, list[dict[str, Any]]]:
     """
@@ -552,7 +552,7 @@ def search_web_multi_source(
             "title": s.get("title", ""),
             "url": s.get("url", ""),
             "source": s.get("source", ""),
-            "snippet": s.get("snippet", "") or (s.get("content", "")[:250].strip()),
+            "snippet": s.get("snippet", "") or (s.get("content", "")[:350].strip()),
         }
         for s in valid_sources
     ]
@@ -564,4 +564,4 @@ def search_web_multi_source(
 
 def search_web_context(query: str, *, max_articles: int = 3, timeout: float = 10.0) -> str:
     """Zpětně kompatibilní rozhraní pro vyhledávání."""
-    return search_web_multi_source([query], max_sources=max_articles, max_total_chars=3600, max_chars_per_source=1200)
+    return search_web_multi_source([query], max_sources=max_articles, max_total_chars=1050, max_chars_per_source=350)
