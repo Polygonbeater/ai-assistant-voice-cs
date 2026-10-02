@@ -267,6 +267,7 @@
       <div class="sidebar-resizer resizer-right" id="resizer-right" data-i18n-title="resizer_title_right" title="Drag to resize right sidebar"></div>
 
       <!-- RIGHT COLUMN: 3D VIEWPORT & TELEMETRY INSPECTOR -->
+      <!-- RIGHT COLUMN: 3D VIEWPORT & TELEMETRY INSPECTOR (CONTEXT-AWARE WORKSPACE) -->
       <aside class="right-inspector" id="right-inspector">
         <div class="inspector-header">
           <div class="inspector-title-group">
@@ -279,127 +280,204 @@
                 </g>
               </g>
             </svg>
-            <span data-i18n="inspector_title">3D VIEWPORT & TELEMETRY</span>
+            <span data-i18n="inspector_title">CONTEXT WORKSPACE</span>
           </div>
           <button class="icon-refresh-btn" id="btn-refresh-telemetry" data-i18n-title="btn_refresh_telemetry_title" title="Refresh snapshot and metrics">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>
           </button>
         </div>
 
-        <div class="inspector-scroll-area">
+        <!-- TAB NAVIGATION -->
+        <div class="inspector-tabs-nav">
+          <button class="inspector-tab-btn active" id="tab-btn-3d" data-tab="3d" data-i18n-title="tab_3d_title" title="3D Workspace (Blender Viewport & Commands)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            <span data-i18n="tab_3d">3D Workspace</span>
+          </button>
+          <button class="inspector-tab-btn" id="tab-btn-research" data-tab="research" data-i18n-title="tab_research_title" title="Research & Knowledge Base References">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+            <span data-i18n="tab_research">Research</span>
+          </button>
+          <button class="inspector-tab-btn" id="tab-btn-agent" data-tab="agent" data-i18n-title="tab_agent_title" title="Agent Execution Log & Tool Calls">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            <span data-i18n="tab_agent">Agent Log</span>
+          </button>
+        </div>
+
+        <!-- TAB CONTENT CONTAINER -->
+        <div class="inspector-tab-content">
           
-          <!-- VIEWPORT PREVIEW CARD -->
-          <div class="inspector-card" id="card-viewport">
-            <div class="card-header">
-              <span class="card-title" data-i18n="card_viewport_title">LIVE VIEWPORT PREVIEW</span>
-              <span class="card-badge" id="viewport-badge" data-i18n="viewport_offline">Offline</span>
+          <!-- TAB PANE: 3D WORKSPACE -->
+          <div class="inspector-tab-pane active" id="pane-3d">
+            <!-- VIEWPORT PREVIEW CARD -->
+            <div class="inspector-card" id="card-viewport">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_viewport_title">LIVE VIEWPORT PREVIEW</span>
+                <span class="card-badge" id="viewport-badge" data-i18n="viewport_offline">Offline</span>
+              </div>
+              <div class="viewport-image-box">
+                <img id="viewport-snapshot-img" src="/api/blender/viewport-image" alt="3D Viewport Snapshot" title="Click to enlarge">
+                <div class="viewport-overlay-btn-wrap">
+                  <button class="viewport-snap-btn" id="btn-take-snapshot">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+                    <span data-i18n="btn_snapshot">Take screenshot</span>
+                  </button>
+                </div>
+              </div>
+              <div class="card-v-resizer" data-target="card-viewport" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="viewport-image-box">
-              <img id="viewport-snapshot-img" src="/api/blender/viewport-image" alt="3D Viewport Snapshot" title="Click to enlarge">
-              <div class="viewport-overlay-btn-wrap">
-                <button class="viewport-snap-btn" id="btn-take-snapshot">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
-                  <span data-i18n="btn_snapshot">Take screenshot</span>
+
+            <!-- SCENE METRICS GRID -->
+            <div class="inspector-card" id="card-metrics">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_metrics_title">3D SCENE METRICS</span>
+              </div>
+              <div class="metrics-grid">
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_total_objects">Total Objects</span>
+                  <span class="metric-value" id="val-total-objects">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_active_mesh">Active MESH</span>
+                  <span class="metric-value highlight" id="val-active-mesh">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_total_faces">Polygons Count</span>
+                  <span class="metric-value" id="val-total-faces">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_total_verts">Vertices Count</span>
+                  <span class="metric-value" id="val-total-verts">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_watertight">Watertight</span>
+                  <span class="metric-value" id="val-watertight">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label" data-i18n="metric_bones">Armature Bones</span>
+                  <span class="metric-value" id="val-bones">-</span>
+                </div>
+              </div>
+              <div class="card-v-resizer" data-target="card-metrics" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
+            </div>
+
+            <!-- QUICK 3D ACTIONS -->
+            <div class="inspector-card" id="card-actions">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_quick_actions">QUICK 3D COMMANDS (BLENDER)</span>
+              </div>
+              <div class="quick-actions-list">
+                <button class="quick-action-btn" id="btn-quick-inspect">
+                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg></span>
+                  <div class="qa-info">
+                    <div class="qa-title" data-i18n="qa_inspect_title">Viewport Inspection</div>
+                    <div class="qa-sub" data-i18n="qa_inspect_sub">Snapshot & telemetry collection</div>
+                  </div>
+                </button>
+                
+                <button class="quick-action-btn" id="btn-quick-autorig">
+                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
+                  <div class="qa-info">
+                    <div class="qa-title" data-i18n="qa_autorig_title">Auto-Rig & Skinning</div>
+                    <div class="qa-sub" data-i18n="qa_autorig_sub">Armature + ARMATURE_AUTO</div>
+                  </div>
+                </button>
+
+                <button class="quick-action-btn" id="btn-quick-meshdoctor">
+                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg></span>
+                  <div class="qa-info">
+                    <div class="qa-title" data-i18n="qa_meshdoctor_title">Mesh Doctor Audit</div>
+                    <div class="qa-sub" data-i18n="qa_meshdoctor_sub">Check manifold mesh for 3D printing</div>
+                  </div>
+                </button>
+
+                <button class="quick-action-btn" id="btn-quick-studio">
+                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span>
+                  <div class="qa-info">
+                    <div class="qa-title" data-i18n="qa_studio_title">Product Studio</div>
+                    <div class="qa-sub" data-i18n="qa_studio_sub">3-point AREA lighting + backdrop</div>
+                  </div>
+                </button>
+
+                <button class="quick-action-btn" id="btn-quick-shader">
+                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg></span>
+                  <div class="qa-info">
+                    <div class="qa-title" data-i18n="qa_shader_title">Brushed Metal (Shader)</div>
+                    <div class="qa-sub" data-i18n="qa_shader_sub">Procedural Principled BSDF tree</div>
+                  </div>
                 </button>
               </div>
+              <div class="card-v-resizer" data-target="card-actions" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="card-v-resizer" data-target="card-viewport" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
-          <!-- SCENE METRICS GRID -->
-          <div class="inspector-card" id="card-metrics">
-            <div class="card-header">
-              <span class="card-title" data-i18n="card_metrics_title">3D SCENE METRICS</span>
+          <!-- TAB PANE: RESEARCH (WEB SEARCH & RAG EXCERPTS) -->
+          <div class="inspector-tab-pane" id="pane-research" style="display: none;">
+            <!-- WEB RESEARCH & CITATIONS CARD -->
+            <div class="inspector-card" id="card-web-research">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_web_research_title">LIVE WEB RESEARCH & SOURCES</span>
+                <span class="card-badge" id="badge-research-count">0 sources</span>
+              </div>
+              <div class="research-sources-feed" id="research-sources-list">
+                <div class="tab-empty-state">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <span data-i18n="no_web_research">No web research queries in this session.</span>
+                </div>
+              </div>
+              <div class="card-v-resizer" data-target="card-web-research" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="metrics-grid">
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_total_objects">Total Objects</span>
-                <span class="metric-value" id="val-total-objects">-</span>
+
+            <!-- SEMANTIC MEMORY (RAG) CHUNKS CARD -->
+            <div class="inspector-card" id="card-rag-context">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_rag_context_title">SEMANTIC MEMORY (RAG) CHUNKS</span>
+                <span class="card-badge" id="badge-rag-count">0 chunks</span>
               </div>
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_active_mesh">Active MESH</span>
-                <span class="metric-value highlight" id="val-active-mesh">-</span>
+              <div class="rag-snippets-feed" id="rag-snippets-list">
+                <div class="tab-empty-state">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"></path></svg>
+                  <span data-i18n="no_rag_context">No semantic memory queries performed yet.</span>
+                </div>
               </div>
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_total_faces">Polygons Count</span>
-                <span class="metric-value" id="val-total-faces">-</span>
+              <div class="card-footer-action">
+                <button class="tab-action-btn" id="btn-open-knowledge-from-tab">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+                  <span data-i18n="btn_open_knowledge_modal">Open Knowledge Base</span>
+                </button>
               </div>
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_total_verts">Vertices Count</span>
-                <span class="metric-value" id="val-total-verts">-</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_watertight">Watertight</span>
-                <span class="metric-value" id="val-watertight">-</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label" data-i18n="metric_bones">Armature Bones</span>
-                <span class="metric-value" id="val-bones">-</span>
-              </div>
+              <div class="card-v-resizer" data-target="card-rag-context" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="card-v-resizer" data-target="card-metrics" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
-          <!-- QUICK 3D ACTIONS -->
-          <div class="inspector-card" id="card-actions">
-            <div class="card-header">
-              <span class="card-title" data-i18n="card_quick_actions">QUICK 3D COMMANDS (BLENDER)</span>
+          <!-- TAB PANE: AGENT LOG -->
+          <div class="inspector-tab-pane" id="pane-agent" style="display: none;">
+            <!-- AGENT EXECUTION TIMELINE CARD -->
+            <div class="inspector-card" id="card-agent-steps">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_agent_steps_title">AGENT WORKFLOW & TOOL TRACES</span>
+                <button class="clear-log-btn" id="btn-clear-agent-steps" data-i18n="btn_clear_console">Clear</button>
+              </div>
+              <div class="agent-steps-feed" id="agent-steps-timeline">
+                <div class="tab-empty-state">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span data-i18n="no_agent_steps">Waiting for agent actions...</span>
+                </div>
+              </div>
+              <div class="card-v-resizer" data-target="card-agent-steps" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="quick-actions-list">
-              <button class="quick-action-btn" id="btn-quick-inspect">
-                <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg></span>
-                <div class="qa-info">
-                  <div class="qa-title" data-i18n="qa_inspect_title">Viewport Inspection</div>
-                  <div class="qa-sub" data-i18n="qa_inspect_sub">Snapshot & telemetry collection</div>
-                </div>
-              </button>
-              
-              <button class="quick-action-btn" id="btn-quick-autorig">
-                <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
-                <div class="qa-info">
-                  <div class="qa-title" data-i18n="qa_autorig_title">Auto-Rig & Skinning</div>
-                  <div class="qa-sub" data-i18n="qa_autorig_sub">Armature + ARMATURE_AUTO</div>
-                </div>
-              </button>
 
-              <button class="quick-action-btn" id="btn-quick-meshdoctor">
-                <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg></span>
-                <div class="qa-info">
-                  <div class="qa-title" data-i18n="qa_meshdoctor_title">Mesh Doctor Audit</div>
-                  <div class="qa-sub" data-i18n="qa_meshdoctor_sub">Check manifold mesh for 3D printing</div>
-                </div>
-              </button>
-
-              <button class="quick-action-btn" id="btn-quick-studio">
-                <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span>
-                <div class="qa-info">
-                  <div class="qa-title" data-i18n="qa_studio_title">Product Studio</div>
-                  <div class="qa-sub" data-i18n="qa_studio_sub">3-point AREA lighting + backdrop</div>
-                </div>
-              </button>
-
-              <button class="quick-action-btn" id="btn-quick-shader">
-                <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg></span>
-                <div class="qa-info">
-                  <div class="qa-title" data-i18n="qa_shader_title">Brushed Metal (Shader)</div>
-                  <div class="qa-sub" data-i18n="qa_shader_sub">Procedural Principled BSDF tree</div>
-                </div>
-              </button>
+            <!-- REALTIME CONSOLE / TELEMETRY LOG -->
+            <div class="inspector-card" id="card-console">
+              <div class="card-header">
+                <span class="card-title" data-i18n="card_console_title">TELEMETRIC CONSOLE</span>
+                <button class="clear-log-btn" id="btn-clear-console" data-i18n="btn_clear_console">Clear</button>
+              </div>
+              <div class="console-box" id="console-output">
+                <div class="console-line info">[System] Polygon Beater Web Engine initialized.</div>
+                <div class="console-line">[Socket] Waiting for Blender TCP events...</div>
+              </div>
+              <div class="card-v-resizer" data-target="card-console" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
-            <div class="card-v-resizer" data-target="card-actions" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
-          </div>
-
-          <!-- REALTIME CONSOLE / TELEMETRY LOG -->
-          <div class="inspector-card" id="card-console">
-            <div class="card-header">
-              <span class="card-title" data-i18n="card_console_title">TELEMETRIC CONSOLE</span>
-              <button class="clear-log-btn" id="btn-clear-console" data-i18n="btn_clear_console">Clear</button>
-            </div>
-            <div class="console-box" id="console-output">
-              <div class="console-line info">[System] Polygon Beater Web Engine initialized.</div>
-              <div class="console-line">[Socket] Waiting for Blender TCP events...</div>
-            </div>
-            <div class="card-v-resizer" data-target="card-console" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
         </div>

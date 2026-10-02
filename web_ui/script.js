@@ -14,6 +14,7 @@
     language: 'en',
     leftSidebarWidth: '280px',
     rightSidebarWidth: '340px',
+    activeRightTab: '3d',
 
     sessionId: null,
     sessions: [],
@@ -57,6 +58,25 @@
     btnNewChat: document.getElementById('btn-new-chat'),
     sessionSearch: document.getElementById('session-search-input'),
     sessionsContainer: document.getElementById('sessions-container'),
+
+    // Inspector Tabs & Panes
+    tabBtn3d: document.getElementById('tab-btn-3d'),
+    tabBtnResearch: document.getElementById('tab-btn-research'),
+    tabBtnAgent: document.getElementById('tab-btn-agent'),
+    pane3d: document.getElementById('pane-3d'),
+    paneResearch: document.getElementById('pane-research'),
+    paneAgent: document.getElementById('pane-agent'),
+
+    // Research Feeds
+    researchSourcesList: document.getElementById('research-sources-list'),
+    badgeResearchCount: document.getElementById('badge-research-count'),
+    ragSnippetsList: document.getElementById('rag-snippets-list'),
+    badgeRagCount: document.getElementById('badge-rag-count'),
+    btnOpenKnowledgeFromTab: document.getElementById('btn-open-knowledge-from-tab'),
+
+    // Agent Steps
+    agentStepsTimeline: document.getElementById('agent-steps-timeline'),
+    btnClearAgentSteps: document.getElementById('btn-clear-agent-steps'),
 
     // Chat
     activeSessionTitle: document.getElementById('active-session-title'),
@@ -198,6 +218,12 @@
       resizer_title_right: 'Drag to resize right sidebar',
       inspector_title: '3D VIEWPORT & TELEMETRY',
       btn_refresh_telemetry_title: 'Refresh snapshot and metrics',
+      tab_3d: '3D Workspace',
+      tab_3d_title: '3D Workspace (Blender Viewport & Commands)',
+      tab_research: 'Research',
+      tab_research_title: 'Web Research & Knowledge Base References',
+      tab_agent: 'Agent Log',
+      tab_agent_title: 'Agent Execution Workflow & Tool Traces',
       card_viewport_title: 'LIVE VIEWPORT PREVIEW',
       viewport_active: 'Active',
       viewport_offline: 'Offline',
@@ -224,6 +250,14 @@
       qa_studio_sub: '3-point AREA lighting + backdrop',
       qa_shader_title: 'Brushed Metal (Shader)',
       qa_shader_sub: 'Procedural Principled BSDF tree',
+
+      card_web_research_title: 'LIVE WEB RESEARCH & SOURCES',
+      no_web_research: 'No web research queries in this session.',
+      card_rag_context_title: 'SEMANTIC MEMORY (RAG) CHUNKS',
+      no_rag_context: 'No semantic memory queries performed yet.',
+      btn_open_knowledge_modal: 'Open Knowledge Base',
+      card_agent_steps_title: 'AGENT WORKFLOW & TOOL TRACES',
+      no_agent_steps: 'Waiting for agent actions...',
       card_console_title: 'TELEMETRIC CONSOLE',
       btn_clear_console: 'Clear',
 
@@ -258,6 +292,8 @@
       error_save_config: 'Failed to save configuration',
       error_saving_config: 'Error saving configuration',
       log_session_deleted: 'Session {id} deleted.',
+      sources_count: '{count} sources',
+      chunks_count: '{count} chunks',
     },
     cs: {
       status_llm: 'Qwen2.5-7B GGUF',
@@ -324,6 +360,12 @@
       resizer_title_right: 'Tažením změnit šířku pravého panelu',
       inspector_title: '3D VIEWPORT & TELEMETRIE',
       btn_refresh_telemetry_title: 'Obnovit snímek a metriky',
+      tab_3d: '3D Workspace',
+      tab_3d_title: '3D Pracovní plocha (Blender Viewport & Příkazy)',
+      tab_research: 'Rešerše',
+      tab_research_title: 'Webové rešerše a citace z báze znalostí',
+      tab_agent: 'Agent Log',
+      tab_agent_title: 'Kroky agenta a volání nástrojů',
       card_viewport_title: 'ŽIVÝ NÁHLED VIEWPORTU',
       viewport_active: 'Aktivní',
       viewport_offline: 'Offline',
@@ -350,6 +392,14 @@
       qa_studio_sub: 'Tříbodové AREA světlo + pozadí',
       qa_shader_title: 'Kartáčovaný kov (Shader)',
       qa_shader_sub: 'Procedurální Principled BSDF strom',
+
+      card_web_research_title: 'WEBOVÉ REŠERŠE & ZDROJE',
+      no_web_research: 'V této relaci zatím neproběhlo webové vyhledávání.',
+      card_rag_context_title: 'ÚRYVKY ZE SÉMANTICKÉ PAMĚTI (RAG)',
+      no_rag_context: 'Zatím nebyly načteny žádné bloky ze znalostní báze.',
+      btn_open_knowledge_modal: 'Otevřít bázi znalostí',
+      card_agent_steps_title: 'PRŮBĚH AGENTA & VOLÁNÍ NÁSTROJŮ',
+      no_agent_steps: 'Čekám na akce agenta...',
       card_console_title: 'TELEMETRICKÁ KONZOLE',
       btn_clear_console: 'Vymazat',
 
@@ -384,6 +434,8 @@
       error_save_config: 'Nepodařilo se uložit nastavení',
       error_saving_config: 'Chyba ukládání konfigurace',
       log_session_deleted: 'Relace {id} smazána.',
+      sources_count: '{count} zdrojů',
+      chunks_count: '{count} úseků',
     }
   };
 
@@ -512,6 +564,40 @@
     'meta_analysis': 'meta_analysis',
   };
 
+  function switchInspectorTab(tabName, savePref = true) {
+    const validTabs = ['3d', 'research', 'agent'];
+    const active = validTabs.includes(tabName) ? tabName : '3d';
+    state.activeRightTab = active;
+
+    const tabBtns = {
+      '3d': el.tabBtn3d,
+      'research': el.tabBtnResearch,
+      'agent': el.tabBtnAgent,
+    };
+    const tabPanes = {
+      '3d': el.pane3d,
+      'research': el.paneResearch,
+      'agent': el.paneAgent,
+    };
+
+    Object.keys(tabBtns).forEach(key => {
+      const btn = tabBtns[key];
+      const pane = tabPanes[key];
+      const isTarget = key === active;
+      if (btn) btn.classList.toggle('active', isTarget);
+      if (pane) {
+        pane.classList.toggle('active', isTarget);
+        pane.style.display = isTarget ? 'flex' : 'none';
+      }
+    });
+
+    if (savePref) {
+      try {
+        localStorage.setItem('polygon_active_right_tab', active);
+      } catch (e) {}
+    }
+  }
+
   function loadStoredPreferences() {
     try {
       // 1. Language preference (default EN)
@@ -566,6 +652,10 @@
           });
         } catch (e) {}
       }
+
+      // 6. Active Inspector tab (3d, research, agent)
+      const storedTab = localStorage.getItem('polygon_active_right_tab') || '3d';
+      switchInspectorTab(storedTab, false);
     } catch (e) {
       // Ignore localStorage read errors
     }
@@ -709,6 +799,7 @@
       localStorage.removeItem('polygon_temperature');
       localStorage.removeItem('polygon_max_tokens');
       localStorage.removeItem('polygon_system_prompt');
+      localStorage.removeItem('polygon_active_right_tab');
 
       state.language = 'en';
       state.leftSidebarWidth = '280px';
@@ -717,6 +808,7 @@
       state.ragEnabled = true;
       state.ttsEnabled = false;
       state.selectedPreset = 'standard';
+      state.activeRightTab = '3d';
 
       document.documentElement.style.setProperty('--left-sidebar-width', '280px');
       document.documentElement.style.setProperty('--right-sidebar-width', '340px');
@@ -734,11 +826,114 @@
       if (el.cfgSysprompt) el.cfgSysprompt.value = '';
       if (el.cfgLanguage) el.cfgLanguage.value = 'en';
 
+      switchInspectorTab('3d', false);
       setLanguage('en');
       closeSettingsModal();
       logConsole('Factory reset complete. Defaults restored (EN).', 'info');
     } catch (err) {
       logConsole(`Reset error: ${err.message}`, 'error');
+    }
+  }
+
+  // ===========================================================================
+  // CONTEXT WORKSPACE FEEDS: RESEARCH & AGENT TRACES
+  // ===========================================================================
+  const MAX_AGENT_STEPS = 100;
+
+  function addAgentStep(message, type = 'info', badge = 'STEP') {
+    if (!el.agentStepsTimeline || !message) return;
+
+    // Remove empty state placeholder if present
+    const emptyState = el.agentStepsTimeline.querySelector('.tab-empty-state');
+    if (emptyState) emptyState.remove();
+
+    const item = document.createElement('div');
+    item.className = `agent-step-item ${type}`;
+
+    const time = new Date().toLocaleTimeString();
+    item.innerHTML = `
+      <div class="agent-step-header">
+        <span class="agent-step-badge">${escapeHtml(badge)}</span>
+        <span class="agent-step-time">${time}</span>
+      </div>
+      <div class="agent-step-body">${escapeHtml(message)}</div>
+    `;
+
+    el.agentStepsTimeline.appendChild(item);
+
+    // Keep FIFO limit
+    while (el.agentStepsTimeline.children.length > MAX_AGENT_STEPS) {
+      el.agentStepsTimeline.removeChild(el.agentStepsTimeline.firstElementChild);
+    }
+
+    el.agentStepsTimeline.scrollTop = el.agentStepsTimeline.scrollHeight;
+  }
+
+  function clearAgentSteps() {
+    if (!el.agentStepsTimeline) return;
+    el.agentStepsTimeline.innerHTML = `
+      <div class="tab-empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>${escapeHtml(t('no_agent_steps'))}</span>
+      </div>
+    `;
+  }
+
+  function addWebResearchResult(query, results = []) {
+    if (!el.researchSourcesList) return;
+    const emptyState = el.researchSourcesList.querySelector('.tab-empty-state');
+    if (emptyState) emptyState.remove();
+
+    const item = document.createElement('div');
+    item.className = 'research-source-item';
+
+    const count = results.length;
+    let linksHtml = '';
+    if (count > 0) {
+      linksHtml = results.map(r => `
+        <a class="source-link" href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          <span>${escapeHtml(r.title || r.url || 'Web Source')}</span>
+        </a>
+      `).join('');
+    }
+
+    item.innerHTML = `
+      <div class="source-query"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> ${escapeHtml(query)}</div>
+      <div class="source-links">${linksHtml}</div>
+    `;
+
+    el.researchSourcesList.prepend(item);
+
+    const totalSources = el.researchSourcesList.querySelectorAll('.research-source-item').length;
+    if (el.badgeResearchCount) {
+      el.badgeResearchCount.textContent = t('sources_count', { count: totalSources });
+    }
+  }
+
+  function addRagSnippet(docTitle, snippetText, score = null) {
+    if (!el.ragSnippetsList) return;
+    const emptyState = el.ragSnippetsList.querySelector('.tab-empty-state');
+    if (emptyState) emptyState.remove();
+
+    const item = document.createElement('div');
+    item.className = 'rag-snippet-item';
+
+    const scoreTag = score !== null ? `<span class="snippet-score">${Math.round(score * 100)}% match</span>` : '';
+
+    item.innerHTML = `
+      <div class="snippet-header">
+        <span class="snippet-doc-name"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> ${escapeHtml(docTitle || 'Document Chunk')}</span>
+        ${scoreTag}
+      </div>
+      <div class="snippet-body">${escapeHtml(snippetText)}</div>
+    `;
+
+    el.ragSnippetsList.prepend(item);
+
+    const totalSnippets = el.ragSnippetsList.querySelectorAll('.rag-snippet-item').length;
+    if (el.badgeRagCount) {
+      el.badgeRagCount.textContent = t('chunks_count', { count: totalSnippets });
     }
   }
 
@@ -1311,9 +1506,24 @@
               if (el.liveStatusText) {
                 el.liveStatusText.textContent = data.content;
               }
+              addAgentStep(data.content, 'status', 'TOOL');
               logConsole(data.content, 'info');
               scrollToBottom();
+            } else if (data.type === 'agent_step') {
+              addAgentStep(data.content, data.step_type || 'info', data.badge || 'STEP');
+              logConsole(`[Agent Step] ${data.content}`, 'info');
+            } else if (data.type === 'web_search') {
+              addWebResearchResult(data.query || promptText, data.sources || data.results || []);
+              addAgentStep(`Web research: "${data.query || promptText}"`, 'info', 'WEB');
+            } else if (data.type === 'rag_context') {
+              if (Array.isArray(data.snippets)) {
+                data.snippets.forEach(s => addRagSnippet(s.doc || s.title, s.text || s.content, s.score));
+              } else if (data.content) {
+                addRagSnippet(data.doc || 'RAG Memory', data.content, data.score);
+              }
+              addAgentStep('Retrieved semantic memory chunks from RAG', 'info', 'RAG');
             } else if (data.type === 'methodology') {
+              addAgentStep(`Analytical methodology: ${data.content}`, 'methodology', 'FRAMEWORK');
               logConsole(`Methodology: ${data.content}`, 'info');
             } else if (data.type === 'done') {
               fullText = data.content || fullText;
@@ -1321,6 +1531,7 @@
               scrollToBottom();
             } else if (data.type === 'error') {
               bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
+              addAgentStep(`Error: ${data.content}`, 'error', 'ERROR');
               logConsole(`Error: ${data.content}`, 'error');
             }
           } catch (e) {
@@ -1985,6 +2196,19 @@
 
     // Microphone toggle
     if (el.btnMic) el.btnMic.addEventListener('click', toggleMicrophoneRecording);
+
+    // Context Workspace tabs
+    if (el.tabBtn3d) el.tabBtn3d.addEventListener('click', () => switchInspectorTab('3d'));
+    if (el.tabBtnResearch) el.tabBtnResearch.addEventListener('click', () => switchInspectorTab('research'));
+    if (el.tabBtnAgent) el.tabBtnAgent.addEventListener('click', () => switchInspectorTab('agent'));
+
+    if (el.btnOpenKnowledgeFromTab) {
+      el.btnOpenKnowledgeFromTab.addEventListener('click', openRagModal);
+    }
+
+    if (el.btnClearAgentSteps) {
+      el.btnClearAgentSteps.addEventListener('click', clearAgentSteps);
+    }
 
     // 3D Blender actions
     if (el.btnTakeSnapshot) el.btnTakeSnapshot.addEventListener('click', takeBlenderInspection);
