@@ -1494,7 +1494,7 @@
 
       // Presets
       if (data.analytical_presets && el.selectPreset) {
-        const currentVal = el.selectPreset.value;
+        const targetVal = state.selectedPreset || el.selectPreset.value;
         const existingValues = Array.from(el.selectPreset.options).map(o => o.value);
         data.analytical_presets.forEach(presetName => {
           if (!existingValues.includes(presetName)) {
@@ -1504,7 +1504,10 @@
             el.selectPreset.appendChild(opt);
           }
         });
-        if (currentVal) el.selectPreset.value = currentVal;
+        if (targetVal && Array.from(el.selectPreset.options).some(o => o.value === targetVal)) {
+          el.selectPreset.value = targetVal;
+          state.selectedPreset = targetVal;
+        }
       }
     } catch (e) {
       // Ignore

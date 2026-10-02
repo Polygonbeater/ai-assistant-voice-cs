@@ -113,6 +113,7 @@ class DesktopAppRunner:
         height: int = 900,
         use_pywebview: bool = True,
         open_as_tab: bool = False,
+        quiet: bool = False,
     ):
         self.host = host
         self.port = port
@@ -122,6 +123,7 @@ class DesktopAppRunner:
         self.height = height
         self.use_pywebview = use_pywebview
         self.open_as_tab = open_as_tab
+        self.quiet = quiet
 
         self.server: Optional[object] = None
         self.server_thread: Optional[threading.Thread] = None
@@ -133,12 +135,13 @@ class DesktopAppRunner:
     def _run_server_thread(self):
         """Spustí Uvicorn server v samostatném vlákně."""
         import uvicorn
+        log_level = "error" if self.quiet else ("warning" if not self.reload else "info")
         config = uvicorn.Config(
             "web_server:app",
             host=self.host,
             port=self.port,
             reload=self.reload,
-            log_level="warning" if not self.reload else "info",
+            log_level=log_level,
         )
         self.server = uvicorn.Server(config)
         self.server.run()
@@ -147,7 +150,8 @@ class DesktopAppRunner:
         """Spustí systémový prohlížeč v dedikovaném aplikačním režimu (--app)."""
         if self.open_as_tab:
             import webbrowser
-            logger.info("Otevírám standardní záložku v prohlížeči: %s", url)
+            if not self.quiet:
+                logger.info("Otevírám standardní záložku v prohlížeči: %s", url)
             webbrowser.open_new_tab(url)
             return None
 
@@ -167,15 +171,26 @@ class DesktopAppRunner:
             "--window-position=center",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-background-mode",
+            "--disable-session-crashed-bubble",
+            "--hide-crash-restore-bubble",
+            "--password-store=basic",
             "--disable-features=Translate,OptimizationHints,MediaRouter",
             "--disable-sync",
             "--disable-background-networking",
+            "--disable-component-update",
             "--app-id=polygon_beater_desktop",
             "--class=PolygonBeater",
         ]
-        logger.info("Spouštím samostatné desktopové okno: %s", browser_bin)
+        if not self.quiet:
+            logger.info("Spouštím samostatné desktopové okno: %s", browser_bin)
         try:
-            proc = subprocess.Popen(cmd)
+            # Přesměrování stdout/stderr na DEVNULL zamezí šumu z grafických ovladačů do terminálu
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             return proc
         except Exception as exc:
             logger.error("Chyba při spuštění okna prohlížeče: %s", exc)
@@ -190,9 +205,10 @@ class DesktopAppRunner:
                 return
             self._is_shutting_down = True
 
-        if reason:
-            print(f"\n[*] {reason}")
-        print("[*] Provádím čisté ukončení Polygon Beater (backend i okno)...")
+        if not self.quiet:
+            if reason:
+                print(f"\n[*] {reason}")
+            print("[*] Provádím čisté ukončení Polygon Beater (backend i okno)...")
 
         # 1. Ukončit proces okna prohlížeče, pokud ještě běží
         if self.browser_proc and self.browser_proc.poll() is None:
@@ -216,7 +232,8 @@ class DesktopAppRunner:
             self.server_thread.join(timeout=3.0)
 
         self._shutdown_event.set()
-        print("[✓] Polygon Beater byl čistě ukončen. Všechny procesy uvolněny.")
+        if not self.quiet:
+            print("[✓] Polygon Beater byl čistě ukončen. Všechny procesy uvolněny.")
 
     def run(self):
         """Hlavní řídicí smyčka spuštění a sledování životního cyklu."""
@@ -235,9 +252,10 @@ class DesktopAppRunner:
         except (ValueError, AttributeError):
             pass
 
-        print(BANNER)
-        print(f"[*] Spouštím Polygon Beater engine na http://{self.host}:{self.port}")
-        print("[*] 100% Soukromé & Lokální prostředí (LLM, Blender Bridge, RAG Paměť, STT/TTS)")
+        if not self.quiet:
+            print(BANNER)
+            print(f"[*] Spouštím Polygon Beater engine na http://{self.host}:{self.port}")
+            print("[*] 100% Soukromé & Lokální prostředí (LLM, Blender Bridge, RAG Paměť, STT/TTS)")
 
         _PUBLIC_HOSTS = {"0.0.0.0", "::"}
         if self.host in _PUBLIC_HOSTS:
@@ -256,14 +274,16 @@ class DesktopAppRunner:
         self.server_thread.start()
 
         # Automatický start: Aktivní čekání na plnou inicializaci serveru
-        print(f"[*] Čekám na dokončení inicializace backendu ({status_url})...")
+        if not self.quiet:
+            print(f"[*] Čekám na dokončení inicializace backendu ({status_url})...")
         ready = wait_for_server(status_url, timeout=35.0, poll_interval=0.25)
         if not ready:
             print(f"[!] Backend na {status_url} neodpověděl v časovém limitu. Ukončuji.")
             self.shutdown("Server timeout při startu")
             sys.exit(1)
 
-        print("[✓] Backend je plně připraven (HTTP 200).")
+        if not self.quiet:
+            print("[✓] Backend je plně připraven (HTTP 200).")
 
         # 1. Zkouška pywebview (pokud je povoleno a dostupné v prostředí)
         pywebview_launched = False
@@ -327,13 +347,15 @@ def main():
     parser.add_argument("--port", type=int, default=8000, help="Port rozhraní (výchozí: 8000)")
     parser.add_argument("--browser-tab", action="store_true", help="Otevřít běžnou záložku namísto samostatného okna")
     parser.add_argument("--no-window", "--server-only", dest="server_only", action="store_true", help="Spustit pouze server bez desktopového okna")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Tichý start pro čisté desktopové prostředí")
     parser.add_argument("--reload", action="store_true", help="Povolit autoreload pro vývoj")
     args = parser.parse_args()
 
     if args.server_only:
         import uvicorn
-        print(BANNER)
-        print(f"[*] Spouštím Polygon Beater v režimu pouze server na http://{args.host}:{args.port}")
+        if not args.quiet:
+            print(BANNER)
+            print(f"[*] Spouštím Polygon Beater v režimu pouze server na http://{args.host}:{args.port}")
         uvicorn.run("web_server:app", host=args.host, port=args.port, reload=args.reload)
         return
 
@@ -342,6 +364,7 @@ def main():
         port=args.port,
         reload=args.reload,
         open_as_tab=args.browser_tab,
+        quiet=args.quiet,
     )
     runner.run()
 

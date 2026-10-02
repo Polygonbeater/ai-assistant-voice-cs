@@ -2247,6 +2247,7 @@ def main():
     parser.add_argument("--legacy-tk", action="store_true", help="Spustit původní Tkinter rozhraní namísto moderního desktopového okna")
     parser.add_argument("--server-only", "--no-window", dest="server_only", action="store_true", help="Spustit pouze backend bez desktopového okna")
     parser.add_argument("--browser-tab", action="store_true", help="Otevřít běžnou záložku v prohlížeči namísto samostatného okna")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Tichý start pro čisté desktopové prostředí")
     parser.add_argument("--reload", action="store_true", help="Povolit autoreload pro vývoj")
     args, unknown = parser.parse_known_args()
 
@@ -2277,6 +2278,7 @@ def main():
         port=args.port,
         reload=args.reload,
         open_as_tab=args.browser_tab,
+        quiet=args.quiet,
     )
     runner.run()
 

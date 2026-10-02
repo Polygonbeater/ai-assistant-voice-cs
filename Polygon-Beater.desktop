@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Polygon Beater
+GenericName=AI Voice Assistant & 3D Copilot
+Comment=100% Private & Local AI Assistant (LLM, RAG, Voice, Blender Bridge)
+Exec=/home/polygon/ai-assistant-voice-cs/start_app.sh
+Icon=/home/polygon/ai-assistant-voice-cs/web_ui/favicon.svg
+Path=/home/polygon/ai-assistant-voice-cs
+Terminal=false
+Categories=Utility;AudioVideo;Graphics;Development;
+StartupNotify=true
+StartupWMClass=PolygonBeater
