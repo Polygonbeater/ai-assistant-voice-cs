@@ -5,8 +5,11 @@ Využívá asyncio, aiohttp a trafilatura pro bleskový paralelní sběr, dedupl
 
 from __future__ import annotations
 import asyncio
+import ipaddress
 import logging
 import re
+import socket
+import ssl
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -20,6 +23,86 @@ logger = logging.getLogger(__name__)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 
+# Blokované privátní a interní sítě pro ochranu proti SSRF
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),      # Loopback (127.0.0.0/8)
+    ipaddress.ip_network("10.0.0.0/8"),       # Private Class A (10.0.0.0/8)
+    ipaddress.ip_network("172.16.0.0/12"),    # Private Class B (172.16.0.0/12)
+    ipaddress.ip_network("192.168.0.0/16"),   # Private Class C (192.168.0.0/16)
+    ipaddress.ip_network("169.254.0.0/16"),   # Link-Local / Cloud Metadata (169.254.0.0/16)
+    ipaddress.ip_network("0.0.0.0/8"),        # Current network
+    ipaddress.ip_network("100.64.0.0/10"),    # Carrier-grade NAT
+    ipaddress.ip_network("192.0.0.0/24"),     # IETF Protocol Assignments
+    ipaddress.ip_network("192.0.2.0/24"),     # TEST-NET-1
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),   # TEST-NET-3
+    ipaddress.ip_network("224.0.0.0/4"),      # Multicast
+    ipaddress.ip_network("240.0.0.0/4"),      # Reserved
+    ipaddress.ip_network("::1/128"),          # IPv6 Loopback
+    ipaddress.ip_network("fc00::/7"),         # IPv6 Unique Local Address
+    ipaddress.ip_network("fe80::/10"),        # IPv6 Link-Local
+]
+
+BLOCKED_HOSTNAMES = {
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "0.0.0.0",
+    "metadata.google.internal",
+    "instance-data",
+}
+
+
+def is_safe_web_url(url: str) -> bool:
+    """
+    Ověří, že URL je bezpečné pro stahování z pohledu SSRF:
+    1. Používá výhradně schéma http nebo https.
+    2. Nesměřuje na localhost, privátní IP (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8),
+       link-local, loopback, broadcast ani cloud metadata.
+    3. Povoluje stahování výhradně z veřejného internetu s ověřenou globální IP adresou.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        parsed = urllib.parse.urlparse(url.strip())
+        if parsed.scheme.lower() not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        host_lower = hostname.lower()
+        if host_lower in BLOCKED_HOSTNAMES or host_lower.endswith(".local") or host_lower.endswith(".internal"):
+            return False
+
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+        except (socket.gaierror, OSError):
+            return False
+
+        if not addr_info:
+            return False
+
+        for item in addr_info:
+            ip_str = item[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                if (
+                    any(ip in net for net in BLOCKED_IP_NETWORKS)
+                    or ip.is_private
+                    or ip.is_loopback
+                    or ip.is_link_local
+                    or ip.is_reserved
+                    or ip.is_multicast
+                    or ip.is_unspecified
+                    or not ip.is_global
+                ):
+                    return False
+            except ValueError:
+                return False
+        return True
+    except Exception:
+        return False
+
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/126.0.0.0 Safari/537.36"
@@ -32,6 +115,70 @@ DEFAULT_HEADERS = {
     "DNT": "1",
     "Upgrade-Insecure-Requests": "1"
 }
+
+# Bezpečnostní opatření (Fáze 6): Maximální počet přesměrování, která
+# budeme manuálně sledovat. Každý redirect je ověřen přes is_safe_web_url(),
+# čímž se zabrání SSRF útoku přes open-redirector.
+MAX_REDIRECTS = 3
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+
+async def _safe_get(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: aiohttp.ClientTimeout,
+) -> "aiohttp.ClientResponse | None":
+    """
+    Provede GET požadavek s manuálním a SSRF-safe sledováním přesměrování.
+    Automatické následování redirectů je zakázáno (allow_redirects=False).
+    Každý redirect je nejprve ověřen přes is_safe_web_url(). Pokud Location
+    ukazuje na interní/privátní síť, sledování se zastaví a vrátí se None.
+    Vrací poslední (finální) odpověď nebo None při překročení limitu či
+    detekci nebezpečného přesměrování.
+    """
+    current_url = url
+    for hop in range(MAX_REDIRECTS + 1):
+        try:
+            resp = await session.get(current_url, timeout=timeout, allow_redirects=False)
+        except Exception as exc:
+            logger.debug("_safe_get: chyba při GET %s (hop %d): %s", current_url, hop, exc)
+            return None
+
+        if resp.status not in _REDIRECT_STATUSES:
+            return resp
+
+        # Přesměrování: získej Location a validuj ho
+        location = resp.headers.get("Location", "").strip()
+        await resp.release()
+
+        if not location:
+            logger.warning("_safe_get: redirect bez Location hlavičky z %s", current_url)
+            return None
+
+        # Relativní → absolutní URL: urljoin správně zpracuje všechny případy RFC 3986:
+        # absolutní URL projdou beze změny, root-relative (/path) i path-relative (../x)
+        # jsou správně resolvovány vůči aktuální URL.
+        location = urllib.parse.urljoin(current_url, location)
+
+        if not is_safe_web_url(location):
+            logger.warning(
+                "SSRF ochrana (redirect): zamítnuto přesměrování %s → %s (hop %d)",
+                current_url, location, hop
+            )
+            return None
+
+        if hop == MAX_REDIRECTS:
+            logger.warning(
+                "_safe_get: dosažen limit %d přesměrování, posledni URL: %s",
+                MAX_REDIRECTS, location
+            )
+            return None
+
+        logger.debug("_safe_get: redirect hop %d: %s → %s", hop, current_url, location)
+        current_url = location
+
+    return None
 
 # Domény s nízkou informační hodnotou nebo vyžadující přihlášení/aplikace
 DISALLOWED_DOMAINS = {
@@ -107,11 +254,14 @@ async def _fetch_ddg_query_async(query: str, max_results: int = 3) -> list[dict]
 async def _fetch_ct24_live_async(session: aiohttp.ClientSession) -> list[dict]:
     """Asynchronně stáhne nejčerstvější hlavní události z portálu ČT24."""
     url = "https://ct24.ceskatelevize.cz/tema/hlavni-udalosti-90196"
+    if not is_safe_web_url(url):
+        return []
     try:
         timeout = aiohttp.ClientTimeout(total=4.0)
-        async with session.get(url, timeout=timeout, ssl=False) as resp:
-            if resp.status != 200:
-                return []
+        resp = await _safe_get(session, url, timeout=timeout)
+        if resp is None or resp.status != 200:
+            return []
+        async with resp:
             html = await resp.text(errors="ignore")
             doc = lxml.html.fromstring(html)
             items = []
@@ -147,10 +297,14 @@ async def _fetch_google_news_rss_async(session: aiohttp.ClientSession, query: st
         else:
             rss_url = "https://news.google.com/rss?hl=cs&gl=CZ&ceid=CZ:cs"
 
+        if not is_safe_web_url(rss_url):
+            return []
+
         timeout = aiohttp.ClientTimeout(total=4.0)
-        async with session.get(rss_url, timeout=timeout, ssl=False) as resp:
-            if resp.status != 200:
-                return []
+        resp = await _safe_get(session, rss_url, timeout=timeout)
+        if resp is None or resp.status != 200:
+            return []
+        async with resp:
             xml_data = await resp.read()
             root = ET.fromstring(xml_data)
             items = []
@@ -180,28 +334,40 @@ async def _fetch_and_clean_article_async(
 ) -> dict:
     """
     Asynchronně stáhne HTML stránku z URL a vyextrahuje čistý text článku přes trafilatura.
-    Pokud extrakce selže nebo web blokuje roboty, bezpečně se použije snippet z vyhledávače.
+    Obsahuje ochranu proti SSRF (zamítá loopback a privátní sítě) a ověřuje TLS certifikáty.
     """
     url = item["url"]
     extracted_text = ""
+    if not is_safe_web_url(url):
+        logger.warning("SSRF ochrana: zamítnuto načtení interní/neveřejné adresy %s", url)
+        return {
+            "title": item["title"],
+            "url": item["url"],
+            "source": item.get("source", _extract_domain(url)),
+            "content": item.get("snippet", ""),
+            "is_full_text": False
+        }
+
     try:
         timeout = aiohttp.ClientTimeout(total=timeout_sec, connect=2.0)
-        async with session.get(url, timeout=timeout, ssl=False) as resp:
-            if resp.status == 200:
-                html = await resp.text(errors="ignore")
-                extracted = await asyncio.to_thread(
-                    trafilatura.extract,
-                    html,
-                    include_comments=False,
-                    include_tables=True,
-                    no_fallback=False
-                )
-                if extracted and len(extracted.strip()) > 80:
-                    # Filtrovat zastaralé archivní články při dotazech na aktuální témata
-                    first_500 = extracted[:500]
-                    old_years = [str(y) for y in range(2010, 2023)]
-                    if not any(f".{y}" in first_500 or f" {y}" in first_500 for y in old_years):
-                        extracted_text = extracted.strip()
+        resp = await _safe_get(session, url, timeout=timeout)
+        if resp is not None:
+            async with resp:
+                if resp.status == 200:
+                    html = await resp.text(errors="ignore")
+                    extracted = await asyncio.to_thread(
+                        trafilatura.extract,
+                        html,
+                        include_comments=False,
+                        include_tables=True,
+                        no_fallback=False
+                    )
+                    if extracted and len(extracted.strip()) > 80:
+                        # Filtrovat zastaralé archivní články při dotazech na aktuální témata
+                        first_500 = extracted[:500]
+                        old_years = [str(y) for y in range(2010, 2023)]
+                        if not any(f".{y}" in first_500 or f" {y}" in first_500 for y in old_years):
+                            extracted_text = extracted.strip()
     except Exception as exc:
         logger.debug("Chyba při stahování článku %s: %s", url, exc)
 
@@ -234,7 +400,8 @@ async def search_multi_source_async(
 
     logger.info("Spouštím asynchronní Multi-Source vyhledávání pro: %s", clean_queries)
 
-    connector = aiohttp.TCPConnector(limit=15, ssl=False)
+    ssl_context = ssl.create_default_context()
+    connector = aiohttp.TCPConnector(limit=15, ssl=ssl_context)
     async with aiohttp.ClientSession(headers=DEFAULT_HEADERS, connector=connector) as session:
         # 1. Paralelní sběr vyhledávacích výsledků
         search_tasks = [_fetch_ddg_query_async(q, max_results=3) for q in clean_queries]

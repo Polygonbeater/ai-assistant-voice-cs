@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BLENDER_HOST = "127.0.0.1"
 DEFAULT_BLENDER_PORT = 9876
-DEFAULT_TIMEOUT = 5.0
+DEFAULT_TIMEOUT = 65.0
 
 
 def is_blender_available(host: str = DEFAULT_BLENDER_HOST, port: int = DEFAULT_BLENDER_PORT) -> bool:
@@ -104,7 +104,7 @@ def send_code_to_blender(
         sock.connect((host, port))
 
         request_payload = {
-            "action": "execute",
+            "action": "run_bpy_script",
             "code": code.strip(),
         }
         raw_msg = json.dumps(request_payload) + "\n"
@@ -212,7 +212,7 @@ def request_scene_inspection(
     host: str = DEFAULT_BLENDER_HOST,
     port: int = DEFAULT_BLENDER_PORT,
     output_path: str = "/tmp/blender_viewport.png",
-    timeout: float = 12.0,
+    timeout: float = DEFAULT_TIMEOUT,
     raise_on_error: bool = False,
 ) -> dict[str, Any]:
     """
@@ -339,7 +339,7 @@ def _send_blender_request(
     payload: dict[str, Any],
     host: str = DEFAULT_BLENDER_HOST,
     port: int = DEFAULT_BLENDER_PORT,
-    timeout: float = 20.0,
+    timeout: float = DEFAULT_TIMEOUT,
     raise_on_error: bool = False,
 ) -> dict[str, Any]:
     """
@@ -464,7 +464,7 @@ def _send_blender_request(
 def request_mesh_audit(
     host: str = DEFAULT_BLENDER_HOST,
     port: int = DEFAULT_BLENDER_PORT,
-    timeout: float = 20.0,
+    timeout: float = DEFAULT_TIMEOUT,
     raise_on_error: bool = False,
 ) -> dict[str, Any]:
     """
@@ -1226,4 +1226,3 @@ def request_auto_rig(
     return _send_blender_request(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
-

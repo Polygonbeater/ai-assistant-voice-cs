@@ -2,89 +2,96 @@
 # AI Assistant Voice CS — Local Voice Companion & 3D Technical Director
 # requirements.txt
 # ==============================================================================
+#
+# Bezpečnostní opatření (Nález č. 7): Všechny volné verze (>=, <=, <) byly
+# nahrazeny přesnými piny (==) odpovídajícími aktuálně prověřenému prostředí.
+# Tím se zabrání neúmyslnému povýšení na neprověřenou verzi balíčku.
+#
+# Pro vygenerování plně zmrazeného stavu VŠECH tranzitivních závislostí
+# (včetně nepřímých) spusťte po instalaci:
+#   venv/bin/pip freeze > requirements-frozen.txt
+# ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. CRITICAL DEPENDENCIES & VERSION PINS (COMPATIBILITY FOR GRUUT / COQUI TTS)
-# Tyto verze nesmí být povýšeny, aby nedošlo k poškození fonetického syntetizéru gruut a Coqui TTS.
+# 1. KRITICKÉ ZÁVISLOSTI — KOMPATIBILITA PRO GRUUT / COQUI TTS
+# Tyto verze nesmí být povýšeny, aby nedošlo k poškození fonetického syntetizéru.
 # ------------------------------------------------------------------------------
-numpy<2.0.0
-networkx<3.0.0
-rembg<=2.0.50
-scikit-image<0.23.0
+numpy==1.26.4
+networkx==2.8.8
+rembg==2.0.50
+scikit-image==0.22.0
 
 # ------------------------------------------------------------------------------
-# 2. VOICE CORE (SPEECH-TO-TEXT, WAKE WORD, VAD & SYNTHESIS TTS)
-# Hlasové jádro: gruut (česká fonetická syntéza TTS), openai-whisper / faster-whisper (STT)
+# 2. HLASOVÉ JÁDRO (STT, WAKE WORD, VAD, TTS SYNTÉZA)
 # ------------------------------------------------------------------------------
-gruut>=2.2.3
-gruut-ipa>=0.13.0
-gruut_lang_de>=2.0.0
-gruut_lang_en>=2.0.0
-gruut_lang_es>=2.0.0
-gruut_lang_fr>=2.0.0
-openai-whisper>=20231117
-faster-whisper>=1.0.0
-openwakeword>=0.5.0
-TTS>=0.22.0
-PyAudio>=0.2.14
-soundfile>=0.12.0
-num2words>=0.5.12
+gruut==2.2.3
+gruut-ipa==0.13.0
+gruut_lang_de==2.0.1
+gruut_lang_en==2.0.1
+gruut_lang_es==2.0.1
+gruut_lang_fr==2.0.2
+faster-whisper==1.2.1
+openwakeword==0.6.0
+TTS==0.22.0
+PyAudio==0.2.14
+soundfile==0.14.0
+num2words==0.5.14
 
 # ------------------------------------------------------------------------------
-# 3. LLM INFERENCE, FUNCTION CALLING & SEMANTIC MEMORY RAG
-# LLM & Paměť: llama-cpp-python pro lokální GGUF běh, FAISS sémantická paměť a dokumentový RAG
+# 3. LLM INFERENCE, FUNCTION CALLING & SEMANTICKÁ PAMĚŤ RAG
 # ------------------------------------------------------------------------------
-llama_cpp_python>=0.3.0
-sentence-transformers>=2.2.0
-faiss-cpu>=1.7.4
-pymupdf>=1.23.0
-python-docx>=1.0.0
-trafilatura>=1.6.0
-duckduckgo_search>=6.0.0
-beautifulsoup4>=4.12.0
-requests>=2.31.0
-urllib3>=2.0.0
+llama_cpp_python==0.3.35
+sentence-transformers==6.1.0
+faiss-cpu==1.15.1
+pymupdf==1.28.2
+python-docx==1.2.0
+trafilatura==2.2.0
+duckduckgo_search==8.1.1
+requests==2.34.2
+urllib3==2.8.0
 
 # ------------------------------------------------------------------------------
 # 4. DEEP LEARNING, PYTORCH & COMPUTER VISION
 # ------------------------------------------------------------------------------
-torch>=2.1.0
-torchvision>=0.16.0
-torchaudio>=2.1.0
-transformers>=4.35.0
-pillow>=10.0.0
-huggingface_hub>=0.20.0
-einops>=0.7.0
-omegaconf>=2.3.0
+torch==2.14.0
+torchvision==0.29.1
+torchaudio==2.11.0
+transformers==5.17.0
+pillow==12.3.0
+huggingface_hub==1.33.0
+einops==0.8.2
+omegaconf==2.3.1
 
 # ------------------------------------------------------------------------------
-# 5. 3D GEOMETRY, MESH PROCESSING & EXPORT
+# 5. 3D GEOMETRIE, MESH PROCESSING & EXPORT
 # ------------------------------------------------------------------------------
-trimesh>=4.0.0
-scipy>=1.11.0
-PyMatting>=1.1.0
-opencv-python>=4.8.0
+trimesh==5.1.0
+scipy==1.17.1
+PyMatting==1.1.16
+# Pozor: instaluje se headless varianta bez GUI závislostí (Qt/GTK)
+opencv-python-headless==4.11.0.86
 
 # ------------------------------------------------------------------------------
-# 6. DESKTOP GUI & SYSTEM UTILITIES
+# 6. DESKTOP GUI & SYSTÉMOVÉ UTILITY
 # ------------------------------------------------------------------------------
-customtkinter>=5.2.0
-darkdetect>=0.8.0
-pydantic>=2.0.0
-rich>=13.0.0
-psutil>=5.9.0
-PyYAML>=6.0.0
+customtkinter==6.0.0
+darkdetect==0.8.0
+pydantic==2.13.5
+rich==15.0.0
+psutil==7.2.2
+PyYAML==6.0.3
 
 # ------------------------------------------------------------------------------
-# 7. LOCAL WEB UI & SSE API (POLYGON BEATER WEB INTERFACE)
+# 7. LOKÁLNÍ WEB UI & SSE API (POLYGON BEATER WEB INTERFACE)
 # ------------------------------------------------------------------------------
-fastapi>=0.110.0
-uvicorn>=0.28.0
-python-multipart>=0.0.9
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
 
 # ------------------------------------------------------------------------------
-# 8. OPTIONAL TRIPOSR INSTALLATION (DIRECTLY FROM GIT FOR FULL LOCAL 3D AI INFERENCE)
-# Pro zprovoznění plné lokální GPU inference modelu TripoSR včetně Marching Cubes:
-# pip install git+https://github.com/VAST-AI-Research/TripoSR.git
-# pip install git+https://github.com/tatsy/torchmcubes.git
+# 8. VOLITELNÁ INSTALACE TRIPOSR (PŘÍMO Z GITU)
+# BEZPEČNOSTNÍ UPOZORNĚNÍ (Nález č. 7): Před instalací ověřte commit hash
+# ve zdrojovém repozitáři a doplňte místo zástupného textu konkrétní SHA.
+#   pip install git+https://github.com/VAST-AI-Research/TripoSR.git@<ZADEJ_BEZPECNY_COMMIT_HASH>
+#   pip install git+https://github.com/tatsy/torchmcubes.git@<ZADEJ_BEZPECNY_COMMIT_HASH>
 # ------------------------------------------------------------------------------

@@ -31,6 +31,88 @@ PORT = 9876
 # Globální instance pro správu běhu serveru
 _RECEIVER_INSTANCE = None
 
+# Množina bezpečně povolených strukturovaných akcí (libovolný exec() byl odstraněn)
+ALLOWED_ACTIONS = {
+    "ping",
+    "get_status",
+    "status",
+    "inspect_scene",
+    "viewport_snapshot",
+    "render",
+    # Spuštění BPY skriptu generovaného AI asistentem v hlavním vlákně Blenderu.
+    # Tato akce záměrně umožňuje exec() v izolovaném prostředí Blenderu – je
+    # dostupná POUZE přes lokální TCP socket 127.0.0.1:9876 a NIKDY z webu.
+    "run_bpy_script",
+    "move",
+    "rotate",
+    "scale",
+    "select",
+    "delete",
+    "mesh_doctor_audit",
+    "mesh_doctor_repair",
+    "create_product_studio",
+    "create_procedural_shader",
+    "uv_texel_audit",
+    "smart_uv_pack",
+    "generate_parametric_model",
+    "apply_modifier_stack",
+    "create_geometry_nodes_bridge",
+    "apply_fcurve_animation",
+    "create_motion_node_setup",
+    "setup_blueprint_reference",
+    "vectorize_image_to_3d",
+    "setup_compositor",
+    "generate_local_ai_mesh",
+    "auto_rig",
+    "auto_rig_and_skin",
+}
+
+
+def _validate_numeric(value, field_name: str) -> float:
+    """
+    Bezpečnostní opatření (Fáze 6 — Nález č. 3): Explicitní typová kontrola
+    číselných argumentů pro move/rotate/scale.
+    Přijímá výhradně int nebo float; odmítá řetězce, bool, None a jakýkoliv
+    jiný typ, aby nebylo možné podsunout Blender driver syntaxi nebo výrazy.
+    """
+    if isinstance(value, bool):
+        # bool je podtřída int — odmítnout explicitně
+        raise TypeError(
+            f"Pole '{field_name}' musí být číslo (int/float), nikoliv bool: {value!r}"
+        )
+    if not isinstance(value, (int, float)):
+        raise TypeError(
+            f"Pole '{field_name}' musí být číslo (int/float), "
+            f"obdržen typ {type(value).__name__!r}: {value!r}"
+        )
+    result = float(value)
+    if result != result:  # NaN guard
+        raise ValueError(f"Pole '{field_name}' obsahuje NaN — odmítnuto.")
+    if abs(result) == float("inf"):
+        raise ValueError(f"Pole '{field_name}' obsahuje Infinity — odmítnuto.")
+    return result
+
+
+def _validate_vec3(vec, field_name: str) -> tuple:
+    """
+    Ověří, že vstup je seznam nebo n-tice přesně 3 číselných prvků.
+    Vrátí tuple (float, float, float).
+    """
+    if not isinstance(vec, (list, tuple)):
+        raise TypeError(
+            f"Pole '{field_name}' musí být seznam nebo n-tice 3 čísel, "
+            f"obdržen typ {type(vec).__name__!r}."
+        )
+    if len(vec) != 3:
+        raise ValueError(
+            f"Pole '{field_name}' musí mít přesně 3 prvky, obdrženo {len(vec)}."
+        )
+    return (
+        _validate_numeric(vec[0], f"{field_name}[0]"),
+        _validate_numeric(vec[1], f"{field_name}[1]"),
+        _validate_numeric(vec[2], f"{field_name}[2]"),
+    )
+
 
 class BlenderSocketServer:
     def __init__(self, host=HOST, port=PORT):
@@ -98,8 +180,30 @@ class BlenderSocketServer:
                 conn.close()
                 return
 
-            message = json.loads(data_buffer.decode("utf-8"))
-            action = message.get("action", "execute")
+            try:
+                message = json.loads(data_buffer.decode("utf-8"))
+            except Exception as json_err:
+                resp = {"status": "error", "error": f"Neplatný formát JSON: {json_err}"}
+                conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                conn.close()
+                return
+
+            if not isinstance(message, dict):
+                resp = {"status": "error", "error": "Neplatný formát zprávy: očekáván JSON objekt."}
+                conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                conn.close()
+                return
+
+            action = str(message.get("action", "")).strip()
+            if not action or action not in ALLOWED_ACTIONS:
+                resp = {
+                    "status": "error",
+                    "error": f"Neznámá nebo nepovolená akce: '{action}'. Libovolné spouštění Python kódu (exec) je zakázáno.",
+                    "allowed_actions": sorted(list(ALLOWED_ACTIONS)),
+                }
+                conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                conn.close()
+                return
 
             # Ping test
             if action == "ping":
@@ -119,12 +223,14 @@ class BlenderSocketServer:
             self.request_queue.put((message, completion_event, result_container))
 
             # Čekání na dokončení úlohy v hlavním vlákně Blenderu
-            success = completion_event.wait(timeout=15.0)
+            success = completion_event.wait(timeout=60.0)
             if not success:
+                result_container["cancelled"] = True
                 resp = {
                     "status": "error",
+                    "error_type": "ExecutionTimeout",
                     "error": "Timeout: Blender hlavní vlákno nestihlo úlohu vykonat včas.",
-                    "traceback": "TimeoutError: bpy.app.timers execution timed out after 15.0s",
+                    "traceback": "TimeoutError: bpy.app.timers execution timed out after 60.0s",
                 }
             else:
                 resp = result_container.get("response", {"status": "success"})
@@ -480,7 +586,75 @@ def process_blender_queue_timer():
             break
 
         message, completion_event, result_container = item
-        action = message.get("action", "execute")
+        action = message.get("action", "run_bpy_script")
+        if result_container.get("cancelled"):
+            completion_event.set()
+            _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 0. Spuštění BPY skriptu vygenerovaného AI asistentem (action == "run_bpy_script")
+        # POZNÁMKA: exec() je zde záměrný – kód generuje LLM a je spouštěn výhradně v
+        # izolovaném prostředí Blenderu přes lokální TCP socket 127.0.0.1:9876.
+        # Tato cesta NENÍ dostupná z webového rozhraní.
+        if action == "run_bpy_script":
+            code_value = message.get("code")
+            if not isinstance(code_value, str):
+                result_container["response"] = {
+                    "status": "error",
+                    "error": "InvalidCodeType",
+                    "message": "Pole 'code' musí být textový řetězec.",
+                }
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+                continue
+            code = code_value.strip()
+            print(f"\n[AI-Blender] >>> Spouštím run_bpy_script ({len(code)} znaků)...")
+            if not code:
+                result_container["response"] = {
+                    "status": "error",
+                    "error": "EmptyCodeError",
+                    "message": "Pole 'code' je prázdné.",
+                }
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+                continue
+            try:
+                stdout_capture = io.StringIO()
+                stderr_capture = io.StringIO()
+                exec_globals = {"bpy": bpy, "__name__": "__blender_ai_script__"}
+                with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+                    exec(compile(code, "<ai_generated_bpy_script>", "exec"), exec_globals)  # noqa: S102
+
+                stdout_out = stdout_capture.getvalue()
+                stderr_out = stderr_capture.getvalue()
+
+                # Překreslení 3D viewportu po operaci
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": "run_bpy_script",
+                    "output": stdout_out,
+                    "stderr": stderr_out,
+                }
+                print(f"✅ [AI-Blender] run_bpy_script dokončen. stdout={stdout_out[:200]!r}")
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "action": "run_bpy_script",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba run_bpy_script: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
 
         # 1. Inspekce 3D scény a pořízení snímku viewportu
         if action in ("inspect_scene", "viewport_snapshot"):
@@ -3241,54 +3415,314 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 18. Vykonání Python kódu (action == 'execute')
+        # 18. Zjištění detailního stavu Blenderu (action in ("get_status", "status"))
+        if action in ("get_status", "status"):
+            print("\n[AI-Blender] >>> Vyžádán stav Blenderu...")
+            try:
+                metrics = collect_scene_metrics()
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "blender_version": ".".join(map(str, bpy.app.version)),
+                    "file": bpy.data.filepath or "Untitled",
+                    "scene_metrics": metrics,
+                }
+                print("✅ [AI-Blender] Stav Blenderu úspěšně vrácen.")
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
 
-        code = message.get("code", "")
-        stdout_capture = io.StringIO()
-        stderr_capture = io.StringIO()
+        # 19. Vyrenderování scény / náhledu (action == "render")
+        if action == "render":
+            output_path = message.get("output_path", "/tmp/blender_render.png")
+            engine = message.get("engine")
+            use_viewport = bool(message.get("viewport", False))
+            print(f"\n[AI-Blender] >>> Vykonávám render (cíl={output_path}, engine={engine})...")
+            try:
+                scene = bpy.context.scene
+                if engine and engine in ("CYCLES", "BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"):
+                    scene.render.engine = engine
 
-        print(f"\n[AI-Blender] >>> Vykonávám příkaz asistenta:")
-        print("--------------------------------------------------")
-        print(code)
-        print("--------------------------------------------------")
+                if use_viewport:
+                    actual_path = capture_viewport_render(output_path)
+                else:
+                    orig_filepath = scene.render.filepath
+                    orig_format = scene.render.image_settings.file_format
+                    try:
+                        import os
+                        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                        scene.render.filepath = output_path
+                        scene.render.image_settings.file_format = 'PNG'
+                        bpy.ops.render.render(write_still=True)
+                        actual_path = output_path
+                    finally:
+                        scene.render.filepath = orig_filepath
+                        scene.render.image_settings.file_format = orig_format
 
-        exec_context = {
-            "bpy": bpy,
-            "__name__": "__main__",
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "render_path": actual_path,
+                    "engine": getattr(bpy.context.scene.render, "engine", "UNKNOWN"),
+                }
+                print(f"✅ [AI-Blender] Render dokončen: {actual_path}")
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při renderování: {e}")
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 20. Posun objektu (action == "move")
+        if action == "move":
+            obj_name = message.get("object_name") or message.get("target")
+            delta = message.get("delta")  # [dx, dy, dz]
+            location = message.get("location")  # [x, y, z]
+            x = message.get("x")
+            y = message.get("y")
+            z = message.get("z")
+            relative = bool(message.get("relative", delta is not None))
+
+            print(f"\n[AI-Blender] >>> Posun objektu (cíl={obj_name}, relative={relative})...")
+            try:
+                target_obj = bpy.data.objects.get(obj_name) if obj_name else bpy.context.active_object
+                if not target_obj:
+                    raise ValueError(f"Objekt '{obj_name or 'active'}' nebyl nalezen ve scéně.")
+
+                if location is not None and isinstance(location, (list, tuple)) and len(location) == 3:
+                    target_obj.location = _validate_vec3(location, "location")
+                elif delta is not None and isinstance(delta, (list, tuple)) and len(delta) == 3:
+                    dx, dy, dz = _validate_vec3(delta, "delta")
+                    target_obj.location.x += dx
+                    target_obj.location.y += dy
+                    target_obj.location.z += dz
+                else:
+                    if x is not None:
+                        vx = _validate_numeric(x, "x")
+                        target_obj.location.x = (target_obj.location.x + vx) if relative else vx
+                    if y is not None:
+                        vy = _validate_numeric(y, "y")
+                        target_obj.location.y = (target_obj.location.y + vy) if relative else vy
+                    if z is not None:
+                        vz = _validate_numeric(z, "z")
+                        target_obj.location.z = (target_obj.location.z + vz) if relative else vz
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                new_loc = [round(float(v), 4) for v in target_obj.location]
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "object_name": target_obj.name,
+                    "location": new_loc,
+                }
+                print(f"✅ [AI-Blender] Objekt '{target_obj.name}' posunut na {new_loc}")
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při posunu objektu: {e}")
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 21. Rotace objektu (action == "rotate")
+        if action == "rotate":
+            obj_name = message.get("object_name") or message.get("target")
+            euler = message.get("rotation_euler") or message.get("euler")
+            rx = message.get("rx")
+            ry = message.get("ry")
+            rz = message.get("rz")
+            relative = bool(message.get("relative", False))
+
+            try:
+                target_obj = bpy.data.objects.get(obj_name) if obj_name else bpy.context.active_object
+                if not target_obj:
+                    raise ValueError(f"Objekt '{obj_name or 'active'}' nebyl nalezen.")
+
+                if euler is not None and isinstance(euler, (list, tuple)) and len(euler) == 3:
+                    target_obj.rotation_euler = _validate_vec3(euler, "rotation_euler")
+                else:
+                    if rx is not None:
+                        vrx = _validate_numeric(rx, "rx")
+                        target_obj.rotation_euler.x = (target_obj.rotation_euler.x + vrx) if relative else vrx
+                    if ry is not None:
+                        vry = _validate_numeric(ry, "ry")
+                        target_obj.rotation_euler.y = (target_obj.rotation_euler.y + vry) if relative else vry
+                    if rz is not None:
+                        vrz = _validate_numeric(rz, "rz")
+                        target_obj.rotation_euler.z = (target_obj.rotation_euler.z + vrz) if relative else vrz
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                new_rot = [round(float(v), 4) for v in target_obj.rotation_euler]
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "object_name": target_obj.name,
+                    "rotation_euler": new_rot,
+                }
+            except Exception as e:
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 22. Škálování objektu (action == "scale")
+        if action == "scale":
+            obj_name = message.get("object_name") or message.get("target")
+            scale_val = message.get("scale")
+            sx = message.get("sx")
+            sy = message.get("sy")
+            sz = message.get("sz")
+
+            try:
+                target_obj = bpy.data.objects.get(obj_name) if obj_name else bpy.context.active_object
+                if not target_obj:
+                    raise ValueError(f"Objekt '{obj_name or 'active'}' nebyl nalezen.")
+
+                if scale_val is not None and isinstance(scale_val, (list, tuple)):
+                    sv = _validate_vec3(scale_val, "scale")
+                    target_obj.scale = sv
+                elif scale_val is not None:
+                    # Skalár: aplikuj na všechny tři osy
+                    sv = _validate_numeric(scale_val, "scale")
+                    target_obj.scale = (sv, sv, sv)
+                else:
+                    if sx is not None:
+                        target_obj.scale.x = _validate_numeric(sx, "sx")
+                    if sy is not None:
+                        target_obj.scale.y = _validate_numeric(sy, "sy")
+                    if sz is not None:
+                        target_obj.scale.z = _validate_numeric(sz, "sz")
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                new_scale = [round(float(v), 4) for v in target_obj.scale]
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "object_name": target_obj.name,
+                    "scale": new_scale,
+                }
+            except Exception as e:
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 23. Výběr objektu (action == "select")
+        if action == "select":
+            obj_name = message.get("object_name") or message.get("target")
+            try:
+                if not obj_name:
+                    raise ValueError("Chybí parametr 'object_name' pro výběr.")
+                target_obj = bpy.data.objects.get(obj_name)
+                if not target_obj:
+                    raise ValueError(f"Objekt '{obj_name}' nebyl nalezen.")
+
+                bpy.ops.object.select_all(action='DESELECT')
+                target_obj.select_set(True)
+                bpy.context.view_layer.objects.active = target_obj
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "selected_object": target_obj.name,
+                }
+            except Exception as e:
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # 24. Smazání objektu (action == "delete")
+        if action == "delete":
+            obj_name = message.get("object_name") or message.get("target")
+            try:
+                target_obj = bpy.data.objects.get(obj_name) if obj_name else bpy.context.active_object
+                if not target_obj:
+                    raise ValueError(f"Objekt '{obj_name or 'active'}' k odstranění nebyl nalezen.")
+                deleted_name = target_obj.name
+                bpy.data.objects.remove(target_obj, do_unlink=True)
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "deleted_object": deleted_name,
+                }
+            except Exception as e:
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+            continue
+
+        # Neznámá nebo nepovolená akce – libovolné spouštění kódu (exec) je zakázáno
+        print(f"❌ [AI-Blender] Zamítnuta nepovolená akce: '{action}'")
+        result_container["response"] = {
+            "status": "error",
+            "error": f"Neznámá nebo zakázaná akce: '{action}'. Libovolné spouštění Python kódu (exec) bylo z bezpečnostních důvodů trvale odstraněno.",
+            "allowed_actions": sorted(list(ALLOWED_ACTIONS)),
         }
-
-        try:
-            with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
-                exec(code, exec_context)
-
-            # Vynutit překreslení všech 3D pohledů, aby uživatel ihned viděl výsledek
-            for window in bpy.context.window_manager.windows:
-                for area in window.screen.areas:
-                    if area.type == 'VIEW_3D':
-                        area.tag_redraw()
-
-            out_text = stdout_capture.getvalue().strip()
-            result_container["response"] = {
-                "status": "success",
-                "output": out_text or "Kód byl úspěšně vykonán.",
-            }
-            print(f"✅ [AI-Blender] Kód úspěšně proběhl.")
-            if out_text:
-                print(f"Výstup:\n{out_text}")
-
-        except Exception as e:
-            err_trace = traceback.format_exc()
-            result_container["response"] = {
-                "status": "error",
-                "error": str(e),
-                "traceback": err_trace,
-                "output": stdout_capture.getvalue().strip(),
-            }
-            print(f"❌ [AI-Blender] Chyba při spuštění kódu: {e}")
-            print(err_trace)
-        finally:
-            completion_event.set()
-            _RECEIVER_INSTANCE.request_queue.task_done()
+        completion_event.set()
+        _RECEIVER_INSTANCE.request_queue.task_done()
 
     # Spouštět každých 50 ms pro minimální latenci
     return 0.05

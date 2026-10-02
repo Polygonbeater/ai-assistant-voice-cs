@@ -5,11 +5,16 @@ import torch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Bezpečnostní opatření (Nález č. 7): Silero VAD je načítáno z fixovaného
+# release tagu namísto plovoucí větve master/main, aby nedošlo k neúmyslnému
+# spuštění neprověřeného upstream kódu.
+SILERO_VAD_PINNED_REF = "snakers4/silero-vad:v4.0"
+
 def initialize_vad():
-    """Inicializuje Silero VAD model."""
+    """Inicializuje Silero VAD model z fixované revize."""
     try:
-        logging.info("Načítám Silero VAD model...")
-        model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
+        logging.info(f"Načítám Silero VAD model z fixované reference: {SILERO_VAD_PINNED_REF}...")
+        model, utils = torch.hub.load(repo_or_dir=SILERO_VAD_PINNED_REF,
                                      model='silero_vad',
                                      force_reload=False,
                                      onnx=True)

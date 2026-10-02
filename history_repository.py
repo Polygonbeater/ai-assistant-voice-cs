@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -33,6 +35,10 @@ class HistoryRepository:
         self.memory_service = memory_service
         self._lock = threading.RLock()
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.sessions_dir, 0o700)
+        except OSError:
+            pass
 
     def set_memory_service(self, memory_service) -> None:
         """Nastaví instanci sémantické paměti pro automatickou indexaci."""
@@ -40,10 +46,30 @@ class HistoryRepository:
             self.memory_service = memory_service
 
     def _safe_index_session(self, session_id: str, title: str, messages: list[dict], updated_at: str) -> None:
-        """Asynchronně a bezpečně zindexuje relaci do sémantické paměti."""
+        """Asynchronně a bezpečně zindexuje relaci do sémantické paměti s ověřením existence a konzistence."""
         try:
-            if self.memory_service and messages:
-                self.memory_service.index_session(session_id, title, messages, updated_at=updated_at)
+            path = self.sessions_dir / f"{session_id}.json"
+            with self._lock:
+                # 1. Kontrola, zda soubor relace stále existuje
+                if not path.is_file():
+                    logger.info("Relace %s byla mezitím smazána, přeskakuji indexaci.", session_id)
+                    return
+
+                try:
+                    current = self._read_session(session_id)
+                    if current.get("updated_at") != updated_at or not current.get("messages"):
+                        logger.info("Relace %s byla mezitím modifikována nebo vyprázdněna, přeskakuji indexaci.", session_id)
+                        return
+                except Exception:
+                    return
+
+                # 2. Těsně před finálním zápisem do vektorového indexu/paměti ověříme existenci souboru
+                if not path.is_file():
+                    logger.info("Soubor relace %s na disku již neexistuje (uživatelem smazán), indexaci tiše ukončuji.", session_id)
+                    return
+
+                if self.memory_service and messages:
+                    self.memory_service.index_session(session_id, title, messages, updated_at=updated_at)
         except Exception as exc:
             logger.exception("Chyba při automatické indexaci relace %s do sémantické paměti: %s", session_id, exc)
 
@@ -151,7 +177,7 @@ class HistoryRepository:
         return removed
 
     def _read_session(self, session_id: str) -> dict:
-        if not session_id or Path(session_id).name != session_id:
+        if not session_id or Path(session_id).name != session_id or not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
             raise ValueError("Neplatné ID relace.")
         path = self.sessions_dir / f"{session_id}.json"
         if not path.exists():
@@ -163,11 +189,21 @@ class HistoryRepository:
         return session
 
     def _write_session(self, session_id: str, session: dict) -> None:
+        if not session_id or Path(session_id).name != session_id or not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+            raise ValueError("Neplatné ID relace.")
         target = self.sessions_dir / f"{session_id}.json"
         temporary = target.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as session_file:
             json.dump(session, session_file, ensure_ascii=False, indent=2)
+        try:
+            os.chmod(temporary, 0o600)
+        except OSError:
+            pass
         temporary.replace(target)
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
 
     @staticmethod
     def _summary(session: dict) -> SessionSummary:

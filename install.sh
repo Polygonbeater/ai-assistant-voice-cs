@@ -255,15 +255,19 @@ if [ "$INSTALL_TRIPO" = false ] && [ "$NON_INTERACTIVE" = false ]; then
 fi
 
 if [ "$INSTALL_TRIPO" = true ]; then
-    log_info "Instaluji C++ rozšíření torchmcubes z GitHubu..."
-    if pip install git+https://github.com/tatsy/torchmcubes.git; then
+    log_info "Instaluji C++ rozšíření torchmcubes z GitHubu (fixovaný commit)..."
+    # BEZPECNOSTNI POZADAVEK: Nahradte FIXME_ZADEJ_COMMIT_HASH konkretnim
+    # proverzenym SHA commitu z https://github.com/tatsy/torchmcubes
+    if pip install "git+https://github.com/tatsy/torchmcubes.git@FIXME_ZADEJ_COMMIT_HASH"; then
         log_success "torchmcubes úspěšně zkompilován a nainstalován."
     else
         log_warning "Kompilace torchmcubes selhala (může chybět CUDA dev toolset). Asistent využije deterministický fallback."
     fi
 
-    log_info "Instaluji balíček TripoSR z GitHubu..."
-    if pip install git+https://github.com/VAST-AI-Research/TripoSR.git; then
+    log_info "Instaluji balíček TripoSR z GitHubu (fixovaný commit)..."
+    # BEZPECNOSTNI POZADAVEK: Nahradte FIXME_ZADEJ_COMMIT_HASH konkretnim
+    # proverzenym SHA commitu z https://github.com/VAST-AI-Research/TripoSR
+    if pip install "git+https://github.com/VAST-AI-Research/TripoSR.git@FIXME_ZADEJ_COMMIT_HASH"; then
         log_success "TripoSR úspěšně nainstalován."
     else
         log_warning "Instalace TripoSR z gitu selhala. Asistent využije deterministický fallback."
