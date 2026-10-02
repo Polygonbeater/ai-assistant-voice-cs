@@ -2242,12 +2242,16 @@ class UnifiedToolDispatcher:
 
         from web_search import search_web_multi_source
         try:
-            context = search_web_multi_source(query, max_sources=3, max_total_chars=3600, max_chars_per_source=1200)
+            context, sources = search_web_multi_source(
+                query, max_sources=3, max_total_chars=3600, max_chars_per_source=1200, return_sources=True
+            )
             return {
                 "status": "success",
                 "tool": "search_web",
                 "query": query,
                 "result": context,
+                "sources": sources,
+                "results": sources,
             }
         except Exception as exc:
             logging.exception("Chyba při volání nástroje search_web: %s", exc)
@@ -2257,6 +2261,8 @@ class UnifiedToolDispatcher:
                 "query": query,
                 "error": str(exc),
                 "result": f"Chyba při online vyhledávání: {exc}",
+                "sources": [],
+                "results": [],
             }
 
     def _execute_query_local_rag(self, query: str) -> dict[str, Any]:

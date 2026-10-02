@@ -473,11 +473,28 @@ async def chat_stream(req: ChatRequest, request: Request):
                     tool_name = data.get("tool")
                     tool_res = data.get("result", {})
                     if tool_name == "search_web":
-                        res_val = tool_res.get("result", "") if isinstance(tool_res, dict) else str(tool_res)
+                        sources_list = []
+                        if isinstance(tool_res, dict):
+                            sources_list = tool_res.get("sources") or tool_res.get("results") or []
+                        elif isinstance(data.get("sources"), list):
+                            sources_list = data["sources"]
+                        elif isinstance(data.get("results"), list):
+                            sources_list = data["results"]
+
+                        if not isinstance(sources_list, list):
+                            sources_list = []
+
+                        if not sources_list and isinstance(tool_res, dict) and "result" in tool_res:
+                            import re
+                            res_text = str(tool_res.get("result", ""))
+                            for m in re.finditer(r"\[([^\]]+)\]\((https?://[^\)]+)\)", res_text):
+                                sources_list.append({"title": m.group(1), "url": m.group(2), "snippet": ""})
+
                         event_queue.put({
                             "type": "web_search",
                             "query": data.get("arguments", {}).get("query", user_prompt),
-                            "results": res_val,
+                            "results": sources_list,
+                            "sources": sources_list,
                         })
                     elif tool_name in ("query_local_rag", "query_memory_rag"):
                         res_val = tool_res.get("result", "") if isinstance(tool_res, dict) else str(tool_res)

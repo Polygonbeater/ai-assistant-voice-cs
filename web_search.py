@@ -490,6 +490,7 @@ async def search_multi_source_async(
             f"<source_content>\n{trimmed_content}\n</source_content>"
         )
         formatted_docs.append(doc_block)
+        src["snippet"] = trimmed_content[:250].strip()
 
     # 5. Sestavení instrukcí pro LLM syntézu
     header = (
@@ -517,8 +518,9 @@ def search_web_multi_source(
     queries: list[str] | str,
     max_sources: int = 3,
     max_total_chars: int = 3600,
-    max_chars_per_source: int = 1200
-) -> str:
+    max_chars_per_source: int = 1200,
+    return_sources: bool = False,
+) -> str | tuple[str, list[dict[str, Any]]]:
     """
     Synchronní fasáda pro bezpečné a rychlé volání asynchronního Multi-Source RAG z libovolného vlákna.
     """
@@ -536,16 +538,28 @@ def search_web_multi_source(
         # Pokud již běží event loop v aktuálním vlákně, spustíme úlohu v dedikovaném threadpoolu
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            context, _ = pool.submit(
+            context, valid_sources = pool.submit(
                 asyncio.run,
                 search_multi_source_async(query_list, max_sources, max_total_chars, max_chars_per_source)
             ).result()
-            return context
     else:
-        context, _ = asyncio.run(
+        context, valid_sources = asyncio.run(
             search_multi_source_async(query_list, max_sources, max_total_chars, max_chars_per_source)
         )
-        return context
+
+    sources_summary = [
+        {
+            "title": s.get("title", ""),
+            "url": s.get("url", ""),
+            "source": s.get("source", ""),
+            "snippet": s.get("snippet", "") or (s.get("content", "")[:250].strip()),
+        }
+        for s in valid_sources
+    ]
+
+    if return_sources:
+        return context, sources_summary
+    return context
 
 
 def search_web_context(query: str, *, max_articles: int = 3, timeout: float = 10.0) -> str:

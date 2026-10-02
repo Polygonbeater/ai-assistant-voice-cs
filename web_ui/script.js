@@ -920,23 +920,116 @@
     `;
   }
 
+  function normalizeWebSearchResults(rawResults) {
+    if (!rawResults) return { sources: [], textMessage: '' };
+
+    let current = rawResults;
+
+    // 1. Zda nepřišel JSON string vyžadující JSON.parse()
+    if (typeof current === 'string') {
+      const trimmed = current.trim();
+      if (!trimmed) return { sources: [], textMessage: '' };
+
+      // Pokus o JSON parse, pokud string začíná jako JSON objekt nebo pole
+      if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+        try {
+          current = JSON.parse(trimmed);
+        } catch (e) {
+          // Není validní JSON, pokračujeme jako se stringem
+        }
+      }
+    }
+
+    // 2. Kontrola vnořených klíčů (results?.results, results?.sources, results?.data, results?.items)
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      if (Array.isArray(current.results)) {
+        current = current.results;
+      } else if (Array.isArray(current.sources)) {
+        current = current.sources;
+      } else if (Array.isArray(current.data)) {
+        current = current.data;
+      } else if (Array.isArray(current.items)) {
+        current = current.items;
+      }
+    }
+
+    // 3. Pokud je výsledkem pole, namapujeme položky do sjednoceného formátu
+    if (Array.isArray(current)) {
+      const sources = [];
+      for (const item of current) {
+        if (!item) continue;
+        if (typeof item === 'string') {
+          const isUrl = item.startsWith('http://') || item.startsWith('https://');
+          sources.push({
+            title: isUrl ? item : 'Web Source',
+            url: isUrl ? item : '#',
+            snippet: isUrl ? '' : item,
+          });
+        } else if (typeof item === 'object') {
+          sources.push({
+            title: item.title || item.name || item.url || 'Web Source',
+            url: item.url || item.link || '#',
+            snippet: item.snippet || item.content || item.description || '',
+          });
+        }
+      }
+      return { sources, textMessage: '' };
+    }
+
+    // 4. Pokud jde o obyčejný text/string nebo pole nelze sestavit, zpracuj jej jako textovou zprávu
+    let textMessage = '';
+    if (typeof current === 'string') {
+      // Zkusíme najít Markdown odkazy [title](url)
+      const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g;
+      const extracted = [];
+      let match;
+      while ((match = linkRegex.exec(current)) !== null) {
+        extracted.push({
+          title: match[1].trim(),
+          url: match[2].trim(),
+          snippet: '',
+        });
+      }
+      if (extracted.length > 0) {
+        return { sources: extracted, textMessage: '' };
+      }
+      textMessage = current.trim();
+    } else if (current && typeof current === 'object') {
+      textMessage = current.result || current.message || current.error || JSON.stringify(current);
+    } else {
+      textMessage = String(current);
+    }
+
+    if (textMessage.length > 300) {
+      textMessage = textMessage.slice(0, 297) + '…';
+    }
+
+    return { sources: [], textMessage };
+  }
+
   function addWebResearchResult(query, results = []) {
     if (!el.researchSourcesList) return;
     const emptyState = el.researchSourcesList.querySelector('.tab-empty-state');
     if (emptyState) emptyState.remove();
 
+    const { sources, textMessage } = normalizeWebSearchResults(results);
+
     const item = document.createElement('div');
     item.className = 'research-source-item';
 
-    const count = results.length;
     let linksHtml = '';
-    if (count > 0) {
-      linksHtml = results.map(r => `
-        <a class="source-link" href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          <span>${escapeHtml(r.title || r.url || 'Web Source')}</span>
-        </a>
+    if (sources.length > 0) {
+      linksHtml = sources.map(r => `
+        <div class="research-source-entry">
+          <a class="research-source-link source-link" href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            <span>${escapeHtml(r.title || r.url || 'Web Source')}</span>
+          </a>
+          ${r.snippet ? `<div class="research-source-snippet">${escapeHtml(r.snippet)}</div>` : ''}
+        </div>
       `).join('');
+    } else if (textMessage) {
+      linksHtml = `<div class="research-source-snippet source-text-message">${escapeHtml(textMessage)}</div>`;
     }
 
     item.innerHTML = `
@@ -1803,7 +1896,8 @@
             addAgentStep(data.content, data.step_type || 'info', data.badge || 'STEP');
             logConsole(`[Agent Step] ${data.content}`, 'info');
           } else if (data.type === 'web_search') {
-            addWebResearchResult(data.query || promptText, data.sources || data.results || []);
+            const rawPayload = (data.sources !== undefined) ? data.sources : data.results;
+            addWebResearchResult(data.query || promptText, rawPayload !== undefined ? rawPayload : []);
             addAgentStep(`Web research: "${data.query || promptText}"`, 'info', 'WEB');
           } else if (data.type === 'rag_context') {
             if (Array.isArray(data.snippets)) {
