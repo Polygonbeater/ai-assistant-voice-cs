@@ -213,8 +213,11 @@
       prompt_placeholder: 'Type a query or Blender command... (Enter to send, Shift+Enter for newline)',
       attach_file_title: 'Attach document for RAG (PDF, TXT, DOCX)',
       mic_btn_title: 'Voice recording (Whisper STT)',
-      proofread_btn_title: 'Check spelling and style (AI)',
+      proofread_btn_title: 'Proofread text (AI)',
       proofread_empty_hint: 'Please write or paste text to proofread first.',
+      apply_to_input: 'Use in input',
+      applied_to_input: 'Applied!',
+      apply_to_input_title: 'Insert corrected text into the input field',
       prompt_shortcut_hint: 'Enter to send • Shift+Enter for new line',
       send_btn_title: 'Send message',
       stop_btn_title: 'Stop generation',
@@ -361,6 +364,9 @@
       mic_btn_title: 'Hlasový záznam (přepis přes Whisper)',
       proofread_btn_title: 'Zkontrolovat pravopis a stylistiku (AI)',
       proofread_empty_hint: 'Nejprve napište nebo vložte text ke korektuře.',
+      apply_to_input: 'Použít ve vstupu',
+      applied_to_input: 'Vloženo!',
+      apply_to_input_title: 'Vložit opravený text zpět do vstupního pole',
       prompt_shortcut_hint: 'Enter pro odeslání • Shift+Enter pro nový řádek',
       send_btn_title: 'Odeslat zprávu',
       stop_btn_title: 'Zastavit generování',
@@ -525,6 +531,15 @@
       el.promptInput.setAttribute('lang', lang);
       el.promptInput.setAttribute('spellcheck', 'true');
     }
+
+    // Dynamicky renderovaná akční tlačítka v kartách zpráv
+    document.querySelectorAll('.apply-to-input-btn').forEach(btn => {
+      btn.setAttribute('title', t('apply_to_input_title'));
+      const span = btn.querySelector('span');
+      if (span && !btn.classList.contains('applied')) {
+        span.textContent = t('apply_to_input');
+      }
+    });
   }
 
   function setLanguage(lang) {
@@ -1364,7 +1379,10 @@
     el.welcomeHero.style.display = 'none';
 
     messages.forEach(msg => {
-      appendMessageCard(msg.role, msg.content, false);
+      const card = appendMessageCard(msg.role, msg.content, false);
+      if (msg.role === 'assistant') {
+        updateMessageActions(card, msg.content, false);
+      }
     });
 
     scrollToBottom();
@@ -1376,20 +1394,21 @@
     }
 
     const card = document.createElement('div');
-    card.className = `message-card ${role === 'user' ? 'user-card' : 'assistant-card'}`;
+    card.className = `message-card ${role} ${role === 'user' ? 'user-card' : 'assistant-card'}`;
 
     const isUser = role === 'user';
     const avatarLetter = isUser ? 'U' : 'A';
     const authorName = isUser ? t('you') : 'Polygon Beater Core';
 
     card.innerHTML = `
-      <div class="message-card-header">
+      <div class="message-card-header message-meta">
         <div class="message-avatar">${avatarLetter}</div>
-        <span class="message-author">${escapeHtml(authorName)}</span>
+        <span class="message-author message-sender">${escapeHtml(authorName)}</span>
         <span class="message-timestamp">${new Date().toLocaleTimeString()}</span>
       </div>
       <div class="message-tool-status-area" style="display: none;"></div>
-      <div class="message-body">${isUser ? escapeHtml(initialContent) : renderMarkdown(initialContent)}</div>
+      <div class="message-body message-content">${isUser ? escapeHtml(initialContent) : renderMarkdown(initialContent)}</div>
+      <div class="message-actions-footer" style="display: none;"></div>
     `;
 
     el.messagesContainer.appendChild(card);
@@ -1423,6 +1442,111 @@
     }, 2800);
   }
 
+  function extractCorrectedText(text) {
+    if (!text || typeof text !== 'string') return null;
+
+    // 1. Heading-based extraction (### Opravený text / ### Corrected Text)
+    const headerRegex = /(?:###|\*\*|##|#)\s*(?:Opravený text|Opravená verze(?:\s+textu)?|Corrected Text|Proofread Text)[:*]*\s*\n+([\s\S]*?)(?=(?:\n+(?:###|\*\*|##|#)\s*(?:Přehled úprav|Přehled změn|Provedené úpravy|Provedené změny|Seznam úprav|Úpravy|Změny|Summary of Changes|Changes Made|Changes|Summary)|(?:\n+---)|$))/i;
+    const match = text.match(headerRegex);
+    let result = null;
+    if (match && match[1]) {
+      result = match[1].trim();
+    }
+
+    // 2. Fallback to text before bullet points if structure has summary
+    if (!result) {
+      const bulletSplit = text.split(/\n+\s*[-*•]\s+/);
+      if (bulletSplit.length > 1 && bulletSplit[0].trim().length > 8) {
+        const candidate = bulletSplit[0].replace(/^(?:Zde je opravený text|Here is the corrected text|Opravená verze|Corrected text)[:\s]*/i, '').trim();
+        if (candidate.length > 3) {
+          result = candidate;
+        }
+      }
+    }
+
+    if (result) {
+      // Strip blockquotes (> quote)
+      result = result.replace(/^>+\s*/gm, '').trim();
+      // Strip outer enclosing quotes
+      if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith('“') && result.endsWith('”'))) {
+        result = result.slice(1, -1).trim();
+      }
+      // Strip code fence blocks if enclosed
+      if (result.startsWith('```') && result.endsWith('```')) {
+        result = result.replace(/^```[a-z]*\n([\s\S]*?)\n```$/i, '$1').trim();
+      }
+    }
+
+    return result || null;
+  }
+
+  function applyTextToInput(text, btn = null) {
+    if (!el.promptInput || !text) return;
+
+    el.promptInput.value = text;
+    el.promptInput.focus();
+    el.promptInput.style.height = 'auto';
+    el.promptInput.style.height = Math.min(el.promptInput.scrollHeight, 180) + 'px';
+
+    const box = document.querySelector('.prompt-box');
+    if (box) {
+      box.classList.remove('input-applied-highlight');
+      void box.offsetWidth; // trigger reflow
+      box.classList.add('input-applied-highlight');
+      setTimeout(() => box.classList.remove('input-applied-highlight'), 850);
+    }
+
+    if (btn) {
+      const originalHtml = btn.innerHTML;
+      btn.classList.add('applied');
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+        <span>${escapeHtml(t('applied_to_input'))}</span>
+      `;
+      setTimeout(() => {
+        btn.classList.remove('applied');
+        btn.innerHTML = originalHtml;
+      }, 1800);
+    }
+
+    if (el.promptInput.scrollIntoView) {
+      el.promptInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function updateMessageActions(card, text, isProofread = false) {
+    if (!card) return;
+    const actionsFooter = card.querySelector('.message-actions-footer');
+    if (!actionsFooter) return;
+
+    const corrected = extractCorrectedText(text);
+    if (corrected || isProofread) {
+      const textToApply = corrected || text;
+      actionsFooter.innerHTML = '';
+      actionsFooter.style.display = 'flex';
+
+      const btn = document.createElement('button');
+      btn.className = 'message-action-btn apply-to-input-btn';
+      btn.setAttribute('title', t('apply_to_input_title'));
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+          <path d="m15 5 4 4"></path>
+        </svg>
+        <span>${escapeHtml(t('apply_to_input'))}</span>
+      `;
+      btn.addEventListener('click', () => {
+        applyTextToInput(textToApply, btn);
+      });
+      actionsFooter.appendChild(btn);
+    } else {
+      actionsFooter.style.display = 'none';
+      actionsFooter.innerHTML = '';
+    }
+  }
+
   async function triggerAiProofreading() {
     if (state.isStreaming) return;
 
@@ -1436,18 +1560,20 @@
 
     const isCs = (state.language === 'cs');
     const instruction = isCs
-      ? 'Proveď jazykovou, gramatickou a stylistickou korekturu následujícího textu (oprav překlepy, interpunkci a slovosled, zachovej původní význam a tón). Vypiš opravenou verzi a pod ní ve stručných odrážkách uveď provedené změny:'
-      : 'Perform linguistic, grammatical, and stylistic proofreading of the following text (fix typos, punctuation, and phrasing, preserving original meaning and tone). Output the corrected version, followed by a concise bulleted summary of changes made:';
+      ? 'Proveď důkladnou gramatickou, stylistickou a interpunkční korekturu následujícího textu (oprav překlepy, shodu podmětu s přísudkem, čárky a slovosled, se zachováním původního tónu a významu).\n\nOdpověď strukturuj přesně takto:\n### Opravený text\n[Zde uveď pouze čistý opravený text připravený k použití]\n\n### Přehled úprav\n- [stručné odrážky s provedenými změnami]'
+      : 'Perform thorough grammatical, stylistic, and punctuation proofreading of the following text (fix typos, subject-verb agreement, commas, and phrasing, preserving original tone and meaning).\n\nStructure your response exactly as follows:\n### Corrected Text\n[Insert only the clean corrected text ready to use]\n\n### Summary of Changes\n- [concise bullet points of changes made]';
 
-    const fullPrompt = `${instruction}\n\n"${rawText}"`;
-    await sendMessage(fullPrompt);
+    const fullPrompt = `${instruction}\n\nText ke korektuře:\n"${rawText}"`;
+    await sendMessage(fullPrompt, { isProofread: true });
   }
 
   // ===========================================================================
   // CHAT STREAMING (SSE POST /api/chat)
   // ===========================================================================
-  async function sendMessage(overridePrompt = null) {
+  async function sendMessage(overridePrompt = null, options = {}) {
     if (state.isStreaming) return;
+
+    const isProofread = Boolean(options && options.isProofread);
 
     const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
       ? overridePrompt.trim()
@@ -1692,6 +1818,7 @@
           } else if (data.type === 'done' || data.type === 'finish' || data.type === 'end') {
             fullText = data.content || fullText;
             bodyEl.innerHTML = renderMarkdown(fullText);
+            updateMessageActions(assistantCard, fullText, isProofread);
             scrollToBottom();
             isStreamFinished = true;
             break;
@@ -1703,6 +1830,10 @@
             break;
           }
         }
+      }
+
+      if (assistantCard && fullText) {
+        updateMessageActions(assistantCard, fullText, isProofread);
       }
 
       // Auto rename session on first prompt
@@ -1741,6 +1872,9 @@
         try {
           reader.releaseLock();
         } catch (e) {}
+      }
+      if (assistantCard && fullText) {
+        updateMessageActions(assistantCard, fullText, isProofread);
       }
       state.isStreaming = false;
       state.abortController = null;
