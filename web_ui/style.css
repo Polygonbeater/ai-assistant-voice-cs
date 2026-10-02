@@ -1494,9 +1494,31 @@ pre {
   flex-direction: column;
   gap: 8px;
   flex: 0 0 auto;
-  min-height: 80px;
+  min-height: 120px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+#card-viewport {
+  min-height: 180px;
+}
+#card-metrics {
+  min-height: 150px;
+}
+#card-actions {
+  min-height: 160px;
+}
+#card-web-research {
+  min-height: 130px;
+}
+#card-rag-context {
+  min-height: 160px;
+}
+#card-agent-steps {
+  min-height: 130px;
+}
+#card-console {
+  min-height: 130px;
 }
 
 .inspector-card[style*="height"] {

@@ -740,12 +740,14 @@
       let isDragging = false;
       let startY = 0;
       let startHeight = 0;
+      let minCardHeight = 110;
 
       const onPointerMove = (e) => {
         if (!isDragging) return;
         const deltaY = e.clientY - startY;
-        const newHeight = Math.max(70, Math.min(startHeight + deltaY, 900));
+        const newHeight = Math.max(minCardHeight, Math.min(startHeight + deltaY, 900));
         targetCard.style.height = `${newHeight}px`;
+        targetCard.style.flex = '0 0 auto';
       };
 
       const onPointerUp = () => {
@@ -775,6 +777,8 @@
         isDragging = true;
         startY = e.clientY;
         startHeight = targetCard.getBoundingClientRect().height;
+        const compMin = parseInt(window.getComputedStyle(targetCard).minHeight, 10);
+        minCardHeight = (!isNaN(compMin) && compMin > 0) ? compMin : 110;
         resizer.classList.add('dragging');
         document.body.classList.add('is-resizing-card');
 
@@ -1468,11 +1472,19 @@
         throw new Error(`HTTP ${response.status}: ${errDetail}`);
       }
 
-      const reader = response.body.getReader();
+      let reader = null;
+      try {
+        reader = response.body ? response.body.getReader() : null;
+      } catch (e) {
+        reader = null;
+      }
+      if (!reader) throw new Error('Response body is not readable');
+
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let isStreamFinished = false;
 
-      while (true) {
+      while (!isStreamFinished) {
         const { value, done } = await reader.read();
         if (done) break;
 
@@ -1529,15 +1541,13 @@
               fullText = data.content || fullText;
               bodyEl.innerHTML = renderMarkdown(fullText);
               scrollToBottom();
-              state.isStreaming = false;
-              updateStreamingUi(false);
+              isStreamFinished = true;
               break;
             } else if (data.type === 'error') {
               bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
               addAgentStep(`Error: ${data.content}`, 'error', 'ERROR');
               logConsole(`Error: ${data.content}`, 'error');
-              state.isStreaming = false;
-              updateStreamingUi(false);
+              isStreamFinished = true;
               break;
             }
           } catch (e) {
@@ -1567,6 +1577,14 @@
         bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>Connection Error: ${escapeHtml(err.message)}</span></div>`;
       }
     } finally {
+      if (reader) {
+        try {
+          await reader.cancel();
+        } catch (e) {}
+        try {
+          reader.releaseLock();
+        } catch (e) {}
+      }
       state.isStreaming = false;
       state.abortController = null;
       updateStreamingUi(false);
@@ -1580,8 +1598,6 @@
       if (state.abortController) {
         state.abortController.abort();
       }
-      state.isStreaming = false;
-      updateStreamingUi(false);
       const sid = state.sessionId || '';
       await fetch('/api/chat/stop', {
         method: 'POST',
@@ -1590,6 +1606,10 @@
       });
     } catch (e) {
       // Ignore
+    } finally {
+      state.isStreaming = false;
+      state.abortController = null;
+      updateStreamingUi(false);
     }
   }
 
