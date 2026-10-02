@@ -50,8 +50,8 @@
       <div class="topbar-center">
         <div class="system-status-pills">
           <div class="status-pill" id="pill-llm">
-            <span class="status-indicator online"></span>
-            <span data-i18n="status_llm">Qwen2.5-7B GGUF</span>
+            <span class="status-indicator online" id="llm-indicator"></span>
+            <span id="llm-status-text" data-i18n="status_llm">Qwen2.5-7B GGUF</span>
           </div>
           <div class="status-pill" id="pill-blender">
             <span class="status-indicator checking" id="blender-indicator"></span>
@@ -754,40 +754,240 @@
 
   <!-- MODAL: SETTINGS -->
   <div class="modal-backdrop" id="modal-settings" style="display: none;">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <div class="modal-title-group">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"></line><line x1="4" x2="4" y1="10" y2="3"></line><line x1="12" x2="12" y1="21" y2="12"></line><line x1="12" x2="12" y1="8" y2="3"></line><line x1="20" x2="20" y1="21" y2="16"></line><line x1="20" x2="20" y1="12" y2="3"></line><line x1="1" x2="7" y1="14" y2="14"></line><line x1="9" x2="15" y1="8" y2="8"></line><line x1="17" x2="23" y1="16" y2="16"></line></svg>
           <h3 data-i18n="modal_settings_title">AI Assistant Configuration</h3>
         </div>
-        <button class="modal-close-btn" id="btn-close-settings-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        <div class="modal-header-actions">
+          <button class="modal-close-btn" id="btn-close-settings-modal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
       </div>
-      <div class="modal-body">
-        <div class="settings-form">
-          <div class="form-row">
-            <label for="cfg-language" data-i18n="cfg_language">Interface Language:</label>
-            <select id="cfg-language" class="polygon-select">
-              <option value="en">English (EN)</option>
-              <option value="cs">Čeština (CS)</option>
-            </select>
+
+      <!-- TABS NAVIGATION -->
+      <div class="settings-tabs-nav">
+        <button type="button" class="settings-tab-btn active" id="tab-btn-cfg-brain" data-tab="brain">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 0-4 4v1H7a3 3 0 0 0-3 3v2a3 3 0 0 0 2 2.82V17a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-2.18A3 3 0 0 0 20 12v-2a3 3 0 0 0-3-3h-1V6a4 4 0 0 0-4-4z"></path><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle></svg>
+          <span data-i18n="settings_tab_brain">AI Brain & Providers</span>
+        </button>
+        <button type="button" class="settings-tab-btn" id="tab-btn-cfg-general" data-tab="general">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span data-i18n="settings_tab_general">General Preferences</span>
+        </button>
+      </div>
+
+      <div class="modal-body modal-body-scrollable">
+        <!-- PANE 1: AI BRAIN & PROVIDERS -->
+        <div class="settings-tab-pane active" id="pane-cfg-brain">
+          <div class="settings-section-desc" data-i18n="cfg_brain_desc">
+            Choose whether to run completely private on local hardware (.gguf) or connect ultra-fast cloud/custom AI providers.
           </div>
-          <div class="form-row">
-            <label for="cfg-temp" data-i18n="cfg_temp">Creativity / Temperature:</label>
-            <input type="number" id="cfg-temp" min="0.0" max="1.5" step="0.05" value="0.7">
+
+          <!-- PRIMARY BRAIN SELECTOR (CARD RADIOS) -->
+          <div class="provider-cards-grid">
+            <label class="provider-radio-card active" data-provider="local">
+              <input type="radio" name="ai-brain-provider" value="local" checked>
+              <div class="provider-card-header">
+                <span class="provider-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                </span>
+                <span class="provider-badge-local" data-i18n="provider_badge_offline">100% Offline</span>
+              </div>
+              <div class="provider-card-title" data-i18n="provider_local">Local Model (.gguf)</div>
+              <div class="provider-card-desc" data-i18n="provider_local_desc">Private CPU & Vulkan GPU execution</div>
+            </label>
+
+            <label class="provider-radio-card" data-provider="groq">
+              <input type="radio" name="ai-brain-provider" value="groq">
+              <div class="provider-card-header">
+                <span class="provider-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                </span>
+                <span class="provider-badge-cloud">Cloud</span>
+              </div>
+              <div class="provider-card-title" data-i18n="provider_groq">Groq Cloud</div>
+              <div class="provider-card-desc" data-i18n="provider_groq_desc">Ultra-fast Llama 3.3 & Qwen 2.5</div>
+            </label>
+
+            <label class="provider-radio-card" data-provider="gemini">
+              <input type="radio" name="ai-brain-provider" value="gemini">
+              <div class="provider-card-header">
+                <span class="provider-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>
+                </span>
+                <span class="provider-badge-cloud">Google</span>
+              </div>
+              <div class="provider-card-title" data-i18n="provider_gemini">Google Gemini</div>
+              <div class="provider-card-desc" data-i18n="provider_gemini_desc">Gemini 2.0 Flash & 1.5 Pro</div>
+            </label>
+
+            <label class="provider-radio-card" data-provider="custom">
+              <input type="radio" name="ai-brain-provider" value="custom">
+              <div class="provider-card-header">
+                <span class="provider-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                </span>
+                <span class="provider-badge-custom">OpenAI / Custom</span>
+              </div>
+              <div class="provider-card-title" data-i18n="provider_custom">Custom / Paid API</div>
+              <div class="provider-card-desc" data-i18n="provider_custom_desc">OpenAI, DeepSeek, OpenRouter, vLLM</div>
+            </label>
           </div>
-          <div class="form-row">
-            <label for="cfg-tokens" data-i18n="cfg_tokens">Maximum Response Tokens:</label>
-            <input type="number" id="cfg-tokens" min="50" max="4096" step="50" value="1024">
+
+          <!-- DYNAMIC SUB-PANELS -->
+          <!-- 1. LOCAL MODEL PANEL -->
+          <div class="provider-subpanel" id="subpanel-local">
+            <div class="form-row">
+              <label for="cfg-local-model" data-i18n="cfg_local_model_label">Active .gguf Model:</label>
+              <div class="model-select-group">
+                <select id="cfg-local-model" class="polygon-select">
+                  <option value="" disabled selected>Loading local models...</option>
+                </select>
+                <button type="button" class="secondary-btn btn-sm" id="btn-rescan-models" data-i18n-title="btn_rescan_models_title" title="Scan models directory">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>
+                  <span data-i18n="btn_rescan_models">Rescan folder</span>
+                </button>
+              </div>
+            </div>
+            <div class="provider-status-hint">
+              <span class="status-indicator online"></span>
+              <span id="local-model-info-text" data-i18n="models_dir_info">Directory: ./models/ • Dynamic RAM/VRAM hot-reload supported</span>
+            </div>
           </div>
-          <div class="form-row">
-            <label for="cfg-sysprompt" data-i18n="cfg_sysprompt">System Prompt:</label>
-            <textarea id="cfg-sysprompt" rows="3"></textarea>
+
+          <!-- 2. GROQ CLOUD PANEL -->
+          <div class="provider-subpanel" id="subpanel-groq" style="display: none;">
+            <div class="form-row">
+              <label for="cfg-groq-key" data-i18n="cfg_api_key">API Key:</label>
+              <div class="password-input-wrap">
+                <input type="password" id="cfg-groq-key" placeholder="gsk_..." autocomplete="off">
+                <button type="button" class="btn-toggle-eye" data-target="cfg-groq-key" title="Toggle visibility">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="cfg-groq-model" data-i18n="cfg_model_name">Model Name:</label>
+              <div class="input-with-presets">
+                <input type="text" id="cfg-groq-model" value="llama-3.3-70b-versatile" placeholder="llama-3.3-70b-versatile">
+                <div class="quick-preset-chips">
+                  <button type="button" class="model-chip" data-target="cfg-groq-model" data-val="llama-3.3-70b-versatile">Llama 3.3 70B</button>
+                  <button type="button" class="model-chip" data-target="cfg-groq-model" data-val="qwen-2.5-32b">Qwen 2.5 32B</button>
+                  <button type="button" class="model-chip" data-target="cfg-groq-model" data-val="llama-3.1-8b-instant">Llama 3.1 8B</button>
+                </div>
+              </div>
+            </div>
+            <div class="provider-actions-row">
+              <button type="button" class="secondary-btn btn-sm" id="btn-test-groq">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <span data-i18n="btn_test_connection">Test Connection (Ping)</span>
+              </button>
+              <span class="test-result-badge" id="test-result-groq" style="display: none;"></span>
+            </div>
           </div>
-          <div class="modal-footer-actions modal-footer-split">
-            <button type="button" class="danger-btn" id="btn-reset-defaults" data-i18n="btn_reset_defaults">Reset to Defaults</button>
-            <button type="button" class="primary-btn" id="btn-save-settings" data-i18n="btn_save_settings">Save Settings</button>
+
+          <!-- 3. GOOGLE GEMINI PANEL -->
+          <div class="provider-subpanel" id="subpanel-gemini" style="display: none;">
+            <div class="form-row">
+              <label for="cfg-gemini-key" data-i18n="cfg_api_key">API Key:</label>
+              <div class="password-input-wrap">
+                <input type="password" id="cfg-gemini-key" placeholder="AIzaSy..." autocomplete="off">
+                <button type="button" class="btn-toggle-eye" data-target="cfg-gemini-key" title="Toggle visibility">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="cfg-gemini-model" data-i18n="cfg_model_name">Model Name:</label>
+              <div class="input-with-presets">
+                <input type="text" id="cfg-gemini-model" value="gemini-2.0-flash" placeholder="gemini-2.0-flash">
+                <div class="quick-preset-chips">
+                  <button type="button" class="model-chip" data-target="cfg-gemini-model" data-val="gemini-2.0-flash">Gemini 2.0 Flash</button>
+                  <button type="button" class="model-chip" data-target="cfg-gemini-model" data-val="gemini-1.5-pro">Gemini 1.5 Pro</button>
+                  <button type="button" class="model-chip" data-target="cfg-gemini-model" data-val="gemini-1.5-flash">Gemini 1.5 Flash</button>
+                </div>
+              </div>
+            </div>
+            <div class="provider-actions-row">
+              <button type="button" class="secondary-btn btn-sm" id="btn-test-gemini">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>
+                <span data-i18n="btn_test_connection">Test Connection (Ping)</span>
+              </button>
+              <span class="test-result-badge" id="test-result-gemini" style="display: none;"></span>
+            </div>
+          </div>
+
+          <!-- 4. CUSTOM / COMMERCIAL API PANEL -->
+          <div class="provider-subpanel" id="subpanel-custom" style="display: none;">
+            <div class="form-row">
+              <label for="cfg-custom-preset" data-i18n="cfg_quick_preset">Provider Quick Preset:</label>
+              <select id="cfg-custom-preset" class="polygon-select">
+                <option value="openai">OpenAI (api.openai.com)</option>
+                <option value="deepseek">DeepSeek (api.deepseek.com)</option>
+                <option value="openrouter">OpenRouter (openrouter.ai)</option>
+                <option value="mistral">Mistral AI (api.mistral.ai)</option>
+                <option value="ollama">Ollama (localhost:11434)</option>
+                <option value="vllm">vLLM / Local Server (localhost:8000)</option>
+                <option value="custom">Custom Endpoint...</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="cfg-custom-url" data-i18n="cfg_base_url">Base URL:</label>
+              <input type="text" id="cfg-custom-url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="form-row">
+              <label for="cfg-custom-key" data-i18n="cfg_api_key">API Key:</label>
+              <div class="password-input-wrap">
+                <input type="password" id="cfg-custom-key" placeholder="sk-..." autocomplete="off">
+                <button type="button" class="btn-toggle-eye" data-target="cfg-custom-key" title="Toggle visibility">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="cfg-custom-model" data-i18n="cfg_model_name">Model Name:</label>
+              <input type="text" id="cfg-custom-model" value="gpt-4o" placeholder="gpt-4o / deepseek-chat / claude-3-5-sonnet">
+            </div>
+            <div class="provider-actions-row">
+              <button type="button" class="secondary-btn btn-sm" id="btn-test-custom">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span data-i18n="btn_test_connection">Test Connection (Ping)</span>
+              </button>
+              <span class="test-result-badge" id="test-result-custom" style="display: none;"></span>
+            </div>
           </div>
         </div>
+
+        <!-- PANE 2: GENERAL PREFERENCES -->
+        <div class="settings-tab-pane" id="pane-cfg-general" style="display: none;">
+          <div class="settings-form">
+            <div class="form-row">
+              <label for="cfg-language" data-i18n="cfg_language">Interface Language:</label>
+              <select id="cfg-language" class="polygon-select">
+                <option value="en">English (EN)</option>
+                <option value="cs">Čeština (CS)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="cfg-temp" data-i18n="cfg_temp">Creativity / Temperature:</label>
+              <input type="number" id="cfg-temp" min="0.0" max="1.5" step="0.05" value="0.7">
+            </div>
+            <div class="form-row">
+              <label for="cfg-tokens" data-i18n="cfg_tokens">Maximum Response Tokens:</label>
+              <input type="number" id="cfg-tokens" min="50" max="8192" step="50" value="1024">
+            </div>
+            <div class="form-row">
+              <label for="cfg-sysprompt" data-i18n="cfg_sysprompt">System Prompt:</label>
+              <textarea id="cfg-sysprompt" rows="4"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer-actions modal-footer-split">
+        <button type="button" class="danger-btn" id="btn-reset-defaults" data-i18n="btn_reset_defaults">Reset to Defaults</button>
+        <button type="button" class="primary-btn" id="btn-save-settings" data-i18n="btn_save_settings">Save Settings</button>
       </div>
     </div>
   </div>

@@ -46,11 +46,15 @@ from llama_module import (
     DEFAULT_ANALYTICAL_PRESET,
     DEFAULT_SYSTEM_PROMPT,
     PRESETS_CATALOG,
+    OpenAICompatibleClient,
     classify_methodology,
     detect_analytical_mode,
     generate_response,
     initialize_llama,
     load_analytical_prompt,
+    scan_local_models,
+    test_provider_connection,
+    unload_llama_model,
 )
 
 logger = logging.getLogger("web_server")
@@ -69,6 +73,45 @@ def load_config(path: str = "config.json") -> dict:
 
 config = load_config()
 
+def save_config_file(path: str = "config.json") -> bool:
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as exc:
+        logger.warning("Nepodařilo se uložit config.json: %s", exc)
+        return False
+
+def mask_api_key(key: str) -> str:
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "••••••••"
+    return f"{key[:3]}••••••••{key[-4:]}"
+
+def get_active_provider_info() -> dict[str, Any]:
+    provider_cfg = config.get("llm_provider", {})
+    active = provider_cfg.get("active_provider", "local")
+    if active == "groq":
+        g = provider_cfg.get("groq", {})
+        m = g.get("model") or "llama-3.3-70b-versatile"
+        return {"provider": "groq", "model": m, "display_name": f"Groq: {m}", "is_cloud": True}
+    elif active == "gemini":
+        gm = provider_cfg.get("gemini", {})
+        m = gm.get("model") or "gemini-2.0-flash"
+        return {"provider": "gemini", "model": m, "display_name": f"Gemini: {m}", "is_cloud": True}
+    elif active == "custom":
+        c = provider_cfg.get("custom", {})
+        pname = c.get("provider_name") or "API"
+        m = c.get("model") or "gpt-4o"
+        return {"provider": "custom", "model": m, "display_name": f"{pname}: {m}", "is_cloud": True}
+    else:
+        m = config.get("llama", {}).get("model", "Qwen2.5-7B-Instruct-Q4_K_M.gguf")
+        fname = Path(m).name
+        clean_m = fname[:-5] if fname.lower().endswith(".gguf") else fname
+        short_name = clean_m.split("-")[0] if "-" in clean_m else clean_m
+        return {"provider": "local", "model": fname, "display_name": f"{short_name} (Local)", "is_cloud": False}
+
 # Repositář historie a služeb
 history_repository = HistoryRepository()
 document_service = DocumentService(config=config)
@@ -86,6 +129,32 @@ _whisper_lock = threading.Lock()
 
 def get_llm():
     global _llm_instance
+    provider_cfg = config.get("llm_provider", {})
+    active_provider = provider_cfg.get("active_provider", "local")
+
+    if active_provider != "local":
+        p_data = provider_cfg.get(active_provider, {})
+        base_url = p_data.get("base_url", "")
+        api_key = p_data.get("api_key", "")
+        model = p_data.get("model", "")
+
+        if active_provider == "groq":
+            base_url = base_url or "https://api.groq.com/openai/v1"
+            model = model or "llama-3.3-70b-versatile"
+        elif active_provider == "gemini":
+            base_url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+            model = model or "gemini-2.0-flash"
+        elif active_provider == "custom":
+            base_url = base_url or "https://api.openai.com/v1"
+            model = model or "gpt-4o"
+
+        return OpenAICompatibleClient(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            timeout=float(config.get("llama", {}).get("timeout", 90.0)),
+        )
+
     with _llm_lock:
         if _llm_instance is None:
             try:
@@ -95,6 +164,24 @@ def get_llm():
             except Exception as e:
                 logger.warning("Llama model se nepodařilo inicializovat v procesu: %s (používám fallback)", e)
                 _llm_instance = None
+        return _llm_instance
+
+def reload_local_llm(new_model_path: Optional[str] = None):
+    global _llm_instance
+    with _llm_lock:
+        if _llm_instance is not None:
+            logger.info("Uvolňuji stávající model z paměti RAM/VRAM...")
+            unload_llama_model(_llm_instance)
+            _llm_instance = None
+
+        if new_model_path:
+            config.setdefault("llama", {})["model"] = new_model_path
+
+        save_config_file()
+
+        logger.info("Zavádím nový model do paměti: %s", config.get("llama", {}).get("model"))
+        _llm_instance = initialize_llama(config)
+        logger.info("Nový lokální model úspěšně zaveden.")
         return _llm_instance
 
 def get_whisper():
@@ -198,6 +285,17 @@ class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     title: Optional[str] = "Přejmenovaný chat"
 
+class SwitchLocalModelRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    model_path: str
+
+class TestConnectionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    provider: str = "groq"
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+
 class SettingsUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     temperature: Optional[float] = None
@@ -206,6 +304,9 @@ class SettingsUpdateRequest(BaseModel):
     analytical_preset: Optional[str] = None
     online_mode: Optional[bool] = None
     system_prompt: Optional[str] = None
+    local_model: Optional[str] = None
+    active_provider: Optional[str] = None
+    llm_provider: Optional[dict[str, Any]] = None
 
 # ------------------------------------------------------------------------------
 # Endpoints: Systém & Stav
@@ -221,11 +322,13 @@ def get_system_status():
     doc_count = len(document_service.get_indexed_documents()) if document_service else 0
     chunk_count = document_service.total_chunks() if document_service else 0
     mem_stats = memory_service.get_memory_stats() if memory_service else {}
+    active_brain = get_active_provider_info()
 
     return {
         "status": "online",
         "engine": "Polygon Beater Local Engine v2.3",
-        "llm_loaded": _llm_instance is not None,
+        "llm_loaded": _llm_instance is not None or active_brain.get("is_cloud", False),
+        "llm": active_brain,
         "blender": {
             "connected": blender_online,
             "host": b_host,
@@ -889,16 +992,112 @@ def reindex_all_memory():
     return {"status": "success", "result": res}
 
 # ------------------------------------------------------------------------------
+# Endpoints: Lokální modely & Externí poskytovatelé (AI Brain)
+# ------------------------------------------------------------------------------
+
+@app.get("/api/llm/local-models")
+def get_local_models():
+    """Vrací seznam všech nalezených lokálních .gguf modelů s metadaty."""
+    models_dir = config.get("llama", {}).get("models_dir", "models")
+    active_model = config.get("llama", {}).get("model", "")
+    found = scan_local_models(models_dir=models_dir, active_model_path=active_model)
+    return {
+        "status": "ok",
+        "models_dir": models_dir,
+        "active_model": active_model,
+        "count": len(found),
+        "models": found,
+    }
+
+@app.post("/api/llm/switch-model")
+def switch_local_model(req: SwitchLocalModelRequest):
+    """Bezpečně uvolní stávající model z RAM/VRAM a zavede nově vybraný .gguf soubor."""
+    path_str = req.model_path.strip()
+    if not path_str:
+        raise HTTPException(status_code=400, detail="Cesta k modelu nesmí být prázdná.")
+
+    p = Path(path_str)
+    if not p.is_file():
+        alt = Path("models") / path_str
+        if alt.is_file():
+            path_str = str(alt)
+        else:
+            raise HTTPException(status_code=404, detail=f"Soubor modelu '{path_str}' nebyl nalezen.")
+
+    try:
+        config.setdefault("llm_provider", {})["active_provider"] = "local"
+        reload_local_llm(new_model_path=path_str)
+        return {
+            "status": "ok",
+            "message": f"Model '{path_str}' byl úspěšně zaveden do paměti.",
+            "active_model": path_str,
+            "active_brain": get_active_provider_info(),
+        }
+    except Exception as exc:
+        logger.exception("Chyba při přepínání modelu: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Chyba při zavádění modelu: {exc}")
+
+@app.post("/api/llm/test-connection")
+def test_connection_endpoint(req: TestConnectionRequest):
+    """Otestuje spojení s vybraným API poskytovatelem (Ping API)."""
+    provider = (req.provider or "groq").lower().strip()
+    provider_cfg = config.get("llm_provider", {}).get(provider, {})
+
+    base_url = (req.base_url or "").strip() or provider_cfg.get("base_url", "")
+    if not base_url:
+        if provider == "groq":
+            base_url = "https://api.groq.com/openai/v1"
+        elif provider == "gemini":
+            base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        else:
+            base_url = "https://api.openai.com/v1"
+
+    api_key = (req.api_key or "").strip()
+    if not api_key or "••••" in api_key:
+        api_key = provider_cfg.get("api_key", "")
+
+    model = (req.model or "").strip() or provider_cfg.get("model", "")
+    if not model:
+        if provider == "groq":
+            model = "llama-3.3-70b-versatile"
+        elif provider == "gemini":
+            model = "gemini-2.0-flash"
+        else:
+            model = "gpt-4o"
+
+    res = test_provider_connection(
+        provider_type=provider,
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+    )
+    return res
+
+# ------------------------------------------------------------------------------
 # Endpoints: Konfigurace & Nastavení
 # ------------------------------------------------------------------------------
 
 @app.get("/api/config")
 def get_config():
+    safe_cfg = json.loads(json.dumps(config))
+    llm_prov = safe_cfg.setdefault("llm_provider", {
+        "active_provider": "local",
+        "groq": {"api_key": "", "model": "llama-3.3-70b-versatile", "base_url": "https://api.groq.com/openai/v1"},
+        "gemini": {"api_key": "", "model": "gemini-2.0-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
+        "custom": {"provider_name": "OpenAI", "base_url": "https://api.openai.com/v1", "api_key": "", "model": "gpt-4o", "temperature": 0.7, "max_tokens": 2048}
+    })
+    for p_name in ("groq", "gemini", "custom"):
+        sub = llm_prov.get(p_name, {})
+        raw_key = config.get("llm_provider", {}).get(p_name, {}).get("api_key", "")
+        sub["has_api_key"] = bool(raw_key)
+        sub["api_key"] = mask_api_key(raw_key)
+
     return {
-        "config": config,
+        "config": safe_cfg,
         "analytical_presets": list(ANALYTICAL_PRESETS.keys()),
         "default_preset": DEFAULT_ANALYTICAL_PRESET,
         "default_system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "active_brain": get_active_provider_info(),
     }
 
 @app.post("/api/config")
@@ -917,14 +1116,40 @@ def update_config(req: SettingsUpdateRequest):
     if req.system_prompt is not None:
         llama_cfg["system_prompt"] = req.system_prompt
 
-    # Uložení do config.json
-    try:
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-    except Exception as exc:
-        logger.warning("Nepodařilo se uložit config.json: %s", exc)
+    llm_prov = config.setdefault("llm_provider", {})
+    if req.active_provider:
+        llm_prov["active_provider"] = req.active_provider
+    elif req.llm_provider and "active_provider" in req.llm_provider:
+        llm_prov["active_provider"] = req.llm_provider["active_provider"]
 
-    return {"status": "success", "config": config}
+    if req.llm_provider:
+        for p_name in ("groq", "gemini", "custom"):
+            if p_name in req.llm_provider and isinstance(req.llm_provider[p_name], dict):
+                incoming = req.llm_provider[p_name]
+                current = llm_prov.setdefault(p_name, {})
+                for k, v in incoming.items():
+                    if k == "api_key":
+                        # Aktualizujeme klíč pouze pokud není prázdný a není zamaskovaný
+                        if v and "••••" not in v and "..." not in v:
+                            current["api_key"] = v.strip()
+                    elif k != "has_api_key":
+                        current[k] = v
+
+    # Přepnutí lokálního modelu, pokud bylo zvoleno a liší se od aktuálního
+    if req.local_model and req.local_model.strip() and req.local_model.strip() != llama_cfg.get("model"):
+        new_m = req.local_model.strip()
+        try:
+            reload_local_llm(new_model_path=new_m)
+        except Exception as e:
+            logger.warning("Nepodařilo se přepnout lokální model: %s", e)
+    else:
+        save_config_file()
+
+    return {
+        "status": "success",
+        "config": get_config()["config"],
+        "active_brain": get_active_provider_info(),
+    }
 
 @app.post("/api/app/shutdown")
 def shutdown_app():

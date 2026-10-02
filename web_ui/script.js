@@ -259,6 +259,8 @@
   // ===========================================================================
   const el = {
     // Header
+    llmIndicator: document.getElementById('llm-indicator'),
+    llmStatusText: document.getElementById('llm-status-text'),
     blenderIndicator: document.getElementById('blender-indicator'),
     blenderStatusText: document.getElementById('blender-status-text'),
     ragStatusText: document.getElementById('rag-status-text'),
@@ -371,6 +373,42 @@
 
     modalSettings: document.getElementById('modal-settings'),
     btnCloseSettingsModal: document.getElementById('btn-close-settings-modal'),
+    tabBtnCfgBrain: document.getElementById('tab-btn-cfg-brain'),
+    tabBtnCfgGeneral: document.getElementById('tab-btn-cfg-general'),
+    paneCfgBrain: document.getElementById('pane-cfg-brain'),
+    paneCfgGeneral: document.getElementById('pane-cfg-general'),
+
+    // Subpanels
+    subpanelLocal: document.getElementById('subpanel-local'),
+    subpanelGroq: document.getElementById('subpanel-groq'),
+    subpanelGemini: document.getElementById('subpanel-gemini'),
+    subpanelCustom: document.getElementById('subpanel-custom'),
+
+    // Local model
+    cfgLocalModel: document.getElementById('cfg-local-model'),
+    btnRescanModels: document.getElementById('btn-rescan-models'),
+    localModelInfoText: document.getElementById('local-model-info-text'),
+
+    // Groq
+    cfgGroqKey: document.getElementById('cfg-groq-key'),
+    cfgGroqModel: document.getElementById('cfg-groq-model'),
+    btnTestGroq: document.getElementById('btn-test-groq'),
+    testResultGroq: document.getElementById('test-result-groq'),
+
+    // Gemini
+    cfgGeminiKey: document.getElementById('cfg-gemini-key'),
+    cfgGeminiModel: document.getElementById('cfg-gemini-model'),
+    btnTestGemini: document.getElementById('btn-test-gemini'),
+    testResultGemini: document.getElementById('test-result-gemini'),
+
+    // Custom
+    cfgCustomPreset: document.getElementById('cfg-custom-preset'),
+    cfgCustomUrl: document.getElementById('cfg-custom-url'),
+    cfgCustomKey: document.getElementById('cfg-custom-key'),
+    cfgCustomModel: document.getElementById('cfg-custom-model'),
+    btnTestCustom: document.getElementById('btn-test-custom'),
+    testResultCustom: document.getElementById('test-result-custom'),
+
     cfgLanguage: document.getElementById('cfg-language'),
     cfgTemp: document.getElementById('cfg-temp'),
     cfgTokens: document.getElementById('cfg-tokens'),
@@ -602,6 +640,32 @@
       log_session_deleted: 'Session {id} deleted.',
       sources_count: '{count} sources',
       chunks_count: '{count} chunks',
+      settings_tab_brain: 'AI Brain & Providers',
+      settings_tab_general: 'General Preferences',
+      cfg_brain_desc: 'Choose whether to run completely private on local hardware (.gguf) or connect ultra-fast cloud/custom AI providers.',
+      provider_local: 'Local Model (.gguf)',
+      provider_local_desc: 'Private CPU & Vulkan GPU execution',
+      provider_badge_offline: '100% Offline',
+      provider_groq: 'Groq Cloud',
+      provider_groq_desc: 'Ultra-fast Llama 3.3 & Qwen 2.5',
+      provider_gemini: 'Google Gemini',
+      provider_gemini_desc: 'Gemini 2.0 Flash & 1.5 Pro',
+      provider_custom: 'Custom / Paid API',
+      provider_custom_desc: 'OpenAI, DeepSeek, OpenRouter, vLLM',
+      cfg_local_model_label: 'Active .gguf Model:',
+      btn_rescan_models: 'Rescan folder',
+      btn_rescan_models_title: 'Scan models directory for .gguf files',
+      models_dir_info: 'Directory: ./models/ • Dynamic RAM/VRAM hot-reload supported',
+      cfg_api_key: 'API Key:',
+      cfg_model_name: 'Model Name:',
+      cfg_base_url: 'Base URL Endpoint:',
+      cfg_quick_preset: 'Provider Quick Preset:',
+      btn_test_connection: 'Test Connection (Ping)',
+      testing_connection: 'Testing connection...',
+      test_connection_ok: 'Connection OK ({latency} ms)',
+      test_connection_err: 'Connection Error: {error}',
+      model_switched_success: 'Model "{model}" successfully loaded into memory.',
+      error_switch_model: 'Failed to switch model: ',
     },
     cs: {
       status_llm: 'Qwen2.5-7B GGUF',
@@ -817,6 +881,32 @@
       log_session_deleted: 'Relace {id} smazána.',
       sources_count: '{count} zdrojů',
       chunks_count: '{count} úseků',
+      settings_tab_brain: 'AI Brain & Poskytovatelé',
+      settings_tab_general: 'Obecná konfigurace',
+      cfg_brain_desc: 'Zvolte, zda poběžíte privátně na lokálním hardwaru (.gguf), nebo připojíte bleskové cloudové a vlastní AI poskytovatele.',
+      provider_local: 'Lokální model (.gguf)',
+      provider_local_desc: 'Privátní běh na CPU a Vulkan GPU',
+      provider_badge_offline: '100% Offline',
+      provider_groq: 'Groq Cloud',
+      provider_groq_desc: 'Bleskové modely Llama 3.3 a Qwen 2.5',
+      provider_gemini: 'Google Gemini',
+      provider_gemini_desc: 'Gemini 2.0 Flash a 1.5 Pro',
+      provider_custom: 'Vlastní / Placené API',
+      provider_custom_desc: 'OpenAI, DeepSeek, OpenRouter, vLLM',
+      cfg_local_model_label: 'Aktivní .gguf model:',
+      btn_rescan_models: 'Znovu načíst složku',
+      btn_rescan_models_title: 'Znovu prohledat adresář models/ na .gguf soubory',
+      models_dir_info: 'Adresář: ./models/ • Podpora symlinků a přepínání za běhu',
+      cfg_api_key: 'API klíč:',
+      cfg_model_name: 'Název modelu:',
+      cfg_base_url: 'Base URL endpoint:',
+      cfg_quick_preset: 'Předvolba poskytovatele:',
+      btn_test_connection: 'Otestovat spojení (Ping)',
+      testing_connection: 'Testuji spojení…',
+      test_connection_ok: 'Spojení v pořádku ({latency} ms)',
+      test_connection_err: 'Chyba spojení: {error}',
+      model_switched_success: 'Model "{model}" byl úspěšně zaveden do paměti.',
+      error_switch_model: 'Chyba při zavádění modelu: ',
     }
   };
 
@@ -3061,23 +3151,218 @@ print(f"Active object: {act.name if act else 'None'}")
   }
 
   // ===========================================================================
+  // SETTINGS TABS & PROVIDER CONFIGURATION
+  // ===========================================================================
+  function switchSettingsTab(tabName) {
+    const isBrain = (tabName === 'brain');
+    if (el.tabBtnCfgBrain) el.tabBtnCfgBrain.classList.toggle('active', isBrain);
+    if (el.tabBtnCfgGeneral) el.tabBtnCfgGeneral.classList.toggle('active', !isBrain);
+    if (el.paneCfgBrain) {
+      el.paneCfgBrain.classList.toggle('active', isBrain);
+      el.paneCfgBrain.style.display = isBrain ? 'block' : 'none';
+    }
+    if (el.paneCfgGeneral) {
+      el.paneCfgGeneral.classList.toggle('active', !isBrain);
+      el.paneCfgGeneral.style.display = !isBrain ? 'block' : 'none';
+    }
+  }
+
+  function selectSettingsProvider(providerName) {
+    const valid = ['local', 'groq', 'gemini', 'custom'];
+    const pName = valid.includes(providerName) ? providerName : 'local';
+
+    // Update radio inputs
+    const radio = document.querySelector(`input[name="llm_provider_choice"][value="${pName}"]`);
+    if (radio) radio.checked = true;
+
+    // Update active class on provider cards
+    document.querySelectorAll('.provider-radio-card').forEach(card => {
+      const cardProvider = card.dataset.provider || card.querySelector('input[name="llm_provider_choice"]')?.value;
+      card.classList.toggle('active', cardProvider === pName);
+    });
+
+    // Update subpanels visibility
+    const subpanels = {
+      local: el.subpanelLocal,
+      groq: el.subpanelGroq,
+      gemini: el.subpanelGemini,
+      custom: el.subpanelCustom,
+    };
+
+    Object.keys(subpanels).forEach(key => {
+      const sp = subpanels[key];
+      if (sp) {
+        sp.style.display = (key === pName) ? 'block' : 'none';
+      }
+    });
+  }
+
+  let localModelsCache = [];
+
+  async function loadLocalModelsList(preferredPath = null) {
+    if (!el.cfgLocalModel) return;
+    try {
+      if (el.btnRescanModels) el.btnRescanModels.classList.add('loading');
+      const res = await fetch('/api/llm/local-models');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      localModelsCache = data.models || [];
+
+      el.cfgLocalModel.innerHTML = '';
+      if (localModelsCache.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = state.language === 'cs' ? '(Žádné .gguf modely nenalezeny v ./models/)' : '(No .gguf models found in ./models/)';
+        el.cfgLocalModel.appendChild(opt);
+        if (el.localModelInfoText) {
+          el.localModelInfoText.textContent = state.language === 'cs'
+            ? 'Vložte soubory modelů .gguf do složky models/ a klikněte na Znovu načíst.'
+            : 'Place .gguf model files into models/ folder and click Rescan.';
+        }
+        return;
+      }
+
+      let targetVal = preferredPath || data.active_model_path || '';
+
+      localModelsCache.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.path;
+        const activeStar = m.is_active ? ' ★' : '';
+        opt.textContent = `${m.filename} (${m.size_gb} GB${m.params ? `, ${m.params}` : ''})${activeStar}`;
+        if (m.path === targetVal || (!targetVal && m.is_active)) {
+          opt.selected = true;
+          targetVal = m.path;
+        }
+        el.cfgLocalModel.appendChild(opt);
+      });
+
+      updateLocalModelInfoDisplay(el.cfgLocalModel.value);
+    } catch (err) {
+      logConsole(`Error scanning local models: ${err.message}`, 'error');
+    } finally {
+      if (el.btnRescanModels) el.btnRescanModels.classList.remove('loading');
+    }
+  }
+
+  function updateLocalModelInfoDisplay(modelPath) {
+    if (!el.localModelInfoText) return;
+    if (!modelPath) {
+      el.localModelInfoText.textContent = '';
+      return;
+    }
+    const found = localModelsCache.find(m => m.path === modelPath);
+    if (found) {
+      el.localModelInfoText.innerHTML = `
+        <span><strong>${escapeHtml(found.filename)}</strong></span> • 
+        <span>${found.size_gb} GB</span> • 
+        <span>${escapeHtml(found.params || 'N/A')}</span> • 
+        <span>Quant: ${escapeHtml(found.quant || 'GGUF')}</span>
+        ${found.is_symlink ? `<span style="color: var(--accent-color);"> (symlink)</span>` : ''}
+      `;
+    } else {
+      el.localModelInfoText.textContent = modelPath;
+    }
+  }
+
+  async function testProviderPing(providerName) {
+    let btn = null;
+    let resultEl = null;
+    let payload = { provider_type: providerName };
+
+    if (providerName === 'groq') {
+      btn = el.btnTestGroq;
+      resultEl = el.testResultGroq;
+      payload.api_key = el.cfgGroqKey ? el.cfgGroqKey.value.trim() : '';
+      payload.model = el.cfgGroqModel ? el.cfgGroqModel.value.trim() : '';
+    } else if (providerName === 'gemini') {
+      btn = el.btnTestGemini;
+      resultEl = el.testResultGemini;
+      payload.api_key = el.cfgGeminiKey ? el.cfgGeminiKey.value.trim() : '';
+      payload.model = el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : '';
+    } else if (providerName === 'custom') {
+      btn = el.btnTestCustom;
+      resultEl = el.testResultCustom;
+      payload.base_url = el.cfgCustomUrl ? el.cfgCustomUrl.value.trim() : '';
+      payload.api_key = el.cfgCustomKey ? el.cfgCustomKey.value.trim() : '';
+      payload.model = el.cfgCustomModel ? el.cfgCustomModel.value.trim() : '';
+    }
+
+    if (!btn || !resultEl) return;
+
+    btn.disabled = true;
+    resultEl.style.display = 'inline-flex';
+    resultEl.className = 'test-result-badge testing';
+    resultEl.textContent = t('testing_connection');
+
+    try {
+      const res = await fetch('/api/llm/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        resultEl.className = 'test-result-badge success';
+        resultEl.textContent = t('test_connection_ok', { latency: data.latency_ms ?? 0 });
+      } else {
+        resultEl.className = 'test-result-badge error';
+        const errMsg = data.error || data.detail || `HTTP ${res.status}`;
+        resultEl.textContent = t('test_connection_err', { error: errMsg });
+      }
+    } catch (err) {
+      resultEl.className = 'test-result-badge error';
+      resultEl.textContent = t('test_connection_err', { error: err.message });
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ===========================================================================
   // SETTINGS MODAL & PERSISTENCE
   // ===========================================================================
   async function openSettingsModal() {
     if (!el.modalSettings) return;
     el.modalSettings.style.display = 'flex';
+    switchSettingsTab('brain');
+
     if (el.cfgLanguage) {
       el.cfgLanguage.value = state.language;
     }
+
     try {
       const res = await fetch('/api/config');
       const data = await res.json();
       const cfg = data.config || {};
       const llama = cfg.llama || {};
+      const provCfg = cfg.llm_provider || {};
 
       if (el.cfgTemp) el.cfgTemp.value = llama.temperature ?? 0.7;
       if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 1024;
       if (el.cfgSysprompt) el.cfgSysprompt.value = llama.system_prompt ?? data.default_system_prompt ?? '';
+
+      // Provider selection
+      const activeProv = provCfg.active_provider || 'local';
+      selectSettingsProvider(activeProv);
+
+      // Groq
+      const groqCfg = provCfg.groq || {};
+      if (el.cfgGroqKey) el.cfgGroqKey.value = groqCfg.api_key || '';
+      if (el.cfgGroqModel) el.cfgGroqModel.value = groqCfg.model || 'llama-3.3-70b-versatile';
+
+      // Gemini
+      const geminiCfg = provCfg.gemini || {};
+      if (el.cfgGeminiKey) el.cfgGeminiKey.value = geminiCfg.api_key || '';
+      if (el.cfgGeminiModel) el.cfgGeminiModel.value = geminiCfg.model || 'gemini-2.0-flash';
+
+      // Custom
+      const customCfg = provCfg.custom || {};
+      if (el.cfgCustomPreset) el.cfgCustomPreset.value = customCfg.preset || 'custom';
+      if (el.cfgCustomUrl) el.cfgCustomUrl.value = customCfg.base_url || 'https://api.openai.com/v1';
+      if (el.cfgCustomKey) el.cfgCustomKey.value = customCfg.api_key || '';
+      if (el.cfgCustomModel) el.cfgCustomModel.value = customCfg.model || 'gpt-4o-mini';
+
+      // Load local models
+      await loadLocalModelsList(llama.model_path);
     } catch (e) {
       logConsole(`Error loading config: ${e.message}`, 'error');
     }
@@ -3089,13 +3374,39 @@ print(f"Active object: {act.name if act else 'None'}")
 
   async function saveSettings() {
     try {
+      if (el.btnSaveSettings) el.btnSaveSettings.disabled = true;
+
       if (el.cfgLanguage) {
         setLanguage(el.cfgLanguage.value);
       }
+
+      const activeProviderRadio = document.querySelector('input[name="llm_provider_choice"]:checked');
+      const activeProvider = activeProviderRadio ? activeProviderRadio.value : 'local';
+
       const payload = {
-        temperature: parseFloat(el.cfgTemp.value) || 0.7,
-        max_tokens: parseInt(el.cfgTokens.value, 10) || 1024,
-        system_prompt: el.cfgSysprompt.value,
+        language: el.cfgLanguage ? el.cfgLanguage.value : state.language,
+        temperature: parseFloat(el.cfgTemp ? el.cfgTemp.value : 0.7) || 0.7,
+        max_tokens: parseInt(el.cfgTokens ? el.cfgTokens.value : 1024, 10) || 1024,
+        system_prompt: el.cfgSysprompt ? el.cfgSysprompt.value : '',
+        active_provider: activeProvider,
+        local_model: (activeProvider === 'local' && el.cfgLocalModel) ? el.cfgLocalModel.value : undefined,
+        llm_provider: {
+          active_provider: activeProvider,
+          groq: {
+            api_key: el.cfgGroqKey ? el.cfgGroqKey.value.trim() : '',
+            model: el.cfgGroqModel ? el.cfgGroqModel.value.trim() : 'llama-3.3-70b-versatile',
+          },
+          gemini: {
+            api_key: el.cfgGeminiKey ? el.cfgGeminiKey.value.trim() : '',
+            model: el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : 'gemini-2.0-flash',
+          },
+          custom: {
+            preset: el.cfgCustomPreset ? el.cfgCustomPreset.value : 'custom',
+            base_url: el.cfgCustomUrl ? el.cfgCustomUrl.value.trim() : 'https://api.openai.com/v1',
+            api_key: el.cfgCustomKey ? el.cfgCustomKey.value.trim() : '',
+            model: el.cfgCustomModel ? el.cfgCustomModel.value.trim() : 'gpt-4o-mini',
+          }
+        }
       };
 
       const res = await fetch('/api/config', {
@@ -3104,11 +3415,18 @@ print(f"Active object: {act.name if act else 'None'}")
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error(t('error_save_config'));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || data.error || t('error_save_config'));
+      }
+
       logConsole(t('config_saved'), 'info');
+      await refreshSystemStatus();
       closeSettingsModal();
     } catch (err) {
       logConsole(`${t('error_saving_config')}: ${err.message}`, 'error');
+    } finally {
+      if (el.btnSaveSettings) el.btnSaveSettings.disabled = false;
     }
   }
 
@@ -3120,6 +3438,17 @@ print(f"Active object: {act.name if act else 'None'}")
       const res = await fetch('/api/status');
       if (!res.ok) return;
       const data = await res.json();
+
+      // LLM status indicator in header
+      if (el.llmStatusText && data.llm) {
+        const modelName = data.llm.model_display || data.llm.model_name || data.llm.provider_name || 'LLM Online';
+        el.llmStatusText.textContent = modelName;
+        if (el.llmIndicator) {
+          const isCloud = (data.llm.provider_type && data.llm.provider_type !== 'local');
+          el.llmIndicator.className = isCloud ? 'status-indicator online cloud' : 'status-indicator online';
+          el.llmIndicator.title = `${data.llm.provider_name || 'LLM'}: ${modelName}`;
+        }
+      }
 
       // RAG status
       if (el.ragStatusText) {
@@ -3551,6 +3880,89 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.btnSaveSettings) el.btnSaveSettings.addEventListener('click', saveSettings);
     if (el.btnResetDefaults) el.btnResetDefaults.addEventListener('click', resetToDefaults);
     if (el.btnReindexMemory) el.btnReindexMemory.addEventListener('click', reindexAllMemory);
+
+    // Settings Tabs (AI Brain vs General)
+    if (el.tabBtnCfgBrain) el.tabBtnCfgBrain.addEventListener('click', () => switchSettingsTab('brain'));
+    if (el.tabBtnCfgGeneral) el.tabBtnCfgGeneral.addEventListener('click', () => switchSettingsTab('general'));
+
+    // Provider Radio Cards Selection
+    document.querySelectorAll('input[name="llm_provider_choice"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        selectSettingsProvider(e.target.value);
+      });
+    });
+
+    document.querySelectorAll('.provider-radio-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        const radio = card.querySelector('input[name="llm_provider_choice"]');
+        if (radio) {
+          radio.checked = true;
+          selectSettingsProvider(radio.value);
+        }
+      });
+    });
+
+    // Rescan Local Models
+    if (el.btnRescanModels) {
+      el.btnRescanModels.addEventListener('click', () => loadLocalModelsList());
+    }
+
+    // Local Model Select Change
+    if (el.cfgLocalModel) {
+      el.cfgLocalModel.addEventListener('change', (e) => {
+        updateLocalModelInfoDisplay(e.target.value);
+      });
+    }
+
+    // Quick Model Preset Chips
+    document.querySelectorAll('.model-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const targetId = chip.dataset.target;
+        const modelVal = chip.dataset.model;
+        if (targetId && modelVal) {
+          const input = document.getElementById(targetId);
+          if (input) input.value = modelVal;
+        }
+      });
+    });
+
+    // Custom Provider Presets Dropdown
+    if (el.cfgCustomPreset) {
+      el.cfgCustomPreset.addEventListener('change', (e) => {
+        const val = e.target.value;
+        const PRESET_ENDPOINTS = {
+          openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+          deepseek: { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+          openrouter: { url: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat' },
+          mistral: { url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
+          ollama: { url: 'http://localhost:11434/v1', model: 'llama3.2:latest' },
+          vllm: { url: 'http://localhost:8000/v1', model: 'default' },
+        };
+        if (PRESET_ENDPOINTS[val]) {
+          if (el.cfgCustomUrl) el.cfgCustomUrl.value = PRESET_ENDPOINTS[val].url;
+          if (el.cfgCustomModel) el.cfgCustomModel.value = PRESET_ENDPOINTS[val].model;
+        }
+      });
+    }
+
+    // Password / API Key Eye Visibility Toggles
+    document.querySelectorAll('.btn-toggle-eye').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const input = targetId ? document.getElementById(targetId) : btn.closest('.password-input-wrap')?.querySelector('input');
+        if (input) {
+          const isPassword = (input.type === 'password');
+          input.type = isPassword ? 'text' : 'password';
+          btn.classList.toggle('active', isPassword);
+        }
+      });
+    });
+
+    // Test Connection Ping Buttons
+    if (el.btnTestGroq) el.btnTestGroq.addEventListener('click', () => testProviderPing('groq'));
+    if (el.btnTestGemini) el.btnTestGemini.addEventListener('click', () => testProviderPing('gemini'));
+    if (el.btnTestCustom) el.btnTestCustom.addEventListener('click', () => testProviderPing('custom'));
 
     // Language switcher in settings
     if (el.cfgLanguage) {

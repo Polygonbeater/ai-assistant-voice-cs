@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 from llama_cpp import Llama
+import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -332,6 +334,220 @@ def resolve_optimal_context_size(model_path: str, user_n_ctx: int | str | None =
         return 16384
     else:
         return 16384
+
+
+def scan_local_models(models_dir: str = "models", active_model_path: str = "") -> list[dict[str, Any]]:
+    """
+    Prohledá adresář s modely a najde všechny dostupné soubory .gguf s detailními metadaty.
+    Správně rozlišuje symlinky, detekuje odhad parametrů a kvantizaci.
+    """
+    p = Path(models_dir)
+    if not p.is_absolute() and not p.exists():
+        # Fallback relativně k aktuálnímu souboru
+        p = (Path(__file__).parent / models_dir).resolve()
+
+    if not p.exists() or not p.is_dir():
+        logging.warning("Složka s modely nebyla nalezena: %s", p)
+        return []
+
+    results = []
+    norm_active = (active_model_path or "").replace("\\", "/").strip().lower()
+
+    for entry in p.rglob("*.gguf"):
+        if not entry.is_file():
+            continue
+        try:
+            stat = entry.stat()
+            size_bytes = stat.st_size
+            size_gb = round(size_bytes / (1024 ** 3), 2)
+            size_human = f"{size_gb} GB" if size_gb >= 1.0 else f"{round(size_bytes / (1024 ** 2), 1)} MB"
+
+            filename = entry.name
+            rel_path = str(entry).replace("\\", "/")
+            try:
+                rel_path = str(entry.relative_to(Path.cwd())).replace("\\", "/")
+            except ValueError:
+                pass
+
+            # Detekce kvantizace z názvu souboru (např. Q4_K_M, Q5_K_S, Q8_0, F16)
+            quant_match = re.search(r'(Q\d_[A-Z0-9_]+|IQ\d_[A-Z0-9_]+|F16|F32|BF16)', filename, re.IGNORECASE)
+            quantization = quant_match.group(1).upper() if quant_match else "GGUF"
+
+            # Detekce počtu parametrů (např. 7B, 9B, 14B, 32B, 70B, 72B)
+            param_match = re.search(r'(\d+(?:\.\d+)?)[Bb]\b', filename)
+            param_estimate = f"{param_match.group(1).upper()}B" if param_match else "-"
+
+            # Odvození přívětivého názvu modelu
+            clean_name = filename[:-5] if filename.lower().endswith(".gguf") else filename
+
+            # Ověření, zda je model aktuálně aktivní
+            is_active = False
+            if norm_active:
+                is_active = (
+                    rel_path.lower() == norm_active
+                    or filename.lower() == Path(norm_active).name.lower()
+                    or entry.name.lower() == Path(norm_active).name.lower()
+                )
+
+            results.append({
+                "name": clean_name,
+                "filename": filename,
+                "path": rel_path,
+                "absolute_path": str(entry.resolve()),
+                "size_bytes": size_bytes,
+                "size_human": size_human,
+                "quantization": quantization,
+                "parameters": param_estimate,
+                "is_active": is_active,
+            })
+        except Exception as exc:
+            logging.warning("Chyba při čtení modelu %s: %s", entry, exc)
+
+    results.sort(key=lambda m: m["name"].lower())
+    return results
+
+
+def unload_llama_model(llm: Any = None) -> None:
+    """Bezpečně uvolní Llama model z paměti RAM a GPU VRAM."""
+    import gc
+    if llm is not None:
+        try:
+            del llm
+        except Exception as e:
+            logging.warning("Chyba při uvolňování reference modelu: %s", e)
+    gc.collect()
+
+
+class OpenAICompatibleClient:
+    """
+    Univerzální klient pro OpenAI-kompatibilní API poskytovatele:
+    - Groq Cloud (https://api.groq.com/openai/v1)
+    - Google Gemini (https://generativelanguage.googleapis.com/v1beta/openai/)
+    - OpenAI (https://api.openai.com/v1)
+    - DeepSeek (https://api.deepseek.com/v1)
+    - OpenRouter (https://openrouter.ai/api/v1)
+    - Mistral, vLLM, Ollama, LM Studio
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str = "",
+        model: str = "gpt-4o",
+        timeout: float = 90.0,
+    ):
+        base = (base_url or "").strip().rstrip("/")
+        if not base:
+            base = "https://api.openai.com/v1"
+        if not base.endswith("/chat/completions"):
+            self.endpoint = f"{base}/chat/completions"
+        else:
+            self.endpoint = base
+        self.api_key = (api_key or "").strip()
+        self.model = (model or "").strip() or "gpt-4o"
+        self.timeout = timeout
+
+    def create_chat_completion(
+        self,
+        messages: list[dict[str, Any]],
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        stream: bool = True,
+        **kwargs: Any,
+    ):
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Polygon-Beater/2.3",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["x-goog-api-key"] = self.api_key
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": stream,
+        }
+
+        for extra in ("top_p", "stop"):
+            if extra in kwargs and kwargs[extra] is not None:
+                payload[extra] = kwargs[extra]
+
+        if stream:
+            return self._stream_generator(payload, headers)
+        else:
+            resp = requests.post(self.endpoint, headers=headers, json=payload, timeout=self.timeout)
+            if not resp.ok:
+                err_text = resp.text[:400]
+                raise RuntimeError(f"API Provider Error (HTTP {resp.status_code}): {err_text}")
+            return resp.json()
+
+    def _stream_generator(self, payload: dict[str, Any], headers: dict[str, str]):
+        with requests.post(self.endpoint, headers=headers, json=payload, stream=True, timeout=self.timeout) as resp:
+            if not resp.ok:
+                err_text = resp.text[:400]
+                raise RuntimeError(f"API Provider Error (HTTP {resp.status_code}): {err_text}")
+
+            for raw_line in resp.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if not line.startswith("data:"):
+                    continue
+                data_str = line[5:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    yield chunk
+                except Exception:
+                    continue
+
+
+def test_provider_connection(
+    provider_type: str,
+    base_url: str,
+    api_key: str,
+    model: str,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Otestuje spojení s vybraným API poskytovatelem (Ping API)."""
+    t0 = time.monotonic()
+    client = OpenAICompatibleClient(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        timeout=timeout,
+    )
+    try:
+        res = client.create_chat_completion(
+            messages=[{"role": "user", "content": "Ping"}],
+            max_tokens=10,
+            temperature=0.0,
+            stream=False,
+        )
+        elapsed_ms = round((time.monotonic() - t0) * 1000)
+        content = ""
+        choices = res.get("choices") or []
+        if choices:
+            content = choices[0].get("message", {}).get("content", "")
+        return {
+            "status": "ok",
+            "latency_ms": elapsed_ms,
+            "model": model,
+            "reply": content.strip()[:100],
+            "message": f"Spojení úspěšné! Model '{model}' odpověděl za {elapsed_ms} ms.",
+        }
+    except Exception as exc:
+        elapsed_ms = round((time.monotonic() - t0) * 1000)
+        return {
+            "status": "error",
+            "latency_ms": elapsed_ms,
+            "error": str(exc),
+            "message": f"Chyba spojení s {provider_type}: {exc}",
+        }
 
 
 def initialize_llama(config: dict) -> Llama:
