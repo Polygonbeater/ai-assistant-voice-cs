@@ -207,6 +207,8 @@
 
       remove_attachment_title: 'Remove attachment',
       thinking_status: 'Thinking…',
+      tool_running: 'Running tool',
+      tool_finished: 'Completed',
       prompt_placeholder: 'Type a query or Blender command... (Enter to send, Shift+Enter for newline)',
       attach_file_title: 'Attach document for RAG (PDF, TXT, DOCX)',
       mic_btn_title: 'Voice recording (Whisper STT)',
@@ -349,6 +351,8 @@
 
       remove_attachment_title: 'Odebrat přílohu',
       thinking_status: 'Přemýšlím…',
+      tool_running: 'Spouštím nástroj',
+      tool_finished: 'Dokončeno',
       prompt_placeholder: 'Napište dotaz nebo příkaz pro Blender... (Enter pro odeslání, Shift+Enter pro nový řádek)',
       attach_file_title: 'Připojit dokument pro RAG (PDF, TXT, DOCX)',
       mic_btn_title: 'Hlasový záznam (přepis přes Whisper)',
@@ -1438,7 +1442,25 @@
     const toolArea = assistantCard.querySelector('.message-tool-status-area');
 
     let fullText = '';
+    let reader = null;
+    let timeoutId = null;
     state.abortController = new AbortController();
+
+    // Univerzální watchdog timeout (120s nečinnosti)
+    const resetWatchdog = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        if (state.isStreaming) {
+          logConsole('Streaming watchdog timeout triggered. Forcing UI reset.', 'warn');
+          if (state.abortController) {
+            try {
+              state.abortController.abort();
+            } catch (e) {}
+          }
+        }
+      }, 120000);
+    };
+    resetWatchdog();
 
     try {
       const payload = {
@@ -1472,7 +1494,6 @@
         throw new Error(`HTTP ${response.status}: ${errDetail}`);
       }
 
-      let reader = null;
       try {
         reader = response.body ? response.body.getReader() : null;
       } catch (e) {
@@ -1488,6 +1509,7 @@
         const { value, done } = await reader.read();
         if (done) break;
 
+        resetWatchdog();
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');
         buffer = lines.pop();
@@ -1495,63 +1517,106 @@
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data: ')) continue;
-          const jsonStr = trimmed.slice(6);
-          try {
-            const data = JSON.parse(jsonStr);
+          const payloadStr = trimmed.slice(6).trim();
 
-            if (data.type === 'session_id') {
-              if (data.content && (!state.sessionId || state.sessionId !== data.content)) {
-                state.sessionId = data.content;
-              }
-            } else if (data.type === 'token') {
-              fullText += data.content;
-              bodyEl.innerHTML = renderMarkdown(fullText);
-              scrollToBottom();
-            } else if (data.type === 'status') {
-              if (toolArea) {
-                toolArea.style.display = 'block';
-                const pill = document.createElement('div');
-                pill.className = 'tool-status-pill';
-                pill.textContent = data.content;
-                toolArea.appendChild(pill);
-              }
-              if (el.liveStatusText) {
-                el.liveStatusText.textContent = data.content;
-              }
-              addAgentStep(data.content, 'status', 'TOOL');
-              logConsole(data.content, 'info');
-              scrollToBottom();
-            } else if (data.type === 'agent_step') {
-              addAgentStep(data.content, data.step_type || 'info', data.badge || 'STEP');
-              logConsole(`[Agent Step] ${data.content}`, 'info');
-            } else if (data.type === 'web_search') {
-              addWebResearchResult(data.query || promptText, data.sources || data.results || []);
-              addAgentStep(`Web research: "${data.query || promptText}"`, 'info', 'WEB');
-            } else if (data.type === 'rag_context') {
-              if (Array.isArray(data.snippets)) {
-                data.snippets.forEach(s => addRagSnippet(s.doc || s.title, s.text || s.content, s.score));
-              } else if (data.content) {
-                addRagSnippet(data.doc || 'RAG Memory', data.content, data.score);
-              }
-              addAgentStep('Retrieved semantic memory chunks from RAG', 'info', 'RAG');
-            } else if (data.type === 'methodology') {
-              addAgentStep(`Analytical methodology: ${data.content}`, 'methodology', 'FRAMEWORK');
-              logConsole(`Methodology: ${data.content}`, 'info');
-            } else if (data.type === 'done') {
-              fullText = data.content || fullText;
-              bodyEl.innerHTML = renderMarkdown(fullText);
-              scrollToBottom();
-              isStreamFinished = true;
-              break;
-            } else if (data.type === 'error') {
-              bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
-              addAgentStep(`Error: ${data.content}`, 'error', 'ERROR');
-              logConsole(`Error: ${data.content}`, 'error');
-              isStreamFinished = true;
-              break;
-            }
+          // 1. Zpracování koncového signálu [DONE]
+          if (payloadStr === '[DONE]' || payloadStr === 'DONE') {
+            isStreamFinished = true;
+            break;
+          }
+
+          let data;
+          try {
+            data = JSON.parse(payloadStr);
           } catch (e) {
-            // parsing error fallback
+            continue;
+          }
+
+          if (data.type === 'session_id') {
+            if (data.content && (!state.sessionId || state.sessionId !== data.content)) {
+              state.sessionId = data.content;
+            }
+          } else if (data.type === 'token' || data.type === 'chunk') {
+            const tokenText = data.content ?? data.chunk ?? data.text ?? '';
+            if (tokenText) {
+              fullText += tokenText;
+              bodyEl.innerHTML = renderMarkdown(fullText);
+              scrollToBottom();
+            }
+          } else if (data.type === 'tool_start') {
+            const toolName = data.tool || data.name || 'tool';
+            const statusMsg = `● 🛠️ ${t('tool_running')}: ${toolName}…`;
+            if (toolArea) {
+              toolArea.style.display = 'block';
+              const pill = document.createElement('div');
+              pill.className = 'tool-status-pill tool-start-pill';
+              pill.textContent = statusMsg;
+              toolArea.appendChild(pill);
+            }
+            if (el.liveStatusText) {
+              el.liveStatusText.textContent = statusMsg;
+            }
+            addAgentStep(`Invoked tool: ${toolName}`, 'info', 'TOOL');
+            logConsole(`[Tool Call Start] ${toolName}`, 'info');
+            scrollToBottom();
+          } else if (data.type === 'tool_end') {
+            const toolName = data.tool || data.name || 'tool';
+            const doneMsg = `✓ 🛠️ ${toolName} ${t('tool_finished').toLowerCase()}`;
+            if (toolArea) {
+              toolArea.style.display = 'block';
+              const pill = document.createElement('div');
+              pill.className = 'tool-status-pill tool-end-pill';
+              pill.textContent = doneMsg;
+              toolArea.appendChild(pill);
+            }
+            if (el.liveStatusText) {
+              el.liveStatusText.textContent = t('thinking_status');
+            }
+            addAgentStep(`Completed tool: ${toolName}`, 'info', 'DONE');
+            logConsole(`[Tool Call End] ${toolName}`, 'info');
+            scrollToBottom();
+          } else if (data.type === 'status') {
+            if (toolArea) {
+              toolArea.style.display = 'block';
+              const pill = document.createElement('div');
+              pill.className = 'tool-status-pill';
+              pill.textContent = data.content;
+              toolArea.appendChild(pill);
+            }
+            if (el.liveStatusText) {
+              el.liveStatusText.textContent = data.content;
+            }
+            addAgentStep(data.content, 'status', 'TOOL');
+            logConsole(data.content, 'info');
+            scrollToBottom();
+          } else if (data.type === 'agent_step') {
+            addAgentStep(data.content, data.step_type || 'info', data.badge || 'STEP');
+            logConsole(`[Agent Step] ${data.content}`, 'info');
+          } else if (data.type === 'web_search') {
+            addWebResearchResult(data.query || promptText, data.sources || data.results || []);
+            addAgentStep(`Web research: "${data.query || promptText}"`, 'info', 'WEB');
+          } else if (data.type === 'rag_context') {
+            if (Array.isArray(data.snippets)) {
+              data.snippets.forEach(s => addRagSnippet(s.doc || s.title, s.text || s.content, s.score));
+            } else if (data.content) {
+              addRagSnippet(data.doc || 'RAG Memory', data.content, data.score);
+            }
+            addAgentStep('Retrieved semantic memory chunks from RAG', 'info', 'RAG');
+          } else if (data.type === 'methodology') {
+            addAgentStep(`Analytical methodology: ${data.content}`, 'methodology', 'FRAMEWORK');
+            logConsole(`Methodology: ${data.content}`, 'info');
+          } else if (data.type === 'done' || data.type === 'finish' || data.type === 'end') {
+            fullText = data.content || fullText;
+            bodyEl.innerHTML = renderMarkdown(fullText);
+            scrollToBottom();
+            isStreamFinished = true;
+            break;
+          } else if (data.type === 'error') {
+            bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>${escapeHtml(data.content)}</span></div>`;
+            addAgentStep(`Error: ${data.content}`, 'error', 'ERROR');
+            logConsole(`Error: ${data.content}`, 'error');
+            isStreamFinished = true;
+            break;
           }
         }
       }
@@ -1570,13 +1635,17 @@
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        logConsole('Generation interrupted by user.', 'warn');
+        logConsole('Generation interrupted by user or watchdog.', 'warn');
         bodyEl.innerHTML += `<div class="tool-status-pill abort-pill"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"></rect></svg> <span>${escapeHtml(t('stopped_pill'))}</span></div>`;
       } else {
         logConsole(`Backend communication error: ${err.message}`, 'error');
         bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>Connection Error: ${escapeHtml(err.message)}</span></div>`;
       }
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       if (reader) {
         try {
           await reader.cancel();
@@ -1588,6 +1657,14 @@
       state.isStreaming = false;
       state.abortController = null;
       updateStreamingUi(false);
+      // Extra pojistka: odstranění visícího textu načítání
+      const titleEl = document.getElementById('active-session-title');
+      if (titleEl && (titleEl.textContent === 'Načítám...' || titleEl.textContent === 'Loading...')) {
+        const curr = state.sessions.find(s => (s.session_id === state.sessionId || s.id === state.sessionId));
+        if (curr && curr.title) {
+          titleEl.textContent = curr.title;
+        }
+      }
       scrollToBottom();
     }
   }

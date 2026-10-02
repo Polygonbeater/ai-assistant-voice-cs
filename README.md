@@ -229,7 +229,7 @@ The right inspector features a dynamic 3-mode tab switcher that adapts to the us
 
 ### 3. Security Hardening & Architectural Integrity
 * **Strict Loopback Binding:** Both the FastAPI web backend (`127.0.0.1:8000`) and the Blender bridge socket (`127.0.0.1:9876`) bind exclusively to loopback addresses, completely blocking unauthorized network access from the local area network (LAN).
-* **Robust SSE Stream Lifecycle:** Server-Sent Events (SSE) stream reader implements deterministic cancellation and lock release (`reader.cancel()`, `reader.releaseLock()`), ensuring that streaming flags (`state.isStreaming`), prompt inputs, and the "Thinking..." status indicator immediately reset to idle mode as soon as generation completes or stops.
+* **Guaranteed SSE Stream Lifecycle & Tool Dispatching:** Server-Sent Events (SSE) streaming incorporates structured `tool_start` and `tool_end` events, guaranteed terminal `data: [DONE]\n\n` framing across all cycles (including multi-turn tool calling like `search_web`), deterministic reader cancellation/lock release (`reader.cancel()`, `reader.releaseLock()`), and an inactivity watchdog timer ensuring the UI and "Thinking…" status unconditionally reset to idle.
 * **Audio Watchdog & VAD Safety:** Whisper speech-to-text and Silero Voice Activity Detection incorporate strict recording timeouts and fallback abort controllers to eliminate lingering microphone capturing.
 * **Thread-Safe Resource Allocation:** Coqui TTS audio synthesis and Llama.cpp inference execute within dedicated, thread-safe asynchronous workers.
 

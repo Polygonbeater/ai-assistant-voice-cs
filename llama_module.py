@@ -4716,6 +4716,7 @@ def generate_response(
     memory_context: str | None = None,
     active_session_id: str | None = None,
     enable_tools: bool = True,
+    tool_callback=None,
     **kwargs
 ):
     """
@@ -4965,7 +4966,28 @@ def generate_response(
         tool_args = tool_call_detected["arguments"]
         logging.info("Spouštím detekovaný nástroj: %s (%s)", tool_name, tool_args)
 
-        dispatch_res = dispatcher.dispatch(tool_name, tool_args)
+        if tool_callback:
+            try:
+                tool_callback("tool_start", {"tool": tool_name, "arguments": tool_args})
+            except Exception as e:
+                logging.warning("Chyba v tool_callback při tool_start: %s", e)
+
+        try:
+            dispatch_res = dispatcher.dispatch(tool_name, tool_args)
+        except Exception as exc:
+            logging.exception("Chyba při volání nástroje %s: %s", tool_name, exc)
+            dispatch_res = {
+                "status": "error",
+                "error": str(exc),
+                "result": f"Chyba při vykonávání nástroje {tool_name}: {exc}",
+            }
+
+        if tool_callback:
+            try:
+                tool_callback("tool_end", {"tool": tool_name, "arguments": tool_args, "result": dispatch_res})
+            except Exception as e:
+                logging.warning("Chyba v tool_callback při tool_end: %s", e)
+
         tool_obs_text = dispatch_res.get("result", "")
 
         if status_callback:

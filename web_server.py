@@ -459,10 +459,32 @@ async def chat_stream(req: ChatRequest, request: Request):
 
             def _on_token(token: str):
                 collected_tokens.append(token)
-                event_queue.put({"type": "token", "content": token})
+                event_queue.put({"type": "token", "content": token, "chunk": token})
 
             def _on_status(status: str):
                 event_queue.put({"type": "status", "content": status})
+
+            def _on_tool(event_type: str, data: dict[str, Any]):
+                payload = {"type": event_type}
+                payload.update(data)
+                event_queue.put(payload)
+                # Odeslání specializovaných SSE eventů pro UI panely (Research / RAG)
+                if event_type == "tool_end":
+                    tool_name = data.get("tool")
+                    tool_res = data.get("result", {})
+                    if tool_name == "search_web":
+                        res_val = tool_res.get("result", "") if isinstance(tool_res, dict) else str(tool_res)
+                        event_queue.put({
+                            "type": "web_search",
+                            "query": data.get("arguments", {}).get("query", user_prompt),
+                            "results": res_val,
+                        })
+                    elif tool_name in ("query_local_rag", "query_memory_rag"):
+                        res_val = tool_res.get("result", "") if isinstance(tool_res, dict) else str(tool_res)
+                        event_queue.put({
+                            "type": "rag_context",
+                            "content": res_val,
+                        })
 
             for chunk in generate_response(
                 llm,
@@ -475,6 +497,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                 document_service=document_service,
                 memory_service=memory_service,
                 active_session_id=session_id,
+                tool_callback=_on_tool,
             ):
                 collected_sentences.append(chunk)
 
@@ -495,6 +518,8 @@ async def chat_stream(req: ChatRequest, request: Request):
     thread.start()
 
     async def event_generator():
+        done_sent = False
+        full_reply_text = ""
         try:
             while True:
                 # Detekce odpojení klienta (zavření okna prohlížeče / přerušení spojení)
@@ -515,7 +540,26 @@ async def chat_stream(req: ChatRequest, request: Request):
                 if msg_type == "finish":
                     break
 
+                if msg_type == "done":
+                    done_sent = True
+                    full_reply_text = item.get("content", "")
+
                 yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+
+            # Garantovaný koncový signál a [DONE] pro každý SSE stream
+            if not await request.is_disconnected():
+                if not done_sent:
+                    yield f"data: {json.dumps({'type': 'done', 'content': full_reply_text}, ensure_ascii=False)}\n\n"
+                    done_sent = True
+                yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.warning("Výjimka v SSE event_generator pro relaci %s: %s", session_id, exc)
+            if not done_sent and not await request.is_disconnected():
+                try:
+                    yield f"data: {json.dumps({'type': 'done', 'content': full_reply_text}, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception:
+                    pass
         finally:
             if thread.is_alive():
                 session_stop.set()

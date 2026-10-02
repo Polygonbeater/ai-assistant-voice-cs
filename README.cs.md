@@ -229,7 +229,7 @@ Pravý panel nabízí tabulátorové přepínání mezi 3 specializovanými rež
 
 ### 3. Bezpečnostní a architektonická vylepšení
 * **Výhradní loopback bind (127.0.0.1):** Webový server FastAPI (`127.0.0.1:8000`) i Blender socket server (`127.0.0.1:9876`) naslouchají striktně na loopback rozhraní, čímž je zamezeno přístupu ze sítě LAN.
-* **Robustní životní cyklus SSE streamů:** Čtecí smyčka SSE streamu spolehlivě uvolňuje zámky a ruší čtečku (`reader.cancel()`, `reader.releaseLock()`). Indikátor "Přemýšlím..." i tlačítko odeslání se okamžitě vrací do klidového stavu bez zasekávání.
+* **Garantovaný životní cyklus SSE streamů & správa nástrojů:** Server-Sent Events (SSE) streamování přenáší strukturované události `tool_start` a `tool_end`, garantovaný koncový signál `data: [DONE]\n\n` i po cyklech s voláním nástrojů (např. `search_web`), deterministické uvolňování zámků a rušení čtečky (`reader.cancel()`, `reader.releaseLock()`) a klientský watchdog timeout. Indikátor "Přemýšlím..." / "Načítám..." i vstupní pole se tak bezpečně vrací do klidového stavu za všech okolností.
 * **Časové limity a ochrana mikrofonu:** Záznam zvuku s neuronovou detekcí Silero VAD disponuje bezpečnostními watchdogy a abort signály, které zabraňují nechtěnému visení mikrofonu.
 * **Vláknová bezpečnost (Thread-Safety):** Generování řeči přes Coqui TTS i inference Llama.cpp probíhají v oddělených, vláknově bezpečných workerech.
 
