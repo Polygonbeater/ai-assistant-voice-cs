@@ -36,6 +36,7 @@ from blender_connector import (
     request_procedural_shader,
     request_product_studio,
     request_scene_inspection,
+    send_code_to_blender,
 )
 from document_service import ConversationMemoryService, DocumentService
 from history_repository import HistoryRepository
@@ -703,6 +704,18 @@ def blender_procedural_shader(shader_type: str = "brushed_metal", material_name:
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
     return request_procedural_shader(material_name=material_name, shader_type=shader_type, host=host, port=port)
+
+class BlenderExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    code: str
+
+@app.post("/api/blender/execute")
+def blender_execute_code(req: BlenderExecuteRequest):
+    """Spustí libovolný Python (bpy) skript přímo v běžící instanci Blenderu."""
+    b_cfg = config.get("blender", {})
+    host = b_cfg.get("host", "127.0.0.1")
+    port = int(b_cfg.get("port", 9876))
+    return send_code_to_blender(code=req.code, host=host, port=port)
 
 @app.get("/api/blender/viewport-image")
 def get_viewport_image():

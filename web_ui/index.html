@@ -369,51 +369,204 @@
               <div class="card-v-resizer" data-target="card-metrics" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
 
-            <!-- QUICK 3D ACTIONS -->
+            <!-- QUICK 3D ACTIONS (18 TOOLS IN 6 CATEGORIES) -->
             <div class="inspector-card" id="card-actions">
               <div class="card-header">
                 <span class="card-title" data-i18n="card_quick_actions">QUICK 3D COMMANDS (BLENDER)</span>
+                <span class="card-badge" id="card-actions-count">18 Tools</span>
               </div>
-              <div class="quick-actions-list">
-                <button class="quick-action-btn" id="btn-quick-inspect">
-                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg></span>
-                  <div class="qa-info">
-                    <div class="qa-title" data-i18n="qa_inspect_title">Viewport Inspection</div>
-                    <div class="qa-sub" data-i18n="qa_inspect_sub">Snapshot & telemetry collection</div>
-                  </div>
-                </button>
-                
-                <button class="quick-action-btn" id="btn-quick-autorig">
-                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
-                  <div class="qa-info">
-                    <div class="qa-title" data-i18n="qa_autorig_title">Auto-Rig & Skinning</div>
-                    <div class="qa-sub" data-i18n="qa_autorig_sub">Armature + ARMATURE_AUTO</div>
-                  </div>
-                </button>
+              <div class="quick-actions-container" id="quick-actions-scroll-area">
+                <div class="qa-offline-banner" id="qa-offline-banner" style="display: none;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+                  <span data-i18n="qa_offline_warning">Blender is offline. Commands will prefill prompt.</span>
+                </div>
 
-                <button class="quick-action-btn" id="btn-quick-meshdoctor">
-                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg></span>
-                  <div class="qa-info">
-                    <div class="qa-title" data-i18n="qa_meshdoctor_title">Mesh Doctor Audit</div>
-                    <div class="qa-sub" data-i18n="qa_meshdoctor_sub">Check manifold mesh for 3D printing</div>
+                <!-- 1. Geometrie a parametrické CAD modelování -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <span data-i18n="qa_group_cad">1. Geometry & Parametric CAD</span>
                   </div>
-                </button>
+                  <div class="qa-buttons-grid">
+                    <button class="qa-tool-btn" id="btn-qa-cad-model" data-i18n-title="qa_cad_model_desc" title="Generate precision parametric CAD models and boxes">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_cad_model_title">Parametric CAD</span>
+                        <span class="qa-tool-tag">generate_parametric_model</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-modifier-stack" data-i18n-title="qa_modifiers_desc" title="Optimize and apply modifier stack">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_modifiers_title">Modifier Stack</span>
+                        <span class="qa-tool-tag">apply_modifier_stack</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-geonodes" data-i18n-title="qa_geonodes_desc" title="Procedural geometry nodes setup">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_geonodes_title">Geometry Nodes</span>
+                        <span class="qa-tool-tag">create_geometry_nodes_bridge</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-vectorize" data-i18n-title="qa_vectorize_desc" title="Convert 2D SVG / image into extruded 3D geometry">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m14.5 9.5-5 5"></path><path d="m9.5 9.5 5 5"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_vectorize_title">Vector to 3D</span>
+                        <span class="qa-tool-tag">vectorize_image_to_3d</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-ai-mesh" data-i18n-title="qa_aimesh_desc" title="Fast local AI neural mesh reconstruction from image">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_aimesh_title">TripoSR AI Mesh</span>
+                        <span class="qa-tool-tag">generate_local_ai_mesh</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
-                <button class="quick-action-btn" id="btn-quick-studio">
-                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span>
-                  <div class="qa-info">
-                    <div class="qa-title" data-i18n="qa_studio_title">Product Studio</div>
-                    <div class="qa-sub" data-i18n="qa_studio_sub">3-point AREA lighting + backdrop</div>
+                <!-- 2. Audit topologie a příprava na 3D tisk (Mesh Doctor) -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span data-i18n="qa_group_mesh">2. Topology Audit & 3D Print</span>
                   </div>
-                </button>
+                  <div class="qa-buttons-grid">
+                    <button class="qa-tool-btn" id="btn-qa-mesh-audit" data-i18n-title="qa_mesh_audit_desc" title="Audit non-manifold edges, holes, and wall thickness">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_mesh_audit_title">Topology Audit</span>
+                        <span class="qa-tool-tag">mesh_doctor_audit</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-mesh-repair" data-i18n-title="qa_mesh_repair_desc" title="Automatically heal holes and cleanup geometry for slicer">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_mesh_repair_title">Mesh Auto-Repair</span>
+                        <span class="qa-tool-tag">mesh_doctor_repair</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-inspect-scene" data-i18n-title="qa_inspect_scene_desc" title="Retrieve scene hierarchy, dimensions, and poly counts">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_inspect_scene_title">Inspect 3D Scene</span>
+                        <span class="qa-tool-tag">inspect_blender_scene</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
-                <button class="quick-action-btn" id="btn-quick-shader">
-                  <span class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg></span>
-                  <div class="qa-info">
-                    <div class="qa-title" data-i18n="qa_shader_title">Brushed Metal (Shader)</div>
-                    <div class="qa-sub" data-i18n="qa_shader_sub">Procedural Principled BSDF tree</div>
+                <!-- 3. Materiály, UV a textury -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>
+                    <span data-i18n="qa_group_materials">3. Materials, UV & Textures</span>
                   </div>
-                </button>
+                  <div class="qa-buttons-grid">
+                    <button class="qa-tool-btn" id="btn-qa-shader" data-i18n-title="qa_shader_desc" title="Build procedural PBR shader graphs (metal, glass, plastic)">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_shader_title">PBR Shader</span>
+                        <span class="qa-tool-tag">create_procedural_shader</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-texel-audit" data-i18n-title="qa_texel_audit_desc" title="Audit Texel Density uniformity across meshes">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_texel_audit_title">Texel Density</span>
+                        <span class="qa-tool-tag">uv_texel_audit</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-smart-uv" data-i18n-title="qa_smart_uv_desc" title="Automated unwrap and optimal pack of UV islands">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_smart_uv_title">Smart UV Pack</span>
+                        <span class="qa-tool-tag">smart_uv_pack</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 4. Scéna, osvětlení a kompozitor -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                    <span data-i18n="qa_group_scene">4. Scene, Lighting & Compositor</span>
+                  </div>
+                  <div class="qa-buttons-grid">
+                    <button class="qa-tool-btn" id="btn-qa-studio" data-i18n-title="qa_studio_desc" title="3-point studio lighting, seamless cyclorama & camera">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_studio_title">Product Studio</span>
+                        <span class="qa-tool-tag">create_product_studio</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-blueprint" data-i18n-title="qa_blueprint_desc" title="Place engineering reference blueprints on orthographic axes">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_blueprint_title">Blueprints</span>
+                        <span class="qa-tool-tag">setup_blueprint_reference</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-compositor" data-i18n-title="qa_compositor_desc" title="Setup compositor bloom, denoise, and cinematic vignette">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_compositor_title">Compositor</span>
+                        <span class="qa-tool-tag">setup_compositor</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 5. Rigging a Animace -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span data-i18n="qa_group_animation">5. Rigging & Animation</span>
+                  </div>
+                  <div class="qa-buttons-grid">
+                    <button class="qa-tool-btn" id="btn-qa-autorig" data-i18n-title="qa_autorig_desc" title="Automatic armature generation and vertex group skinning">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="12" y1="16" x2="8" y2="21"></line><line x1="12" y1="16" x2="16" y2="21"></line><line x1="8" y1="11" x2="16" y2="11"></line></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_autorig_title">Auto-Rig & Skin</span>
+                        <span class="qa-tool-tag">auto_rig_and_skin</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-fcurve" data-i18n-title="qa_fcurve_desc" title="Parametric F-Curve keyframes and interpolation">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_fcurve_title">F-Curves</span>
+                        <span class="qa-tool-tag">apply_fcurve_animation</span>
+                      </div>
+                    </button>
+                    <button class="qa-tool-btn" id="btn-qa-motion-nodes" data-i18n-title="qa_motion_nodes_desc" title="Procedural kinematic animation and continuous motion drivers">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_motion_nodes_title">Motion Nodes</span>
+                        <span class="qa-tool-tag">create_motion_node_setup</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 6. Přímý exekutor -->
+                <div class="qa-category-section">
+                  <div class="qa-category-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                    <span data-i18n="qa_group_executor">6. Direct Code Execution</span>
+                  </div>
+                  <div class="qa-buttons-grid single-col">
+                    <button class="qa-tool-btn qa-tool-btn-featured" id="btn-qa-blender-code" data-i18n-title="qa_blender_code_desc" title="Open dialog to send and execute Python code in Blender">
+                      <span class="qa-tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
+                      <div class="qa-tool-meta">
+                        <span class="qa-tool-name" data-i18n="qa_blender_code_title">Execute Python Script (bpy)</span>
+                        <span class="qa-tool-tag">execute_blender_code</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
               </div>
               <div class="card-v-resizer" data-target="card-actions" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
             </div>
@@ -561,6 +714,39 @@
 
         <div class="modal-footer-actions">
           <button class="secondary-btn" id="btn-reindex-memory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg> <span data-i18n="btn_reindex_memory">Reindex Semantic Memory</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BLENDER CODE EXECUTOR -->
+  <div class="modal-backdrop" id="modal-blender-code" style="display: none;">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          <h3 data-i18n="modal_blender_code_title">Blender Python API Executor (bpy)</h3>
+        </div>
+        <button class="modal-close-btn" id="btn-close-blender-code-modal" data-i18n-title="close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" data-i18n="modal_blender_code_desc">Directly execute Python / bpy code in the running Blender session via TCP socket (port 9876).</p>
+        <div class="code-editor-wrapper">
+          <textarea id="blender-code-input" class="blender-code-textarea" rows="10" spellcheck="false" placeholder="import bpy..."></textarea>
+        </div>
+        <div class="blender-code-output" id="blender-code-output" style="display: none;">
+          <div class="code-output-header" data-i18n="blender_code_output_header">Blender Execution Output:</div>
+          <pre id="blender-code-output-text"></pre>
+        </div>
+        <div class="modal-footer-actions modal-footer-split">
+          <button type="button" class="secondary-btn" id="btn-send-code-chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            <span data-i18n="btn_send_code_chat">Ask AI with this Script</span>
+          </button>
+          <button type="button" class="primary-btn" id="btn-execute-blender-script">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span data-i18n="btn_execute_blender_script">Execute in Blender</span>
+          </button>
         </div>
       </div>
     </div>

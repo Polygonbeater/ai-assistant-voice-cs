@@ -217,7 +217,14 @@ The right inspector features a dynamic 3-mode tab switcher that adapts to the us
 * 🧊 **3D Workspace (`tab-btn-3d`, Box icon):**
   * **Live Viewport Snapshot:** Direct capture of Blender's active viewport (`/api/blender/viewport-image`) with click-to-enlarge lightbox mode.
   * **Scene Metrics Dashboard:** Live telemetry showing object counts, active mesh name, polygon and vertex counts, watertight manifold verification, and armature bones.
-  * **Quick 3D Command Deck:** One-click shortcuts for Viewport Inspection, Auto-Rig & Skinning, Mesh Doctor topology audit, Product Studio backdrop generation, and Procedural Brushed Metal shader creation.
+  * **Complete 18-Tool Quick Command Matrix (6 Categories):**
+    * **1. Geometry & Parametric CAD:** `generate_parametric_model`, `apply_modifier_stack`, `create_geometry_nodes_bridge`, `vectorize_image_to_3d`, `generate_local_ai_mesh` (TripoSR AI concept).
+    * **2. Topology Audit & 3D Print (Mesh Doctor):** `mesh_doctor_audit` (non-manifold/holes audit), `mesh_doctor_repair` (auto-healing & normals fix), `inspect_blender_scene` (diagnostics & hierarchy).
+    * **3. Materials, Shaders & UV:** `create_procedural_shader` (Principled BSDF node trees), `uv_texel_audit` (texel density & distortion), `smart_uv_pack` (auto unwrap & island packing).
+    * **4. Scene, Studio & Lighting:** `create_product_studio` (3-point AREA lighting + cyclorama), `setup_blueprint_reference` (orthographic guide planes), `setup_compositor` (glare, color grading, vignette).
+    * **5. Rigging & Animation:** `auto_rig_and_skin` (armature bones + skin weights), `apply_fcurve_animation` (turntable rotation, bobbing, pulsing), `create_motion_node_setup` (particle and dynamic motion).
+    * **6. Direct Code Execution:** `execute_blender_code` (interactive modal dialog with integrated code editor, output inspector, and direct execution over TCP port 9876 or "Ask AI with this Script").
+    * **Dynamic Execution & Prefill Logic:** Parameter-free actions execute directly when Blender is online; parameterized operations prefill structured prompts directly into the chat input; offline state is visually highlighted with status warning banners while retaining prompt generation capability.
 * 🌐 **Research (`tab-btn-research`, Globe icon):**
   * **Live Web Research & Sources:** Real-time search query feed displaying clickable citation links and excerpt summaries extracted via DuckDuckGo and `trafilatura`.
   * **Semantic Memory (RAG) Chunks:** Live display of retrieved FAISS vector chunks with similarity match percentages (`% match`) and source document metadata.

@@ -1657,7 +1657,7 @@ pre {
   min-height: 150px;
 }
 #card-actions {
-  min-height: 160px;
+  min-height: 200px;
 }
 #card-web-research {
   min-height: 130px;
@@ -1823,56 +1823,215 @@ pre {
   color: var(--cyan-primary);
 }
 
-/* Quick Actions */
-.quick-actions-list {
+/* Quick Actions (18-tool Matrix) */
+.quick-actions-container {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-right: 4px;
 }
-.quick-action-btn {
+
+.qa-offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #fbbf24;
+  font-size: 11px;
+}
+.qa-offline-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.qa-offline-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.qa-offline-text {
+  line-height: 1.35;
+}
+
+.qa-category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qa-category-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cyan-primary);
+  padding: 2px 2px;
+  user-select: none;
+}
+.qa-category-title svg {
+  width: 13px;
+  height: 13px;
+  color: var(--cyan-primary);
+  flex-shrink: 0;
+}
+
+.qa-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.qa-buttons-grid.single-col {
+  grid-template-columns: 1fr;
+}
+
+.qa-tool-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
-  padding: 7px 9px;
   border-radius: 6px;
-  color: var(--text-secondary);
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-.quick-action-btn:hover {
-  background: var(--bg-surface-hover);
-  border-color: rgba(56, 189, 248, 0.25);
+  user-select: none;
   color: var(--text-primary);
+  min-height: 44px;
 }
-.qa-icon {
+.qa-tool-btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+.qa-tool-btn:active {
+  transform: translateY(0);
+}
+.qa-tool-btn-featured {
+  background: rgba(56, 189, 248, 0.06);
+  border-color: rgba(56, 189, 248, 0.28);
+}
+.qa-tool-btn-featured:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: var(--cyan-primary);
+}
+
+.qa-tool-icon {
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
   color: var(--cyan-primary);
 }
-.qa-icon svg {
-  width: 18px;
-  height: 18px;
+.qa-tool-icon svg {
+  width: 14px;
+  height: 14px;
   display: block;
 }
-.qa-title {
-  font-size: 11.5px;
+
+.qa-tool-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.qa-tool-name {
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.qa-sub {
-  font-size: 9.5px;
+.qa-tool-tag {
+  font-size: 9px;
+  font-family: var(--font-mono);
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Offline state dimmed styling */
+#card-actions.blender-offline .qa-tool-btn {
+  opacity: 0.72;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+#card-actions.blender-offline .qa-tool-btn:hover {
+  opacity: 1;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Code Editor in Blender Modal */
+.code-editor-wrapper {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #090c10;
+  margin-bottom: 12px;
+}
+.blender-code-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: none;
+  outline: none;
+  resize: vertical;
+  min-height: 160px;
+  max-height: 380px;
+}
+.blender-code-textarea:focus {
+  box-shadow: inset 0 0 0 1px var(--cyan-primary);
+}
+.blender-code-output {
+  background: #090c10;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.code-output-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.blender-code-output pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.blender-code-output.error pre {
+  color: var(--rose-accent);
+}
+.blender-code-output.success pre {
+  color: var(--emerald-accent);
 }
 
 /* Console Output */

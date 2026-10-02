@@ -338,16 +338,28 @@
     valWatertight: document.getElementById('val-watertight'),
     valBones: document.getElementById('val-bones'),
 
-    // Quick Actions
-    btnQuickInspect: document.getElementById('btn-quick-inspect'),
-    btnQuickAutorig: document.getElementById('btn-quick-autorig'),
-    btnQuickMeshdoctor: document.getElementById('btn-quick-meshdoctor'),
-    btnQuickStudio: document.getElementById('btn-quick-studio'),
-    btnQuickShader: document.getElementById('btn-quick-shader'),
+    // Quick Actions & 3D Workspace
+    cardActions: document.getElementById('card-actions'),
+    qaOfflineBanner: document.getElementById('qa-offline-banner'),
+    btnQuickInspect: document.getElementById('btn-qa-inspect-scene'),
+    btnQuickAutorig: document.getElementById('btn-qa-autorig'),
+    btnQuickMeshdoctor: document.getElementById('btn-qa-mesh-audit'),
+    btnQuickStudio: document.getElementById('btn-qa-studio'),
+    btnQuickShader: document.getElementById('btn-qa-shader'),
 
     // Console
     consoleOutput: document.getElementById('console-output'),
     btnClearConsole: document.getElementById('btn-clear-console'),
+
+    // Blender Code Executor Modal
+    modalBlenderCode: document.getElementById('modal-blender-code'),
+    btnCloseBlenderCodeModal: document.getElementById('btn-close-blender-code-modal'),
+    blenderCodeInput: document.getElementById('blender-code-input'),
+    blenderCodeOutput: document.getElementById('blender-code-output'),
+    blenderCodeOutputText: document.getElementById('blender-code-output-text'),
+    btnSendCodeChat: document.getElementById('btn-send-code-chat'),
+    btnExecuteBlenderScript: document.getElementById('btn-execute-blender-script'),
+    btnQaBlenderCode: document.getElementById('btn-qa-blender-code'),
 
     // Modals
     modalRag: document.getElementById('modal-rag'),
@@ -482,16 +494,64 @@
       metric_none: 'None',
 
       card_quick_actions: 'QUICK 3D COMMANDS (BLENDER)',
-      qa_inspect_title: 'Viewport Inspection',
-      qa_inspect_sub: 'Snapshot & telemetry collection',
-      qa_autorig_title: 'Auto-Rig & Skinning',
-      qa_autorig_sub: 'Armature + ARMATURE_AUTO',
-      qa_meshdoctor_title: 'Mesh Doctor Audit',
-      qa_meshdoctor_sub: 'Check manifold mesh for 3D printing',
+      qa_offline_banner: 'Blender is offline. Commands will pre-fill into chat prompt. Connect Blender to run directly.',
+      qa_group_cad: '1. Geometry & Parametric CAD',
+      qa_group_mesh: '2. Topology Audit & 3D Print (Mesh Doctor)',
+      qa_group_materials: '3. Materials, Shaders & UV',
+      qa_group_scene: '4. Scene, Studio & Lighting',
+      qa_group_animation: '5. Rigging & Animation',
+      qa_group_executor: '6. Direct Code Execution',
+
+      qa_cad_model_title: 'Parametric Model',
+      qa_cad_model_desc: 'Generate precise mechanical parts, boxes and forms by dimensions (generate_parametric_model)',
+      qa_modifier_stack_title: 'Apply Modifiers',
+      qa_modifier_stack_desc: 'Optimize and collapse active modifier stack (apply_modifier_stack)',
+      qa_geonodes_title: 'Geometry Nodes',
+      qa_geonodes_desc: 'Procedurally build geometry node modifier setups (create_geometry_nodes_bridge)',
+      qa_vectorize_title: 'Vector/SVG to 3D',
+      qa_vectorize_desc: 'Extrude 2D SVG or vector curves into 3D geometry (vectorize_image_to_3d)',
+      qa_ai_mesh_title: 'TripoSR AI Mesh',
+      qa_ai_mesh_desc: 'Fast 3D concept mesh from reference image (generate_local_ai_mesh)',
+
+      qa_mesh_audit_title: 'Topology Audit',
+      qa_mesh_audit_desc: 'Detect non-manifold edges, holes, self-intersections (mesh_doctor_audit)',
+      qa_mesh_repair_title: 'Auto-Repair Mesh',
+      qa_mesh_repair_desc: 'Heal holes, fix normals, dissolve degenerates (mesh_doctor_repair)',
+      qa_inspect_scene_title: 'Inspect 3D Scene',
+      qa_inspect_scene_desc: 'Full scene diagnostics, object list and telemetry (inspect_blender_scene)',
+
+      qa_shader_title: 'Procedural Shader',
+      qa_shader_desc: 'Generate Principled BSDF procedural materials (create_procedural_shader)',
+      qa_texel_audit_title: 'UV Texel Audit',
+      qa_texel_audit_desc: 'Check texture resolution uniformity and UV stretching (uv_texel_audit)',
+      qa_smart_uv_title: 'Smart UV Pack',
+      qa_smart_uv_desc: 'Automatic unwrap and optimal island packing (smart_uv_pack)',
+
       qa_studio_title: 'Product Studio',
-      qa_studio_sub: '3-point AREA lighting + backdrop',
-      qa_shader_title: 'Brushed Metal (Shader)',
-      qa_shader_sub: 'Procedural Principled BSDF tree',
+      qa_studio_desc: '3-point studio lighting with cyclorama backdrop (create_product_studio)',
+      qa_blueprint_title: 'Blueprint Reference',
+      qa_blueprint_desc: 'Load orthographic reference sheets to side/front/top planes (setup_blueprint_reference)',
+      qa_compositor_title: 'Setup Compositor',
+      qa_compositor_desc: 'Post-processing pipeline with glare, lens distortion, color balance (setup_compositor)',
+
+      qa_autorig_title: 'Auto-Rig & Skinning',
+      qa_autorig_desc: 'Automatic armature bones setup with skin weights (auto_rig_and_skin)',
+      qa_fcurve_title: 'FCurve Animation',
+      qa_fcurve_desc: 'Procedural rotation, turntable and bobbing animation (apply_fcurve_animation)',
+      qa_motion_nodes_title: 'Motion Setup',
+      qa_motion_nodes_desc: 'Dynamic particle motion and simulation networks (create_motion_node_setup)',
+
+      qa_blender_code_title: 'Execute Python Script (bpy)',
+      qa_blender_code_desc: 'Directly send and execute Python/bpy script in Blender (execute_blender_code)',
+      modal_blender_code_title: 'Execute Python Code in Blender',
+      modal_blender_code_desc: 'Directly execute Python / bpy code in the running Blender session via TCP socket (port 9876).',
+      blender_code_output_header: 'Blender Execution Output:',
+      btn_send_code_chat: 'Ask AI with this Script',
+      btn_execute_blender_script: 'Execute in Blender',
+      blender_code_empty: 'Please enter Python code to execute.',
+      blender_code_running: 'Executing in Blender...',
+      blender_code_success: 'Script executed successfully.',
+      blender_code_error: 'Blender execution error: ',
 
       card_web_research_title: 'LIVE WEB RESEARCH & SOURCES',
       no_web_research: 'No web research queries in this session.',
@@ -643,16 +703,64 @@
       metric_none: 'Žádný',
 
       card_quick_actions: 'RYCHLÉ 3D PŘÍKAZY (BLENDER)',
-      qa_inspect_title: 'Inspekce viewportu',
-      qa_inspect_sub: 'Snímek a sběr telemetrie',
+      qa_offline_banner: 'Blender je offline. Příkazy se předvyplní do chatu. Pro přímé provedení spusťte skript v Blenderu.',
+      qa_group_cad: '1. Geometrie a parametrické CAD modelování',
+      qa_group_mesh: '2. Audit topologie a příprava na 3D tisk (Mesh Doctor)',
+      qa_group_materials: '3. Materiály, UV a textury',
+      qa_group_scene: '4. Scéna, osvětlení a kompozitor',
+      qa_group_animation: '5. Rigging a Animace',
+      qa_group_executor: '6. Přímý exekutor (Python API)',
+
+      qa_cad_model_title: 'Parametrický model',
+      qa_cad_model_desc: 'Generování přesných dílů, boxů a tvarů dle rozměrů (generate_parametric_model)',
+      qa_modifier_stack_title: 'Aplikovat modifikátory',
+      qa_modifier_stack_desc: 'Optimalizace a sloučení zásobníku modifikátorů (apply_modifier_stack)',
+      qa_geonodes_title: 'Geometry Nodes můstek',
+      qa_geonodes_desc: 'Procedurální generování geometrických nodů (create_geometry_nodes_bridge)',
+      qa_vectorize_title: 'Vektor / Křivka do 3D',
+      qa_vectorize_desc: 'Převedení 2D SVG/obrázku na vysunutou 3D geometrii (vectorize_image_to_3d)',
+      qa_ai_mesh_title: 'TripoSR AI Mesh',
+      qa_ai_mesh_desc: 'Rychlý 3D koncept z obrázku (generate_local_ai_mesh)',
+
+      qa_mesh_audit_title: 'Audit topologie & tloušťky',
+      qa_mesh_audit_desc: 'Detekce non-manifold hran, děr a tenkých stěn (mesh_doctor_audit)',
+      qa_mesh_repair_title: 'Automatická oprava meshe',
+      qa_mesh_repair_desc: 'Zacelení děr, otočení normál a vyčištění degenerovaných ploch (mesh_doctor_repair)',
+      qa_inspect_scene_title: 'Inspekce scény',
+      qa_inspect_scene_desc: 'Kompletní výpis objektů, hierarchie a telemetrie (inspect_blender_scene)',
+
+      qa_shader_title: 'Procedurální shader',
+      qa_shader_desc: 'Tvorba fotorealistických materiálů (kov, sklo, plast, dřevo) (create_procedural_shader)',
+      qa_texel_audit_title: 'Audit UV & Texel density',
+      qa_texel_audit_desc: 'Kontrola rovnoměrnosti rozlišení textur a deformací mapování (uv_texel_audit)',
+      qa_smart_uv_title: 'Smart UV rozbalení & Pack',
+      qa_smart_uv_desc: 'Automatické rozbalení a optimální uspořádání UV ostrůvků (smart_uv_pack)',
+
+      qa_studio_title: 'Produktové studio & Světla',
+      qa_studio_desc: 'Tříbodové nasvícení scény a nekonečné studiové pozadí (create_product_studio)',
+      qa_blueprint_title: 'Blueprint & Reference',
+      qa_blueprint_desc: 'Nastavení referenčních technických výkresů do ortografických pohledů (setup_blueprint_reference)',
+      qa_compositor_title: 'Kompozitor & Glare',
+      qa_compositor_desc: 'Postprodukční nodový strom (glare, korekce barev, vinětace) (setup_compositor)',
+
       qa_autorig_title: 'Auto-Rig & Skinning',
-      qa_autorig_sub: 'Kostra + ARMATURE_AUTO',
-      qa_meshdoctor_title: 'Mesh Doctor Audit',
-      qa_meshdoctor_sub: 'Kontrola manifold sítě pro 3D tisk',
-      qa_studio_title: 'Produktové studio',
-      qa_studio_sub: 'Tříbodové AREA světlo + pozadí',
-      qa_shader_title: 'Kartáčovaný kov (Shader)',
-      qa_shader_sub: 'Procedurální Principled BSDF strom',
+      qa_autorig_desc: 'Generování kostry a navázání vah na aktivní mesh (auto_rig_and_skin)',
+      qa_fcurve_title: 'FCurve animace (Turntable)',
+      qa_fcurve_desc: 'Plynulá rotace objektu nebo kamery, pulzování a oscilace (apply_fcurve_animation)',
+      qa_motion_nodes_title: 'Dynamika & Pohyb',
+      qa_motion_nodes_desc: 'Nodová simulace pohybu a dynamiky částic (create_motion_node_setup)',
+
+      qa_blender_code_title: 'Spustit Python skript (bpy)',
+      qa_blender_code_desc: 'Přímé odeslání a spuštění Python/bpy skriptu v Blenderu (execute_blender_code)',
+      modal_blender_code_title: 'Spustit Python kód v Blenderu',
+      modal_blender_code_desc: 'Přímé spuštění Python / bpy kódu v běžícím Blenderu přes TCP socket (port 9876).',
+      blender_code_output_header: 'Výstup z Blenderu:',
+      btn_send_code_chat: 'Vložit do chatu s dotazem',
+      btn_execute_blender_script: 'Spustit v Blenderu',
+      blender_code_empty: 'Zadejte prosím Python kód ke spuštění.',
+      blender_code_running: 'Spouštím v Blenderu...',
+      blender_code_success: 'Skript byl úspěšně vykonán.',
+      blender_code_error: 'Chyba při spuštění v Blenderu: ',
 
       card_web_research_title: 'WEBOVÉ REŠERŠE & ZDROJE',
       no_web_research: 'V této relaci zatím neproběhlo webové vyhledávání.',
@@ -712,6 +820,47 @@
       chip_autorig: 'Vygeneruj automatickou kostru armature a skinning pro aktivní mesh v Blenderu.',
       chip_meshdoctor: 'Proveď topologický audit aktivního modelu, zkontroluj non-manifold geometrii a připravenost pro 3D tisk.',
       chip_studio: 'Nastav v Blenderu čisté produktové studio s tříbodovým nasvícením a nekonečným pozadím.',
+    }
+  };
+
+  const QA_PREFILL_PROMPTS = {
+    en: {
+      'btn-qa-cad-model': 'Create a parametric CAD model (generate_parametric_model) [part type: box / cylinder / flange, dimensions X=100mm, Y=50mm, Z=20mm]: ',
+      'btn-qa-modifier-stack': 'Apply and optimize modifier stack (apply_modifier_stack) on the active mesh.',
+      'btn-qa-geonodes': 'Create a procedural Geometry Nodes setup (create_geometry_nodes_bridge) [setup: scatter / instance array / mesh deformation]: ',
+      'btn-qa-vectorize': 'Vectorize image or SVG curve into 3D geometry (vectorize_image_to_3d) [file path / extrusion depth]: ',
+      'btn-qa-ai-mesh': 'Generate local AI mesh from reference image (generate_local_ai_mesh) [image path]: ',
+      'btn-qa-mesh-audit': 'Perform a mesh topology audit (mesh_doctor_audit), checking non-manifold geometry, holes and 3D print readiness.',
+      'btn-qa-mesh-repair': 'Perform automatic mesh repair (mesh_doctor_repair) for the active object - heal holes and fix normals.',
+      'btn-qa-inspect-scene': 'Inspect current Blender scene (inspect_blender_scene), retrieve object hierarchy and telemetry.',
+      'btn-qa-shader': 'Create a procedural Principled BSDF shader (create_procedural_shader) [material: brushed metal / glass / matte plastic / wood]: ',
+      'btn-qa-texel-audit': 'Audit UV mapping and texel density (uv_texel_audit) for the active object [target texture resolution: 2048px]: ',
+      'btn-qa-smart-uv': 'Unwrap and pack UV islands (smart_uv_pack) for the active mesh with optimal texture space utilization.',
+      'btn-qa-studio': 'Set up a clean product studio scene (create_product_studio) in Blender with three-point lighting and backdrop.',
+      'btn-qa-blueprint': 'Set up orthographic blueprint reference planes (setup_blueprint_reference) [path to blueprint image]: ',
+      'btn-qa-compositor': 'Configure compositor post-processing nodes (setup_compositor) with glare effect, color grading and vignette.',
+      'btn-qa-autorig': 'Generate an automatic armature skeleton and skin weights (auto_rig_and_skin) for the active mesh.',
+      'btn-qa-fcurve': 'Apply procedural FCurve animation (apply_fcurve_animation) [type: 360° turntable rotation / bobbing / levitation]: ',
+      'btn-qa-motion-nodes': 'Create dynamic motion setup or particle simulation (create_motion_node_setup) [type: particles / dynamics / turbulence]: ',
+    },
+    cs: {
+      'btn-qa-cad-model': 'Vytvoř parametrický CAD model (generate_parametric_model) [typ dílu: box / válec / příruba, rozměry X=100mm, Y=50mm, Z=20mm]: ',
+      'btn-qa-modifier-stack': 'Aplikuj a optimalizuj zásobník modifikátorů (apply_modifier_stack) na aktivní mesh.',
+      'btn-qa-geonodes': 'Vytvoř procedurální Geometry Nodes setup (create_geometry_nodes_bridge) [nastavení: scatter / pole instancí / deformace]: ',
+      'btn-qa-vectorize': 'Převeď vektorovou křivku nebo SVG do 3D geometrie (vectorize_image_to_3d) [cesta k souboru / tloušťka vysunutí]: ',
+      'btn-qa-ai-mesh': 'Vygeneruj lokální AI mesh z referenčního obrázku (generate_local_ai_mesh) [cesta k obrázku]: ',
+      'btn-qa-mesh-audit': 'Proveď topologický audit meshe (mesh_doctor_audit), zkontroluj non-manifold hrany, díry a připravenost na 3D tisk.',
+      'btn-qa-mesh-repair': 'Proveď automatickou opravu geometrie (mesh_doctor_repair) pro aktivní mesh – zacel díry a oprav normály.',
+      'btn-qa-inspect-scene': 'Prozkoumej aktuální scénu v Blenderu (inspect_blender_scene), zjisti hierarchii objektů a telemetrii.',
+      'btn-qa-shader': 'Vytvoř procedurální Principled BSDF shader (create_procedural_shader) [materiál: kartáčovaný kov / sklo / matný plast / dřevo]: ',
+      'btn-qa-texel-audit': 'Zkontroluj UV mapování a texel density (uv_texel_audit) pro aktivní objekt [cílové rozlišení: 2048px]: ',
+      'btn-qa-smart-uv': 'Rozbal a zabal UV ostrůvky (smart_uv_pack) pro aktivní mesh s optimálním využitím plochy.',
+      'btn-qa-studio': 'Vytvoř v Blenderu produktové studio (create_product_studio) s tříbodovým osvětlením a studiovým pozadím.',
+      'btn-qa-blueprint': 'Nastav referenční technické výkresy (setup_blueprint_reference) do ortografických pohledů [cesta k výkresu]: ',
+      'btn-qa-compositor': 'Nastav postprodukční uzly v kompozitoru (setup_compositor) pro glare efekt, korekci barev a vinětaci.',
+      'btn-qa-autorig': 'Vygeneruj automatickou kostru armature a navaž váhy (auto_rig_and_skin) na aktivní mesh.',
+      'btn-qa-fcurve': 'Aplikuj FCurve procedurální animaci (apply_fcurve_animation) [typ: turntable rotace 360° / pulzování / levitace]: ',
+      'btn-qa-motion-nodes': 'Vytvoř dynamickou simulaci pohybu nebo částicový systém (create_motion_node_setup) [typ: částice / dynamika / turbulence]: ',
     }
   };
 
@@ -2041,6 +2190,27 @@
     return result || null;
   }
 
+  function setPromptInputAndFocus(text) {
+    if (!el.promptInput || !text) return;
+    el.promptInput.value = text;
+    el.promptInput.focus();
+    el.promptInput.selectionStart = el.promptInput.selectionEnd = el.promptInput.value.length;
+    el.promptInput.style.height = 'auto';
+    el.promptInput.style.height = Math.min(el.promptInput.scrollHeight, 180) + 'px';
+
+    const box = document.querySelector('.prompt-box');
+    if (box) {
+      box.classList.remove('input-applied-highlight');
+      void box.offsetWidth;
+      box.classList.add('input-applied-highlight');
+      setTimeout(() => box.classList.remove('input-applied-highlight'), 850);
+    }
+
+    if (el.promptInput.scrollIntoView) {
+      el.promptInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
   function applyTextToInput(text, btn = null) {
     if (!el.promptInput || !text) return;
 
@@ -2586,14 +2756,28 @@
         el.viewportBadge.textContent = data.connected ? t('viewport_active') : t('viewport_offline');
       }
 
+      if (el.cardActions) {
+        el.cardActions.classList.toggle('blender-offline', !data.connected);
+      }
+      if (el.qaOfflineBanner) {
+        el.qaOfflineBanner.style.display = data.connected ? 'none' : 'flex';
+      }
+
       updateActiveToolsBadge();
       if (el.modalTools && el.modalTools.style.display !== 'none') {
         renderToolsInspector();
       }
     } catch (e) {
+      state.blenderConnected = false;
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = 'status-indicator offline';
         el.blenderStatusText.textContent = `Blender: ${t('blender_offline')}`;
+      }
+      if (el.cardActions) {
+        el.cardActions.classList.add('blender-offline');
+      }
+      if (el.qaOfflineBanner) {
+        el.qaOfflineBanner.style.display = 'flex';
       }
       updateActiveToolsBadge();
       if (el.modalTools && el.modalTools.style.display !== 'none') {
@@ -2662,13 +2846,117 @@
       }
       const res = await fetch(endpoint, options);
       const data = await res.json();
+      if (!res.ok || data.status === 'error') {
+        const errMsg = data.detail || data.message || data.error || `HTTP ${res.status}`;
+        logConsole(`Error [${actionName}]: ${errMsg}`, 'error');
+        return data;
+      }
       logConsole(`Result [${actionName}]: ${JSON.stringify(data)}`, 'info');
 
       // Refresh snapshot and telemetry
       setTimeout(takeBlenderInspection, 500);
+      return data;
     } catch (err) {
       logConsole(`Error during operation ${actionName}: ${err.message}`, 'error');
     }
+  }
+
+  const DIRECT_3D_ACTIONS = {
+    'btn-qa-inspect-scene': () => takeBlenderInspection(),
+    'btn-qa-mesh-audit': () => executeQuick3DAction('/api/blender/mesh-doctor?action=audit', 'Mesh Doctor Audit'),
+    'btn-qa-mesh-repair': () => executeQuick3DAction('/api/blender/mesh-doctor?action=repair', 'Mesh Doctor Repair'),
+    'btn-qa-studio': () => executeQuick3DAction('/api/blender/product-studio', 'Product Studio'),
+    'btn-qa-autorig': () => executeQuick3DAction('/api/blender/auto-rig', 'Auto-Rig & Skinning')
+  };
+
+  function openBlenderCodeModal() {
+    if (!el.modalBlenderCode) return;
+    el.modalBlenderCode.style.display = 'flex';
+    if (el.blenderCodeInput && !el.blenderCodeInput.value.trim()) {
+      el.blenderCodeInput.value = `# Python / bpy script for Blender
+import bpy
+
+# Inspect active object
+act = bpy.context.active_object
+print(f"Active object: {act.name if act else 'None'}")
+`;
+    }
+    if (el.blenderCodeInput) {
+      el.blenderCodeInput.focus();
+    }
+  }
+
+  function closeBlenderCodeModal() {
+    if (!el.modalBlenderCode) return;
+    el.modalBlenderCode.style.display = 'none';
+  }
+
+  async function executeBlenderCode() {
+    if (!el.blenderCodeInput) return;
+    const code = el.blenderCodeInput.value.trim();
+    if (!code) {
+      if (el.blenderCodeOutput && el.blenderCodeOutputText) {
+        el.blenderCodeOutput.style.display = 'block';
+        el.blenderCodeOutput.className = 'blender-code-output error';
+        el.blenderCodeOutputText.textContent = t('blender_code_empty');
+      }
+      logConsole(t('blender_code_empty'), 'warn');
+      return;
+    }
+
+    if (el.blenderCodeOutput && el.blenderCodeOutputText) {
+      el.blenderCodeOutput.style.display = 'block';
+      el.blenderCodeOutput.className = 'blender-code-output';
+      el.blenderCodeOutputText.textContent = t('blender_code_running');
+    }
+    logConsole('Executing Python script in Blender...', 'info');
+
+    try {
+      const res = await fetch('/api/blender/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (!res.ok || data.status === 'error') {
+        const errorText = data.detail || data.error || data.message || `HTTP ${res.status}`;
+        if (el.blenderCodeOutput && el.blenderCodeOutputText) {
+          el.blenderCodeOutput.className = 'blender-code-output error';
+          el.blenderCodeOutputText.textContent = `${t('blender_code_error')}${errorText}`;
+        }
+        logConsole(`Blender execution error: ${errorText}`, 'error');
+        return;
+      }
+
+      const outputResult = data.result || data.output || JSON.stringify(data, null, 2);
+      if (el.blenderCodeOutput && el.blenderCodeOutputText) {
+        el.blenderCodeOutput.className = 'blender-code-output success';
+        el.blenderCodeOutputText.textContent = outputResult || t('blender_code_success');
+      }
+      logConsole(`Blender execution success: ${typeof outputResult === 'string' ? outputResult.slice(0, 120) : 'Done'}`, 'info');
+      setTimeout(takeBlenderInspection, 600);
+    } catch (err) {
+      if (el.blenderCodeOutput && el.blenderCodeOutputText) {
+        el.blenderCodeOutput.className = 'blender-code-output error';
+        el.blenderCodeOutputText.textContent = `${t('blender_code_error')}${err.message}`;
+      }
+      logConsole(`Blender execution network error: ${err.message}`, 'error');
+    }
+  }
+
+  function sendBlenderCodeToChat() {
+    if (!el.blenderCodeInput) return;
+    const code = el.blenderCodeInput.value.trim();
+    if (!code) {
+      closeBlenderCodeModal();
+      return;
+    }
+    closeBlenderCodeModal();
+    const lang = state.language || 'en';
+    const prompt = lang === 'cs'
+      ? `Zkontroluj a vysvětli následující Python bpy skript pro Blender:\n\`\`\`python\n${code}\n\`\`\``
+      : `Review and explain the following Python bpy script for Blender:\n\`\`\`python\n${code}\n\`\`\``;
+    setPromptInputAndFocus(prompt);
   }
 
   // ===========================================================================
@@ -3154,11 +3442,42 @@
       takeBlenderInspection();
     });
 
-    if (el.btnQuickInspect) el.btnQuickInspect.addEventListener('click', takeBlenderInspection);
-    if (el.btnQuickAutorig) el.btnQuickAutorig.addEventListener('click', () => executeQuick3DAction('/api/blender/auto-rig', 'Auto-Rig & Skinning'));
-    if (el.btnQuickMeshdoctor) el.btnQuickMeshdoctor.addEventListener('click', () => executeQuick3DAction('/api/blender/mesh-doctor', 'Mesh Doctor Audit'));
-    if (el.btnQuickStudio) el.btnQuickStudio.addEventListener('click', () => executeQuick3DAction('/api/blender/product-studio', 'Product Studio'));
-    if (el.btnQuickShader) el.btnQuickShader.addEventListener('click', () => executeQuick3DAction('/api/blender/procedural-shader', 'Brushed Metal Shader'));
+    // 18-Tool Quick Command Matrix & Prefill Logic
+    document.querySelectorAll('.qa-tool-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.id;
+        if (id === 'btn-qa-blender-code') {
+          openBlenderCodeModal();
+          return;
+        }
+
+        const isDirect = Boolean(DIRECT_3D_ACTIONS[id]);
+        if (isDirect && state.blenderConnected) {
+          DIRECT_3D_ACTIONS[id]();
+          return;
+        }
+
+        // Prefill into chat prompt
+        const lang = state.language || 'en';
+        const prefill = (QA_PREFILL_PROMPTS[lang] && QA_PREFILL_PROMPTS[lang][id])
+          || (QA_PREFILL_PROMPTS['en'] && QA_PREFILL_PROMPTS['en'][id])
+          || btn.dataset.prompt;
+
+        if (prefill) {
+          setPromptInputAndFocus(prefill);
+          if (!state.blenderConnected && isDirect) {
+            logConsole(lang === 'cs'
+              ? 'Blender je offline. Příkaz byl předvyplněn do chatu pro asistenta.'
+              : 'Blender is offline. Command was pre-filled into chat for assistant.', 'info');
+          }
+        }
+      });
+    });
+
+    // Blender Code Executor Modal Controls
+    if (el.btnCloseBlenderCodeModal) el.btnCloseBlenderCodeModal.addEventListener('click', closeBlenderCodeModal);
+    if (el.btnExecuteBlenderScript) el.btnExecuteBlenderScript.addEventListener('click', executeBlenderCode);
+    if (el.btnSendCodeChat) el.btnSendCodeChat.addEventListener('click', sendBlenderCodeToChat);
 
     if (el.btnClearConsole) {
       el.btnClearConsole.addEventListener('click', () => {
@@ -3200,6 +3519,7 @@
       if (e.target === el.modalTools) closeToolsModal();
       if (e.target === el.modalRag) closeRagModal();
       if (e.target === el.modalSettings) closeSettingsModal();
+      if (e.target === el.modalBlenderCode) closeBlenderCodeModal();
       if (e.target === el.imageLightbox) el.imageLightbox.style.display = 'none';
     });
 
@@ -3259,6 +3579,7 @@
         closeRagModal();
         closeSettingsModal();
         closeToolsModal();
+        closeBlenderCodeModal();
         if (el.imageLightbox) el.imageLightbox.style.display = 'none';
       }
     });
