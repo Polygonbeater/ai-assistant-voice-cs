@@ -1188,3 +1188,42 @@ def request_local_ai_mesh(
         payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
     )
 
+
+def request_auto_rig(
+    host: str = DEFAULT_BLENDER_HOST,
+    port: int = DEFAULT_BLENDER_PORT,
+    rig_type: str = "basic",
+    timeout: float = 25.0,
+    raise_on_error: bool = False,
+) -> dict[str, Any]:
+    """
+    Odešle do Blenderu požadavek na automatické vygenerování kostry (Armature)
+    a provedení automatického skinningu aktivního mesh objektu (action: auto_rig).
+
+    Args:
+        host: IP adresa Blender receiveru.
+        port: Port Blender receiveru.
+        rig_type: Typ kostry ('basic', 'biped').
+        timeout: Timeout v sekundách.
+        raise_on_error: Zda vyvolat výjimku při chybě.
+
+    Vrací strukturovaný slovník:
+    {
+        "status": "success",
+        "action": "auto_rig",
+        "target_mesh": str,
+        "armature_name": str,
+        "bone_count": int,
+        "skinning_status": str,
+        "rig_type": str,
+        "dimensions": list[float],
+    }
+    """
+    payload = {
+        "action": "auto_rig",
+        "rig_type": str(rig_type),
+    }
+    return _send_blender_request(
+        payload, host=host, port=port, timeout=timeout, raise_on_error=raise_on_error
+    )
+

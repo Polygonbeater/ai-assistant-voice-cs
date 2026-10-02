@@ -160,22 +160,22 @@ class TestVisionAIToolRegistration(unittest.TestCase):
         self.assertIn("output_path", props)
 
     def test_total_tools_count(self):
-        """Po přidání nového nástroje musí být celkem 21 nástrojů."""
+        """Po přidání nástroje auto_rig_and_skin musí být celkem 22 nástrojů."""
         names = [
             s["function"]["name"]
             for s in TOOL_SCHEMAS
             if s.get("type") == "function"
         ]
         self.assertEqual(
-            len(names), 21,
-            f"Očekáváno 21 nástrojů, nalezeno {len(names)}: {names}",
+            len(names), 22,
+            f"Očekáváno 22 nástrojů, nalezeno {len(names)}: {names}",
         )
 
     def test_allowed_tool_names_count(self):
-        """ALLOWED_TOOL_NAMES musí obsahovat právě 21 názvů."""
+        """ALLOWED_TOOL_NAMES musí obsahovat právě 22 názvů."""
         self.assertEqual(
-            len(ALLOWED_TOOL_NAMES), 21,
-            f"ALLOWED_TOOL_NAMES má {len(ALLOWED_TOOL_NAMES)} položek, očekáváno 21",
+            len(ALLOWED_TOOL_NAMES), 22,
+            f"ALLOWED_TOOL_NAMES má {len(ALLOWED_TOOL_NAMES)} položek, očekáváno 22",
         )
 
 

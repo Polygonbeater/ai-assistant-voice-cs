@@ -23,7 +23,7 @@ from llama_module import (
 
 class TestFunctionCallingArchitecture(unittest.TestCase):
     def test_tool_schemas_and_prompt(self):
-        # 1. Ověření registru nástrojů (aktuálně 21)
+        # 1. Ověření registru nástrojů (aktuálně 22)
         names = {t["function"]["name"] for t in TOOL_SCHEMAS}
         expected = {
             "search_web",
@@ -47,6 +47,7 @@ class TestFunctionCallingArchitecture(unittest.TestCase):
             "setup_compositor",
             "generate_local_ai_mesh",
             "analyze_viewport_image",
+            "auto_rig_and_skin",
         }
         self.assertEqual(names, expected)
         self.assertEqual(ALLOWED_TOOL_NAMES, expected)
@@ -73,6 +74,7 @@ class TestFunctionCallingArchitecture(unittest.TestCase):
         self.assertIn("setup_compositor", prompt)
         self.assertIn("generate_local_ai_mesh", prompt)
         self.assertIn("analyze_viewport_image", prompt)
+        self.assertIn("auto_rig_and_skin", prompt)
         self.assertIn("KOGNITIVNÍ VIZUÁLNÍ PARAMETRIZACE", prompt)
 
     def test_parse_tool_call_formats(self):

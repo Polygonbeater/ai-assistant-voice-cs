@@ -3154,9 +3154,94 @@ def process_blender_queue_timer():
             finally:
                 completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
+        # 17. Automatické rigování a skinning (action in ("auto_rig", "auto_rig_and_skin"))
+        if action in ("auto_rig", "auto_rig_and_skin"):
+            print("\n[AI-Blender] >>> Zahajuji Auto-Rig & Skinning...")
+            try:
+                rig_type = message.get("rig_type", "basic")
+
+                # 1. Zjištění aktivního mesh objektu
+                obj = None
+                if hasattr(bpy.context, "view_layer") and bpy.context.view_layer:
+                    obj = bpy.context.view_layer.objects.active
+                if not obj and hasattr(bpy.context, "active_object"):
+                    obj = bpy.context.active_object
+
+                if not obj or obj.type != 'MESH':
+                    result_container["response"] = {
+                        "status": "error",
+                        "error": "NoActiveMeshObject",
+                        "message": "Žádný aktivní síťový objekt (MESH) nebyl nalezen. Vyberte mesh a zkuste znovu.",
+                    }
+                    completion_event.set()
+                    _RECEIVER_INSTANCE.request_queue.task_done()
+                    continue
+
+                prev_mode = obj.mode
+                if prev_mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                # Analýza rozměrů a středu objektu
+                dims = obj.dimensions
+                center_loc = obj.location
+                mesh_height = dims.z if dims.z > 0 else 1.0
+                mesh_name = obj.name
+
+                # 2. Vytvoření Armature
+                bpy.ops.object.select_all(action='DESELECT')
+                armature_loc = (center_loc.x, center_loc.y, center_loc.z)
+                bpy.ops.object.armature_add(enter_editmode=False, align='WORLD', location=armature_loc)
+                armature_obj = bpy.context.active_object
+                armature_obj.name = f"{mesh_name}_Armature"
+
+                # Přizpůsobení velikosti kosti výšce meshe
+                if hasattr(armature_obj.data, "edit_bones"):
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    for bone in armature_obj.data.edit_bones:
+                        bone.tail = (bone.head.x, bone.head.y, bone.head.z + mesh_height * 0.5)
+                    bpy.ops.object.mode_set(mode='OBJECT')
+
+                # 3. Nastavení parent vazby s automatickými vahami (ARMATURE_AUTO)
+                bpy.ops.object.select_all(action='DESELECT')
+                obj.select_set(True)
+                armature_obj.select_set(True)
+                bpy.context.view_layer.objects.active = armature_obj
+                bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+
+                bone_count = len(armature_obj.data.bones) if hasattr(armature_obj.data, "bones") else 1
+
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+
+                result_container["response"] = {
+                    "status": "success",
+                    "action": action,
+                    "target_mesh": mesh_name,
+                    "armature_name": armature_obj.name,
+                    "bone_count": bone_count,
+                    "skinning_status": "ARMATURE_AUTO",
+                    "rig_type": rig_type,
+                    "dimensions": [round(dims.x, 3), round(dims.y, 3), round(dims.z, 3)],
+                }
+                print(f"✅ [AI-Blender] Auto-Rig & Skinning dokončen pro '{mesh_name}' -> '{armature_obj.name}' ({bone_count} kostí)")
+
+            except Exception as e:
+                err_trace = traceback.format_exc()
+                result_container["response"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "traceback": err_trace,
+                }
+                print(f"❌ [AI-Blender] Chyba při Auto-Rig & Skinning: {e}")
+                print(err_trace)
+            finally:
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
             continue
 
-        # 17. Vykonání Python kódu (action == 'execute')
+        # 18. Vykonání Python kódu (action == 'execute')
 
         code = message.get("code", "")
         stdout_capture = io.StringIO()

@@ -1703,6 +1703,29 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "auto_rig_and_skin",
+            "description": (
+                "Automaticky vygeneruje kostru (Armature) pro aktivní 3D mesh v Blenderu, "
+                "přizpůsobí ji proporcím objektu a provede automatický skinning (navázání vertex groups s váhami "
+                "přes ARMATURE_AUTO). Použij při požadavcích jako 'přidej kostru', 'udělej rig', "
+                "'naskinuj model', 'auto rig', 'vytvoř armature a navaž váhy'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rig_type": {
+                        "type": "string",
+                        "enum": ["basic", "biped"],
+                        "description": "Typ kostry: 'basic' (jednoduchá osová kostra) nebo 'biped' (dvounohá hierarchie). Výchozí: 'basic'.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 ALLOWED_TOOL_NAMES = {
@@ -1727,6 +1750,7 @@ ALLOWED_TOOL_NAMES = {
     "setup_compositor",
     "generate_local_ai_mesh",
     "analyze_viewport_image",
+    "auto_rig_and_skin",
 }
 
 
@@ -1907,6 +1931,7 @@ class UnifiedToolDispatcher:
     - setup_compositor(preset, glare_threshold, dispersion, vignette_strength)
     - generate_local_ai_mesh(image_path, production_ready, target_faces, texture_size, voxel_size, object_name)
     - analyze_viewport_image(analysis_prompt, output_path)
+    - auto_rig_and_skin(rig_type)
     """
 
     def __init__(
@@ -2077,6 +2102,9 @@ class UnifiedToolDispatcher:
                 analysis_prompt=analysis_prompt,
                 output_path=output_path,
             )
+        elif tool_name == "auto_rig_and_skin":
+            rig_type = str(arguments.get("rig_type", "basic")).strip() or "basic"
+            return self._execute_auto_rig_and_skin(rig_type=rig_type)
         else:
             err = f"Neznámý nástroj: '{tool_name}'"
             logging.error(err)
@@ -2546,6 +2574,90 @@ class UnifiedToolDispatcher:
             "image_exists": image_exists,
             "analysis_prompt": user_question,
             "result": result_text or telemetry_text,
+        }
+
+    # ------------------------------------------------------------------
+    # Auto-Rig & Skinning – automatické rigování a skinning (ARMATURE_AUTO)
+    # ------------------------------------------------------------------
+
+    def _execute_auto_rig_and_skin(self, rig_type: str = "basic") -> dict[str, Any]:
+        """Automaticky vytvoří Armature a provede skinning (ARMATURE_AUTO) pro aktivní mesh v Blenderu."""
+        from blender_connector import request_auto_rig, is_blender_available
+
+        blender_cfg = self.config.get("blender", {})
+        host = blender_cfg.get("host", "127.0.0.1")
+        port = int(blender_cfg.get("port", 9876))
+        tool_label = "auto_rig_and_skin"
+
+        if self.status_callback:
+            self.status_callback("● 🦴 Vytvářím Armature a provádím auto-skinning…")
+        if self.callback_on_token:
+            self.callback_on_token(f"\n🦴 *Volám nástroj:* `{tool_label}(rig_type='{rig_type}')`\n")
+
+        if not is_blender_available(host, port):
+            warn_msg = (
+                f"Blender není připojen na portu {port}. "
+                "Spusťte prosím v Blenderu blender_receiver.py (Alt+P)."
+            )
+            if self.callback_on_token:
+                self.callback_on_token(f"\n⚠️ **{warn_msg}**\n")
+            return {
+                "status": "error",
+                "tool": tool_label,
+                "error": "BlenderNotConnected",
+                "result": warn_msg,
+            }
+
+        try:
+            res = request_auto_rig(host=host, port=port, rig_type=rig_type, timeout=25.0)
+        except Exception as exc:
+            res = {"status": "error", "error": str(exc)}
+
+        if res.get("status") != "success":
+            err_msg = res.get("error") or res.get("message", "Neznámá chyba při vytváření rigu.")
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Auto-Rig selhal:** `{err_msg}`\n")
+            return {
+                "status": "error",
+                "tool": tool_label,
+                "error": err_msg,
+                "result": f"Auto-Rig selhal: {err_msg}",
+            }
+
+        armature_name = res.get("armature_name", "Armature")
+        mesh_name = res.get("target_mesh", "Mesh")
+        bone_count = res.get("bone_count", 1)
+        skinning_status = res.get("skinning_status", "ARMATURE_AUTO")
+        dims = res.get("dimensions", [])
+
+        ui_msg = (
+            f"\n\n🦴 **Auto-Rig & Skinning dokončen:**\n"
+            f"- Cílový mesh: `{mesh_name}`\n"
+            f"- Vytvořená kostra: `{armature_name}` ({bone_count} kostí)\n"
+            f"- Skinning: `{skinning_status}` (automatické váhy vrcholů)\n"
+            f"- Typ rigu: `{rig_type}`\n\n"
+            f"---\n\n"
+        )
+        if self.callback_on_token:
+            self.callback_on_token(ui_msg)
+
+        res_text = (
+            f"Úspěšně vytvořena kostra '{armature_name}' pro mesh '{mesh_name}' (rozměry: {dims}). "
+            f"Skinning proveden s automatickými vahami ({skinning_status}). Počet kostí: {bone_count}."
+        )
+        if self.status_callback:
+            self.status_callback(f"● ✅ Auto-Rig dokončen ({bone_count} kostí)")
+
+        return {
+            "status": "success",
+            "tool": tool_label,
+            "armature_name": armature_name,
+            "target_mesh": mesh_name,
+            "bone_count": bone_count,
+            "skinning_status": skinning_status,
+            "rig_type": rig_type,
+            "dimensions": dims,
+            "result": res_text,
         }
 
     # ------------------------------------------------------------------

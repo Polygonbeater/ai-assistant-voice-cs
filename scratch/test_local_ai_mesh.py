@@ -179,8 +179,8 @@ class TestLocalAIMeshToolSchemas(unittest.TestCase):
         self.assertIn("generate_local_ai_mesh", ALLOWED_TOOL_NAMES)
 
     def test_total_tool_count_is_twenty(self):
-        # Aktualizováno na 21 po přidání nástroje analyze_viewport_image (Vision AI)
-        self.assertEqual(len(ALLOWED_TOOL_NAMES), 21)
+        # Aktualizováno na 22 po přidání nástroje auto_rig_and_skin
+        self.assertEqual(len(ALLOWED_TOOL_NAMES), 22)
 
 
 class TestLocalAIMeshParseToolCall(unittest.TestCase):
