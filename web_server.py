@@ -779,6 +779,19 @@ def update_config(req: SettingsUpdateRequest):
 
     return {"status": "success", "config": config}
 
+@app.post("/api/app/shutdown")
+def shutdown_app():
+    """Ukončí běžící desktopový server a aplikaci na vyžádání z UI."""
+    logger.info("Přijat požadavek na ukončení aplikace skrze API (/api/app/shutdown)")
+    def _delayed_exit():
+        time.sleep(0.2)
+        try:
+            os.kill(os.getpid(), signal.SIGTERM)
+        except Exception:
+            pass
+    threading.Thread(target=_delayed_exit, daemon=True).start()
+    return {"status": "shutting_down"}
+
 # ------------------------------------------------------------------------------
 # Statické soubory frontendu
 # ------------------------------------------------------------------------------

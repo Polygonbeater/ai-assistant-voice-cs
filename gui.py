@@ -2241,29 +2241,44 @@ def load_config(path: str = "config.json") -> dict:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="AI Assistant Voice CS — GUI Launcher")
-    parser.add_argument("--web", action="store_true", help="Spustit moderní webové rozhraní Polygon Beater namísto desktopového GUI")
+    parser = argparse.ArgumentParser(description="Polygon Beater Voice CS — Desktop Application")
+    parser.add_argument("--host", default="127.0.0.1", help="Host rozhraní (výchozí: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8000, help="Port rozhraní (výchozí: 8000)")
+    parser.add_argument("--legacy-tk", action="store_true", help="Spustit původní Tkinter rozhraní namísto moderního desktopového okna")
+    parser.add_argument("--server-only", "--no-window", dest="server_only", action="store_true", help="Spustit pouze backend bez desktopového okna")
+    parser.add_argument("--browser-tab", action="store_true", help="Otevřít běžnou záložku v prohlížeči namísto samostatného okna")
+    parser.add_argument("--reload", action="store_true", help="Povolit autoreload pro vývoj")
     args, unknown = parser.parse_known_args()
 
-    if args.web:
-        import main as web_main
-        web_main.main()
+    if args.legacy_tk:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s",
+        )
+        logger.info("Spouštím původní Tkinter GUI asistenta")
+        config = load_config()
+        try:
+            llm = initialize_llama(config)
+            app = AssistantGUI(llm, config)
+            app.mainloop()
+            return
+        except Exception as exc:
+            logger.warning("Spuštění Tkinter GUI selhalo (%s). Přecházím na moderní desktopové okno...", exc)
+
+    # Výchozí moderní spuštění: samostatné desktopové okno se sjednoceným životním cyklem
+    from desktop_app import DesktopAppRunner
+    if args.server_only:
+        import uvicorn
+        uvicorn.run("web_server:app", host=args.host, port=args.port, reload=args.reload)
         return
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s",
+    runner = DesktopAppRunner(
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        open_as_tab=args.browser_tab,
     )
-    logger.info("Spouštím GUI asistenta")
-    config = load_config()
-    try:
-        llm = initialize_llama(config)
-        app = AssistantGUI(llm, config)
-        app.mainloop()
-    except Exception as exc:
-        logger.warning("Spuštění desktopového GUI selhalo (%s). Spouštím moderní Web UI...", exc)
-        import main as web_main
-        web_main.main()
+    runner.run()
 
 
 if __name__ == "__main__":

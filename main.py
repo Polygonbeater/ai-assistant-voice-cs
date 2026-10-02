@@ -63,44 +63,50 @@ def wait_and_open_browser(url: str, check_url: str | None = None, poll_interval:
     thread.start()
 
 def main():
-    parser = argparse.ArgumentParser(description="Polygon Beater Voice CS — Web Interface Launcher")
-    # Bezpečnostní opatření (Fáze 6): Výchozí hodnota je natvrdo 127.0.0.1 (loopback).
+    parser = argparse.ArgumentParser(description="Polygon Beater Voice CS — Desktop Application & Server")
+    # Bezpečnostní opatření: Výchozí hodnota je natvrdo 127.0.0.1 (loopback).
     # Při spuštění na veřejném rozhraní se zobrazí bezpečnostní varování.
     parser.add_argument("--host", default="127.0.0.1", help="Host rozhraní (výchozí: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8000, help="Port rozhraní (výchozí: 8000)")
-    parser.add_argument("--no-browser", action="store_true", help="Neotevírat automaticky webový prohlížeč")
+    parser.add_argument("--server-only", "--no-browser", "--no-window", dest="server_only", action="store_true", help="Spustit pouze FastAPI server bez desktopového okna")
+    parser.add_argument("--browser-tab", action="store_true", help="Otevřít běžnou záložku v prohlížeči namísto samostatného okna")
     parser.add_argument("--reload", action="store_true", help="Povolit autoreload pro vývoj")
     args = parser.parse_args()
 
-    print(BANNER)
-    print(f"[*] Inicializuji lokální Polygon Beater engine na http://{args.host}:{args.port}")
-    print("[*] 100% Soukromé & Lokální prostředí (LLM, Blender Bridge, RAG Paměť, STT/TTS)")
-    print("[*] Stiskněte Ctrl+C pro ukončení serveru.\n")
+    if args.server_only:
+        print(BANNER)
+        print(f"[*] Inicializuji lokální Polygon Beater engine (pouze server) na http://{args.host}:{args.port}")
+        print("[*] 100% Soukromé & Lokální prostředí (LLM, Blender Bridge, RAG Paměť, STT/TTS)")
+        print("[*] Stiskněte Ctrl+C pro ukončení serveru.\n")
 
-    # Bezpečnostní varování při startu na veřejném rozhraní
-    _PUBLIC_HOSTS = {"0.0.0.0", "::"}
-    if args.host in _PUBLIC_HOSTS:
-        print("=" * 70)
-        print("⚠️  BEZPEČNOSTNÍ VAROVÁNÍ: Server je spuštěn na veřejném rozhraní!")
-        print(f"   Host: {args.host}:{args.port}")
-        print("   Polygon Beater zpřístupní rozhraní VŠEM zařízením v lokální síti.")
-        print("   Pro bezpečný provoz spusťte s --host 127.0.0.1 (výchozí hodnota).")
-        print("=" * 70 + "\n")
+        # Bezpečnostní varování při startu na veřejném rozhraní
+        _PUBLIC_HOSTS = {"0.0.0.0", "::"}
+        if args.host in _PUBLIC_HOSTS:
+            print("=" * 70)
+            print("⚠️  BEZPEČNOSTNÍ VAROVÁNÍ: Server je spuštěn na veřejném rozhraní!")
+            print(f"   Host: {args.host}:{args.port}")
+            print("   Polygon Beater zpřístupní rozhraní VŠEM zařízením v lokální síti.")
+            print("   Pro bezpečný provoz spusťte s --host 127.0.0.1 (výchozí hodnota).")
+            print("=" * 70 + "\n")
 
-    if not args.no_browser:
-        browser_host = "127.0.0.1" if args.host in _PUBLIC_HOSTS else args.host
-        browser_url = f"http://{browser_host}:{args.port}"
-        status_url = f"http://{browser_host}:{args.port}/api/status"
-        wait_and_open_browser(browser_url, check_url=status_url, poll_interval=1.0)
+        import uvicorn
+        uvicorn.run(
+            "web_server:app",
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
+            log_level="info",
+        )
+        return
 
-    import uvicorn
-    uvicorn.run(
-        "web_server:app",
+    from desktop_app import DesktopAppRunner
+    runner = DesktopAppRunner(
         host=args.host,
         port=args.port,
         reload=args.reload,
-        log_level="info",
+        open_as_tab=args.browser_tab,
     )
+    runner.run()
 
 if __name__ == "__main__":
     main()
