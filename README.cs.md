@@ -287,8 +287,12 @@ pip install git+https://github.com/tatsy/torchmcubes.git
 3. Otevřete soubor `blender_receiver.py` a stiskněte **Run Script** (`Alt + P`).
 4. V konzoli Blenderu se potvrdí: `[AI-Blender] Server naslouchá na 127.0.0.1:9876`.
 
-### 5. Spuštění asistenta
+### 5. Spuštění asistenta (Antigravity Web UI)
 ```bash
+# Spuštění moderního webového rozhraní Antigravity (doporučeno)
+python main.py
+
+# Případně spuštění staršího desktopového okna
 python gui.py
 ```
 Můžete ihned mluvit do mikrofonu nebo psát do chatu:

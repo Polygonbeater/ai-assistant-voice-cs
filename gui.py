@@ -2240,15 +2240,30 @@ def load_config(path: str = "config.json") -> dict:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="AI Assistant Voice CS — GUI Launcher")
+    parser.add_argument("--web", action="store_true", help="Spustit moderní webové rozhraní Antigravity namísto desktopového GUI")
+    args, unknown = parser.parse_known_args()
+
+    if args.web:
+        import main as web_main
+        web_main.main()
+        return
+
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s",
     )
     logger.info("Spouštím GUI asistenta")
     config = load_config()
-    llm = initialize_llama(config)
-    app = AssistantGUI(llm, config)
-    app.mainloop()
+    try:
+        llm = initialize_llama(config)
+        app = AssistantGUI(llm, config)
+        app.mainloop()
+    except Exception as exc:
+        logger.warning("Spuštění desktopového GUI selhalo (%s). Spouštím moderní Web UI...", exc)
+        import main as web_main
+        web_main.main()
 
 
 if __name__ == "__main__":

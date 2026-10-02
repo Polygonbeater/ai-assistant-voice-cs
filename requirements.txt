@@ -76,7 +76,14 @@ psutil>=5.9.0
 PyYAML>=6.0.0
 
 # ------------------------------------------------------------------------------
-# 7. OPTIONAL TRIPOSR INSTALLATION (DIRECTLY FROM GIT FOR FULL LOCAL 3D AI INFERENCE)
+# 7. LOCAL WEB UI & SSE API (ANTIGRAVITY WEB INTERFACE)
+# ------------------------------------------------------------------------------
+fastapi>=0.110.0
+uvicorn>=0.28.0
+python-multipart>=0.0.9
+
+# ------------------------------------------------------------------------------
+# 8. OPTIONAL TRIPOSR INSTALLATION (DIRECTLY FROM GIT FOR FULL LOCAL 3D AI INFERENCE)
 # Pro zprovoznění plné lokální GPU inference modelu TripoSR včetně Marching Cubes:
 # pip install git+https://github.com/VAST-AI-Research/TripoSR.git
 # pip install git+https://github.com/tatsy/torchmcubes.git

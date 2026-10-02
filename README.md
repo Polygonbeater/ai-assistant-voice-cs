@@ -272,8 +272,12 @@ pip install git+https://github.com/tatsy/torchmcubes.git
 3. Open `blender_receiver.py` and click **Run Script** (`Alt + P`).
 4. The system console will output: `[AI-Blender] Server naslouchá na 127.0.0.1:9876`.
 
-### 5. Launch the Assistant GUI
+### 5. Launch the Assistant (Antigravity Web UI)
 ```bash
+# Launch modern Antigravity Web Interface (recommended)
+python main.py
+
+# Or launch legacy desktop GUI
 python gui.py
 ```
 
