@@ -254,8 +254,9 @@ def list_sessions():
     return {"sessions": [_normalize_session_summary(s) for s in sessions]}
 
 @app.post("/api/sessions")
-def create_session(title: str = "Nový chat"):
-    sess = history_repository.create_session(title)
+def create_session(title: str = "New chat"):
+    clean_title = (title or "New chat").strip()
+    sess = history_repository.create_session(clean_title)
     return _normalize_session_summary(sess)
 
 @app.get("/api/sessions/{session_id}")
@@ -286,10 +287,14 @@ def rename_session(session_id: str, req: SessionRenameRequest):
 def delete_session(session_id: str):
     if not is_safe_session_id(session_id):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
+    # Zastavit probíhající worker/stream pro danou relaci
+    stop_session(session_id)
+    cleanup_session_stop_event(session_id)
+    # Kompletní odstranění složky relace a její historie z disku
     success = history_repository.delete_session(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Relaci se nepodařilo smazat.")
-    return {"status": "success", "session_id": session_id}
+    return {"status": "success", "session_id": session_id, "deleted": True}
 
 @app.delete("/api/sessions/{session_id}/messages")
 def clear_session_messages(session_id: str):

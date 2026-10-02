@@ -27,6 +27,10 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
 
+  --left-sidebar-width: 280px;
+  --right-sidebar-width: 340px;
+  --polygon-neon: #38bdf8;
+
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Fira Code", Cascadia Code, Consolas, Menlo, monospace;
 }
@@ -237,9 +241,51 @@ html, body {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 340px;
+  grid-template-columns: var(--left-sidebar-width, 280px) 4px minmax(0, 1fr) 4px var(--right-sidebar-width, 340px);
   height: calc(100vh - 48px);
   overflow: hidden;
+  position: relative;
+}
+
+/* Sidebar Resizers */
+.sidebar-resizer {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 25;
+  user-select: none;
+  touch-action: none;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+  z-index: 26;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.is-resizing {
+  background-color: var(--cyan-primary);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+body.is-resizing-left,
+body.is-resizing-left * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-resizing-right,
+body.is-resizing-right * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* ------------------------------------------------------------------------------
@@ -1337,6 +1383,14 @@ pre {
   justify-content: flex-end;
   padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
+  gap: 10px;
+}
+
+.modal-footer-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .primary-btn {
@@ -1347,9 +1401,11 @@ pre {
   padding: 8px 14px;
   border-radius: 6px;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 .primary-btn:hover {
   background: #7dd3fc;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
 }
 
 .secondary-btn {
@@ -1359,9 +1415,28 @@ pre {
   padding: 7px 12px;
   border-radius: 6px;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 .secondary-btn:hover {
   background: var(--bg-surface-hover);
+}
+
+.danger-btn {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.danger-btn:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
 }
 
 /* Settings Form */

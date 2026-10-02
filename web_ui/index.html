@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs" class="dark">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +7,18 @@
   <meta name="color-scheme" content="dark">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function() {
+      try {
+        var lang = localStorage.getItem('polygon_language') || 'en';
+        document.documentElement.lang = lang;
+        var lw = localStorage.getItem('polygon_left_sidebar_width');
+        var rw = localStorage.getItem('polygon_right_sidebar_width');
+        if (lw) document.documentElement.style.setProperty('--left-sidebar-width', lw);
+        if (rw) document.documentElement.style.setProperty('--right-sidebar-width', rw);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="polygon-theme">
   <div class="app-shell">
@@ -37,27 +49,27 @@
         <div class="system-status-pills">
           <div class="status-pill" id="pill-llm">
             <span class="status-indicator online"></span>
-            <span>Qwen2.5-7B GGUF</span>
+            <span data-i18n="status_llm">Qwen2.5-7B GGUF</span>
           </div>
           <div class="status-pill" id="pill-blender">
             <span class="status-indicator checking" id="blender-indicator"></span>
-            <span id="blender-status-text">Blender: Ověřuji</span>
+            <span id="blender-status-text" data-i18n="status_blender_checking">Blender: Checking</span>
           </div>
           <div class="status-pill" id="pill-rag">
             <span class="status-indicator online"></span>
-            <span id="rag-status-text">RAG: 100% Offline</span>
+            <span id="rag-status-text" data-i18n="status_rag">RAG: 100% Offline</span>
           </div>
         </div>
       </div>
 
       <div class="topbar-right">
-        <button class="topbar-btn" id="btn-open-rag" title="Správa RAG dokumentů a paměti">
+        <button class="topbar-btn" id="btn-open-rag" data-i18n-title="btn_knowledge_title" title="Manage RAG documents and memory">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-          <span>Znalosti</span>
+          <span data-i18n="btn_knowledge">Knowledge</span>
         </button>
-        <button class="topbar-btn" id="btn-open-settings" title="Nastavení parametrů">
+        <button class="topbar-btn" id="btn-open-settings" data-i18n-title="btn_settings_title" title="Settings & Configuration">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span>Nastavení</span>
+          <span data-i18n="btn_settings">Settings</span>
         </button>
       </div>
     </header>
@@ -66,22 +78,22 @@
     <div class="workspace-grid">
       
       <!-- LEFT COLUMN: SESSIONS & NAVIGATION -->
-      <aside class="left-sidebar">
+      <aside class="left-sidebar" id="left-sidebar">
         <div class="sidebar-header">
           <button class="new-chat-btn" id="btn-new-chat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>Nová konverzace</span>
+            <span data-i18n="btn_new_chat">New conversation</span>
             <span class="kbd-badge">Ctrl+N</span>
           </button>
           
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="session-search-input" placeholder="Hledat v relacích...">
+            <input type="text" id="session-search-input" data-i18n-placeholder="search_sessions_placeholder" placeholder="Search sessions...">
           </div>
         </div>
 
         <div class="sidebar-section-title">
-          <span>HISTORIE KONVERZACÍ</span>
+          <span data-i18n="section_history">CONVERSATION HISTORY</span>
         </div>
 
         <div class="sessions-list" id="sessions-container">
@@ -94,12 +106,15 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
             </div>
             <div class="engine-info">
-              <div class="engine-name">Polygon Beater Core</div>
-              <div class="engine-sub">100% Lokální AI • Soukromé</div>
+              <div class="engine-name" data-i18n="engine_name">Polygon Beater Core</div>
+              <div class="engine-sub" data-i18n="engine_sub">100% Local AI • Private</div>
             </div>
           </div>
         </div>
       </aside>
+
+      <!-- RESIZER: LEFT SIDEBAR -->
+      <div class="sidebar-resizer resizer-left" id="resizer-left" data-i18n-title="resizer_title_left" title="Drag to resize left sidebar"></div>
 
       <!-- CENTER COLUMN: CHAT STREAM & PROMPT BAR -->
       <main class="center-chat">
@@ -107,39 +122,39 @@
         <!-- CHAT TOP BAR -->
         <div class="chat-header">
           <div class="chat-header-title-group">
-            <span class="chat-title-editable" id="active-session-title" contenteditable="true" title="Klikněte pro přejmenování relace">Načítání...</span>
-            <span class="chat-tools-count">22 Nástrojů aktivních</span>
+            <span class="chat-title-editable" id="active-session-title" contenteditable="true" data-i18n-title="click_to_rename" title="Click to rename session" data-i18n="chat_loading">Loading...</span>
+            <span class="chat-tools-count" data-i18n="chat_tools_count">22 Tools Active</span>
           </div>
 
           <div class="chat-controls-group">
             <div class="select-wrapper">
-              <label for="select-preset" class="sr-only">Metodika</label>
-              <select id="select-preset" class="polygon-select" title="Vyberte expertní analytický rámec">
-                <option value="Vypnuto (Standardní chat)">🧠 Standardní asistent</option>
-                <option value="⚡ Auto (Doporučit)">⚡ Auto-výběr metodiky</option>
-                <option value="🎬 Auteur & Vizuální analýza (Mise-en-scène)">🎬 Auteur & Vizuální styl</option>
-                <option value="📐 First Principles (Kód & 3D dekonstrukce)">📐 First Principles (3D CAD)</option>
-                <option value="🛡️ Red Team & Oponentura hypotéz">🛡️ Red Team & Oponentura</option>
-                <option value="Hloubková analýza v3.1">📊 Taleb / Hloubková analýza</option>
+              <label for="select-preset" class="sr-only" data-i18n="select_preset_label">Methodology</label>
+              <select id="select-preset" class="polygon-select" data-i18n-title="select_preset_title" title="Select expert analytical framework">
+                <option value="Vypnuto (Standardní chat)" data-i18n="preset_standard">🧠 Standard Assistant</option>
+                <option value="⚡ Auto (Doporučit)" data-i18n="preset_auto">⚡ Auto-Select Methodology</option>
+                <option value="🎬 Auteur & Vizuální analýza (Mise-en-scène)" data-i18n="preset_auteur">🎬 Auteur & Visual Style</option>
+                <option value="📐 First Principles (Kód & 3D dekonstrukce)" data-i18n="preset_first_principles">📐 First Principles (3D CAD)</option>
+                <option value="🛡️ Red Team & Oponentura hypotéz" data-i18n="preset_red_team">🛡️ Red Team & Counter-Analysis</option>
+                <option value="Hloubková analýza v3.1" data-i18n="preset_taleb">📊 In-Depth Analysis v3.1</option>
               </select>
             </div>
 
-            <button class="toggle-pill active" id="toggle-online" title="Aktivovat webové vyhledávání a externí nástroje">
+            <button class="toggle-pill active" id="toggle-online" data-i18n-title="toggle_web_tools_title" title="Enable web search and external tools">
               <span class="pill-icon">🌐</span>
-              <span>Web Tools</span>
+              <span data-i18n="toggle_web_tools">Web Tools</span>
             </button>
 
-            <button class="toggle-pill active" id="toggle-rag" title="Sémantické dohledávání v dokumentech RAG">
+            <button class="toggle-pill active" id="toggle-rag" data-i18n-title="toggle_rag_title" title="Semantic retrieval from RAG knowledge base">
               <span class="pill-icon">📄</span>
-              <span>RAG</span>
+              <span data-i18n="toggle_rag">RAG</span>
             </button>
 
-            <button class="toggle-pill" id="toggle-tts" title="Hlasový syntetizér (TTS předčítání)">
+            <button class="toggle-pill" id="toggle-tts" data-i18n-title="toggle_tts_title" title="Voice synthesizer (TTS reading)">
               <span class="pill-icon">🔊</span>
-              <span>TTS</span>
+              <span data-i18n="toggle_tts">TTS</span>
             </button>
 
-            <button class="icon-action-btn" id="btn-clear-chat" title="Vymazat historii aktuální relace">
+            <button class="icon-action-btn" id="btn-clear-chat" data-i18n-title="btn_clear_chat_title" title="Clear current session history">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
           </div>
@@ -161,25 +176,25 @@
                 </g>
               </svg>
             </div>
-            <h1 class="hero-heading">AI Assistant Voice CS</h1>
-            <p class="hero-subheading">Local Voice Companion & 3D Technical Director</p>
+            <h1 class="hero-heading" data-i18n="hero_title">AI Assistant Voice CS</h1>
+            <p class="hero-subheading" data-i18n="hero_subtitle">Local Voice Companion & 3D Technical Director</p>
             
             <div class="suggestion-chips-grid">
-              <button class="suggestion-chip" data-prompt="Zkontroluj scénu a udělej vizuální inspekci viewportu v Blenderu.">
+              <button class="suggestion-chip" id="chip-inspect" data-chip-key="chip_inspect">
                 <span class="chip-icon">📸</span>
-                <span class="chip-text">Zkontroluj scénu a viewport v Blenderu</span>
+                <span class="chip-text" data-i18n="chip_inspect_title">Inspect scene and viewport in Blender</span>
               </button>
-              <button class="suggestion-chip" data-prompt="Vygeneruj kostru a spusť auto-rigování a skinning pro aktivní 3D model.">
+              <button class="suggestion-chip" id="chip-autorig" data-chip-key="chip_autorig">
                 <span class="chip-icon">🦴</span>
-                <span class="chip-text">Aplikuj Auto-Rig & Skinning (ARMATURE_AUTO)</span>
+                <span class="chip-text" data-i18n="chip_autorig_title">Apply Auto-Rig & Skinning (ARMATURE_AUTO)</span>
               </button>
-              <button class="suggestion-chip" data-prompt="Proveď Mesh Doctor audit topologie a zkontroluj watertight stav pro 3D tisk.">
+              <button class="suggestion-chip" id="chip-meshdoctor" data-chip-key="chip_meshdoctor">
                 <span class="chip-icon">🩺</span>
-                <span class="chip-text">Mesh Doctor audit topologie (3D tisk)</span>
+                <span class="chip-text" data-i18n="chip_meshdoctor_title">Mesh Doctor topology audit (3D printing)</span>
               </button>
-              <button class="suggestion-chip" data-prompt="Vytvoř profesionální produktové studio s tříbodovým nasvícením a zakřiveným pozadím.">
+              <button class="suggestion-chip" id="chip-studio" data-chip-key="chip_studio">
                 <span class="chip-icon">💡</span>
-                <span class="chip-text">Vytvoř produktové studio s osvětlením</span>
+                <span class="chip-text" data-i18n="chip_studio_title">Create product studio with lighting</span>
               </button>
             </div>
           </div>
@@ -195,43 +210,44 @@
             <!-- ATTACHED FILE PILL (IF PRESENT) -->
             <div class="attached-file-banner" id="attached-file-banner" style="display: none;">
               <span class="file-icon">📎</span>
-              <span class="file-name" id="attached-file-name">dokument.pdf</span>
-              <button class="file-remove-btn" id="btn-remove-attachment" title="Odebrat přílohu">&times;</button>
+              <span class="file-name" id="attached-file-name">document.pdf</span>
+              <button class="file-remove-btn" id="btn-remove-attachment" data-i18n-title="remove_attachment_title" title="Remove attachment">&times;</button>
             </div>
 
             <!-- STREAMING STATUS BADGE -->
             <div class="live-status-badge" id="live-status-badge" style="display: none;">
               <span class="pulse-ring"></span>
-              <span id="live-status-text">Přemýšlím…</span>
+              <span id="live-status-text" data-i18n="thinking_status">Thinking…</span>
             </div>
 
             <!-- INPUT TEXTAREA -->
             <textarea 
               id="prompt-input" 
-              placeholder="Zadej dotaz nebo příkaz pro Blender... (Enter odeslat, Shift+Enter nový řádek)" 
+              data-i18n-placeholder="prompt_placeholder"
+              placeholder="Type a query or Blender command... (Enter to send, Shift+Enter for newline)" 
               rows="1"
             ></textarea>
 
             <!-- ACTION BAR INSIDE PROMPT BOX -->
             <div class="prompt-actions-bar">
               <div class="prompt-actions-left">
-                <label class="action-btn file-attach-btn" title="Připojit dokument pro RAG (PDF, TXT, DOCX)">
+                <label class="action-btn file-attach-btn" data-i18n-title="attach_file_title" title="Attach document for RAG (PDF, TXT, DOCX)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                   <input type="file" id="file-input" style="display: none;">
                 </label>
 
-                <button class="action-btn mic-btn" id="btn-mic" title="Hlasové nahrávání (Whisper STT)">
+                <button class="action-btn mic-btn" id="btn-mic" data-i18n-title="mic_btn_title" title="Voice recording (Whisper STT)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
                 </button>
                 
-                <span class="prompt-shortcut-hint">Enter odeslat • Shift+Enter nový řádek</span>
+                <span class="prompt-shortcut-hint" data-i18n="prompt_shortcut_hint">Enter to send • Shift+Enter for new line</span>
               </div>
 
               <div class="prompt-actions-right">
-                <button class="send-btn" id="btn-send" title="Odeslat dotaz">
+                <button class="send-btn" id="btn-send" data-i18n-title="send_btn_title" title="Send message">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
-                <button class="stop-btn" id="btn-stop" style="display: none;" title="Zastavit generování">
+                <button class="stop-btn" id="btn-stop" style="display: none;" data-i18n-title="stop_btn_title" title="Stop generation">
                   <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
                 </button>
               </div>
@@ -242,8 +258,11 @@
 
       </main>
 
+      <!-- RESIZER: RIGHT SIDEBAR -->
+      <div class="sidebar-resizer resizer-right" id="resizer-right" data-i18n-title="resizer_title_right" title="Drag to resize right sidebar"></div>
+
       <!-- RIGHT COLUMN: 3D VIEWPORT & TELEMETRY INSPECTOR -->
-      <aside class="right-inspector">
+      <aside class="right-inspector" id="right-inspector">
         <div class="inspector-header">
           <div class="inspector-title-group">
             <svg class="inspector-title-icon" viewBox="0 0 529.16666 529.16667" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -255,9 +274,9 @@
                 </g>
               </g>
             </svg>
-            <span>3D VIEWPORT & TELEMETRIE</span>
+            <span data-i18n="inspector_title">3D VIEWPORT & TELEMETRY</span>
           </div>
-          <button class="icon-refresh-btn" id="btn-refresh-telemetry" title="Aktualizovat snímek a metriky">
+          <button class="icon-refresh-btn" id="btn-refresh-telemetry" data-i18n-title="btn_refresh_telemetry_title" title="Refresh snapshot and metrics">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           </button>
         </div>
@@ -267,15 +286,15 @@
           <!-- VIEWPORT PREVIEW CARD -->
           <div class="inspector-card">
             <div class="card-header">
-              <span class="card-title">ŽIVÝ NÁHLED VIEWPORTU</span>
-              <span class="card-badge" id="viewport-badge">Offline</span>
+              <span class="card-title" data-i18n="card_viewport_title">LIVE VIEWPORT PREVIEW</span>
+              <span class="card-badge" id="viewport-badge" data-i18n="viewport_offline">Offline</span>
             </div>
             <div class="viewport-image-box">
-              <img id="viewport-snapshot-img" src="/api/blender/viewport-image" alt="3D Viewport Snímek" title="Klikněte pro zvětšení">
+              <img id="viewport-snapshot-img" src="/api/blender/viewport-image" alt="3D Viewport Snapshot" title="Click to enlarge">
               <div class="viewport-overlay-btn-wrap">
                 <button class="viewport-snap-btn" id="btn-take-snapshot">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                  <span>Pořídit screenshot</span>
+                  <span data-i18n="btn_snapshot">Take screenshot</span>
                 </button>
               </div>
             </div>
@@ -284,31 +303,31 @@
           <!-- SCENE METRICS GRID -->
           <div class="inspector-card">
             <div class="card-header">
-              <span class="card-title">METRIKY 3D SCÉNY</span>
+              <span class="card-title" data-i18n="card_metrics_title">3D SCENE METRICS</span>
             </div>
             <div class="metrics-grid">
               <div class="metric-item">
-                <span class="metric-label">Objekty celkem</span>
+                <span class="metric-label" data-i18n="metric_total_objects">Total Objects</span>
                 <span class="metric-value" id="val-total-objects">-</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Aktivní MESH</span>
+                <span class="metric-label" data-i18n="metric_active_mesh">Active MESH</span>
                 <span class="metric-value highlight" id="val-active-mesh">-</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Počet polygonů</span>
+                <span class="metric-label" data-i18n="metric_total_faces">Polygons Count</span>
                 <span class="metric-value" id="val-total-faces">-</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Počet vrcholů</span>
+                <span class="metric-label" data-i18n="metric_total_verts">Vertices Count</span>
                 <span class="metric-value" id="val-total-verts">-</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Watertight</span>
+                <span class="metric-label" data-i18n="metric_watertight">Watertight</span>
                 <span class="metric-value" id="val-watertight">-</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Kosti Armature</span>
+                <span class="metric-label" data-i18n="metric_bones">Armature Bones</span>
                 <span class="metric-value" id="val-bones">-</span>
               </div>
             </div>
@@ -317,46 +336,46 @@
           <!-- QUICK 3D ACTIONS -->
           <div class="inspector-card">
             <div class="card-header">
-              <span class="card-title">RYCHLÉ 3D PŘÍKAZY (BLENDER)</span>
+              <span class="card-title" data-i18n="card_quick_actions">QUICK 3D COMMANDS (BLENDER)</span>
             </div>
             <div class="quick-actions-list">
               <button class="quick-action-btn" id="btn-quick-inspect">
                 <span class="qa-icon">📸</span>
                 <div class="qa-info">
-                  <div class="qa-title">Inspekce viewportu</div>
-                  <div class="qa-sub">Snímek a sběr telemetrie</div>
+                  <div class="qa-title" data-i18n="qa_inspect_title">Viewport Inspection</div>
+                  <div class="qa-sub" data-i18n="qa_inspect_sub">Snapshot & telemetry collection</div>
                 </div>
               </button>
               
               <button class="quick-action-btn" id="btn-quick-autorig">
                 <span class="qa-icon">🦴</span>
                 <div class="qa-info">
-                  <div class="qa-title">Auto-Rig & Skinning</div>
-                  <div class="qa-sub">Armature + ARMATURE_AUTO</div>
+                  <div class="qa-title" data-i18n="qa_autorig_title">Auto-Rig & Skinning</div>
+                  <div class="qa-sub" data-i18n="qa_autorig_sub">Armature + ARMATURE_AUTO</div>
                 </div>
               </button>
 
               <button class="quick-action-btn" id="btn-quick-meshdoctor">
                 <span class="qa-icon">🩺</span>
                 <div class="qa-info">
-                  <div class="qa-title">Mesh Doctor Audit</div>
-                  <div class="qa-sub">Kontrola manifold sítě pro 3D tisk</div>
+                  <div class="qa-title" data-i18n="qa_meshdoctor_title">Mesh Doctor Audit</div>
+                  <div class="qa-sub" data-i18n="qa_meshdoctor_sub">Check manifold mesh for 3D printing</div>
                 </div>
               </button>
 
               <button class="quick-action-btn" id="btn-quick-studio">
                 <span class="qa-icon">💡</span>
                 <div class="qa-info">
-                  <div class="qa-title">Produktové studio</div>
-                  <div class="qa-sub">Tříbodové AREA osvětlení + backdrop</div>
+                  <div class="qa-title" data-i18n="qa_studio_title">Product Studio</div>
+                  <div class="qa-sub" data-i18n="qa_studio_sub">3-point AREA lighting + backdrop</div>
                 </div>
               </button>
 
               <button class="quick-action-btn" id="btn-quick-shader">
                 <span class="qa-icon">🎨</span>
                 <div class="qa-info">
-                  <div class="qa-title">Kartáčovaný kov (Shader)</div>
-                  <div class="qa-sub">Procedurální Principled BSDF strom</div>
+                  <div class="qa-title" data-i18n="qa_shader_title">Brushed Metal (Shader)</div>
+                  <div class="qa-sub" data-i18n="qa_shader_sub">Procedural Principled BSDF tree</div>
                 </div>
               </button>
             </div>
@@ -365,12 +384,12 @@
           <!-- REALTIME CONSOLE / TELEMETRY LOG -->
           <div class="inspector-card">
             <div class="card-header">
-              <span class="card-title">TELEMETRICKÁ KONZOLE</span>
-              <button class="clear-log-btn" id="btn-clear-console">Clear</button>
+              <span class="card-title" data-i18n="card_console_title">TELEMETRIC CONSOLE</span>
+              <button class="clear-log-btn" id="btn-clear-console" data-i18n="btn_clear_console">Clear</button>
             </div>
             <div class="console-box" id="console-output">
-              <div class="console-line info">[System] Polygon Beater Web Engine připraven.</div>
-              <div class="console-line">[Socket] Čekám na události Blender TCP...</div>
+              <div class="console-line info">[System] Polygon Beater Web Engine initialized.</div>
+              <div class="console-line">[Socket] Waiting for Blender TCP events...</div>
             </div>
           </div>
 
@@ -386,26 +405,26 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-          <h3>Znalostní báze & RAG dokumenty</h3>
+          <h3 data-i18n="modal_rag_title">Knowledge Base & RAG Documents</h3>
         </div>
         <button class="modal-close-btn" id="btn-close-rag-modal">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc">Dokumenty indexované v lokální sémantické paměti (FAISS). Model z nich čerpá fakta bez odesílání do cloudu.</p>
+        <p class="modal-desc" data-i18n="modal_rag_desc">Documents indexed in local semantic memory (FAISS). The model retrieves facts without cloud upload.</p>
         
         <div class="rag-upload-zone" id="rag-dropzone">
           <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          <div class="upload-text">Klikněte nebo přetáhněte dokument sem (PDF, TXT, DOCX, MD)</div>
+          <div class="upload-text" data-i18n="rag_dropzone_text">Click or drag documents here (PDF, TXT, DOCX, MD)</div>
           <input type="file" id="rag-file-modal-input" style="display: none;">
         </div>
 
-        <div class="indexed-docs-header">Indexované dokumenty:</div>
+        <div class="indexed-docs-header" data-i18n="modal_indexed_docs_header">Indexed Documents:</div>
         <div class="indexed-docs-list" id="modal-docs-list">
           <!-- Dynamicky generováno -->
         </div>
 
         <div class="modal-footer-actions">
-          <button class="secondary-btn" id="btn-reindex-memory">🔄 Přeindexovat sémantickou paměť</button>
+          <button class="secondary-btn" id="btn-reindex-memory" data-i18n="btn_reindex_memory">🔄 Reindex Semantic Memory</button>
         </div>
       </div>
     </div>
@@ -417,26 +436,34 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <h3>Konfigurace AI Asistenta</h3>
+          <h3 data-i18n="modal_settings_title">AI Assistant Configuration</h3>
         </div>
         <button class="modal-close-btn" id="btn-close-settings-modal">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-form">
           <div class="form-row">
-            <label for="cfg-temp">Kreativita / Teplota (Temperature):</label>
+            <label for="cfg-language" data-i18n="cfg_language">Interface Language:</label>
+            <select id="cfg-language" class="polygon-select">
+              <option value="en">English (EN)</option>
+              <option value="cs">Čeština (CS)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="cfg-temp" data-i18n="cfg_temp">Creativity / Temperature:</label>
             <input type="number" id="cfg-temp" min="0.0" max="1.5" step="0.05" value="0.7">
           </div>
           <div class="form-row">
-            <label for="cfg-tokens">Maximální počet tokenů odpovědi:</label>
+            <label for="cfg-tokens" data-i18n="cfg_tokens">Maximum Response Tokens:</label>
             <input type="number" id="cfg-tokens" min="50" max="4096" step="50" value="750">
           </div>
           <div class="form-row">
-            <label for="cfg-sysprompt">Systémový prompt:</label>
+            <label for="cfg-sysprompt" data-i18n="cfg_sysprompt">System Prompt:</label>
             <textarea id="cfg-sysprompt" rows="3"></textarea>
           </div>
-          <div class="modal-footer-actions">
-            <button class="primary-btn" id="btn-save-settings">Uložit nastavení</button>
+          <div class="modal-footer-actions modal-footer-split">
+            <button type="button" class="danger-btn" id="btn-reset-defaults" data-i18n="btn_reset_defaults">Reset to Defaults</button>
+            <button type="button" class="primary-btn" id="btn-save-settings" data-i18n="btn_save_settings">Save Settings</button>
           </div>
         </div>
       </div>
@@ -446,7 +473,7 @@
   <!-- LIGHTBOX PRO OBRÁZKY -->
   <div class="lightbox" id="image-lightbox" style="display: none;">
     <div class="lightbox-close" id="btn-close-lightbox">&times;</div>
-    <img id="lightbox-img" src="" alt="Zvětšený náhled">
+    <img id="lightbox-img" src="" alt="Enlarged view">
   </div>
 
   <script src="script.js"></script>

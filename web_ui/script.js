@@ -1,16 +1,20 @@
 /**
  * POLYGON BEATER — AI Assistant Voice CS
  * Frontend Client Controller (script.js)
- * 100% Vanilla JavaScript, bez externích závislostí, optimalizováno pro lokální offline běh.
+ * 100% Vanilla JavaScript, no external dependencies, optimized for local offline operation.
  */
 
 (() => {
   'use strict';
 
   // ===========================================================================
-  // GLOBÁLNÍ STAV KLIENTA
+  // CLIENT STATE
   // ===========================================================================
   const state = {
+    language: 'en',
+    leftSidebarWidth: '280px',
+    rightSidebarWidth: '340px',
+
     sessionId: null,
     sessions: [],
     isStreaming: false,
@@ -35,7 +39,7 @@
   };
 
   // ===========================================================================
-  // DOM ELEMENTY
+  // DOM ELEMENTS
   // ===========================================================================
   const el = {
     // Header
@@ -45,7 +49,11 @@
     btnOpenRag: document.getElementById('btn-open-rag'),
     btnOpenSettings: document.getElementById('btn-open-settings'),
 
-    // Sidebar
+    // Sidebar & Resizers
+    leftSidebar: document.getElementById('left-sidebar'),
+    rightInspector: document.getElementById('right-inspector'),
+    resizerLeft: document.getElementById('resizer-left'),
+    resizerRight: document.getElementById('resizer-right'),
     btnNewChat: document.getElementById('btn-new-chat'),
     sessionSearch: document.getElementById('session-search-input'),
     sessionsContainer: document.getElementById('sessions-container'),
@@ -108,9 +116,11 @@
 
     modalSettings: document.getElementById('modal-settings'),
     btnCloseSettingsModal: document.getElementById('btn-close-settings-modal'),
+    cfgLanguage: document.getElementById('cfg-language'),
     cfgTemp: document.getElementById('cfg-temp'),
     cfgTokens: document.getElementById('cfg-tokens'),
     cfgSysprompt: document.getElementById('cfg-sysprompt'),
+    btnResetDefaults: document.getElementById('btn-reset-defaults'),
     btnSaveSettings: document.getElementById('btn-save-settings'),
 
     // Lightbox
@@ -120,7 +130,495 @@
   };
 
   // ===========================================================================
-  // POMOCNÉ FUNKCE: TELEMETRICKÝ LOG
+  // LOCALIZATION & I18N DICTIONARY (EN/CS)
+  // ===========================================================================
+  const I18N = {
+    en: {
+      status_llm: 'Qwen2.5-7B GGUF',
+      status_blender_checking: 'Blender: Checking',
+      status_blender_connected: 'Blender: Connected',
+      status_blender_offline: 'Blender: Offline',
+      status_rag: 'RAG: 100% Offline',
+      btn_knowledge: 'Knowledge',
+      btn_knowledge_title: 'Manage RAG documents and memory',
+      btn_settings: 'Settings',
+      btn_settings_title: 'Settings & Configuration',
+
+      btn_new_chat: 'New conversation',
+      search_sessions_placeholder: 'Search sessions...',
+      section_history: 'CONVERSATION HISTORY',
+      engine_name: 'Polygon Beater Core',
+      engine_sub: '100% Local AI • Private',
+      resizer_title_left: 'Drag to resize left sidebar',
+      no_sessions: 'No sessions.',
+      unnamed_session: 'Untitled conversation',
+      delete_session_title: 'Delete session',
+
+      chat_loading: 'Loading...',
+      click_to_rename: 'Click to rename session',
+      chat_tools_count: '22 Tools Active',
+      select_preset_label: 'Methodology',
+      select_preset_title: 'Select expert analytical framework',
+      preset_standard: '🧠 Standard Assistant',
+      preset_auto: '⚡ Auto-Select Methodology',
+      preset_auteur: '🎬 Auteur & Visual Style',
+      preset_first_principles: '📐 First Principles (3D CAD)',
+      preset_red_team: '🛡️ Red Team & Counter-Analysis',
+      preset_taleb: '📊 In-Depth Analysis v3.1',
+      toggle_web_tools: 'Web Tools',
+      toggle_web_tools_title: 'Enable web search and external tools',
+      toggle_rag: 'RAG',
+      toggle_rag_title: 'Semantic retrieval from RAG knowledge base',
+      toggle_tts: 'TTS',
+      toggle_tts_title: 'Voice synthesizer (TTS reading)',
+      btn_clear_chat_title: 'Clear current session history',
+
+      hero_title: 'AI Assistant Voice CS',
+      hero_subtitle: 'Local Voice Companion & 3D Technical Director',
+      chip_inspect_title: 'Inspect scene and viewport in Blender',
+      chip_autorig_title: 'Apply Auto-Rig & Skinning (ARMATURE_AUTO)',
+      chip_meshdoctor_title: 'Mesh Doctor topology audit (3D printing)',
+      chip_studio_title: 'Create product studio with lighting',
+
+      remove_attachment_title: 'Remove attachment',
+      thinking_status: 'Thinking…',
+      prompt_placeholder: 'Type a query or Blender command... (Enter to send, Shift+Enter for newline)',
+      attach_file_title: 'Attach document for RAG (PDF, TXT, DOCX)',
+      mic_btn_title: 'Voice recording (Whisper STT)',
+      prompt_shortcut_hint: 'Enter to send • Shift+Enter for new line',
+      send_btn_title: 'Send message',
+      stop_btn_title: 'Stop generation',
+      default_doc_prompt: 'Process this attached document.',
+
+      resizer_title_right: 'Drag to resize right sidebar',
+      inspector_title: '3D VIEWPORT & TELEMETRY',
+      btn_refresh_telemetry_title: 'Refresh snapshot and metrics',
+      card_viewport_title: 'LIVE VIEWPORT PREVIEW',
+      viewport_active: 'Active',
+      viewport_offline: 'Offline',
+      btn_snapshot: 'Take screenshot',
+      card_metrics_title: '3D SCENE METRICS',
+      metric_total_objects: 'Total Objects',
+      metric_active_mesh: 'Active MESH',
+      metric_total_faces: 'Polygons Count',
+      metric_total_verts: 'Vertices Count',
+      metric_watertight: 'Watertight',
+      metric_bones: 'Armature Bones',
+      metric_yes: 'YES',
+      metric_no: 'NO',
+      metric_none: 'None',
+
+      card_quick_actions: 'QUICK 3D COMMANDS (BLENDER)',
+      qa_inspect_title: 'Viewport Inspection',
+      qa_inspect_sub: 'Snapshot & telemetry collection',
+      qa_autorig_title: 'Auto-Rig & Skinning',
+      qa_autorig_sub: 'Armature + ARMATURE_AUTO',
+      qa_meshdoctor_title: 'Mesh Doctor Audit',
+      qa_meshdoctor_sub: 'Check manifold mesh for 3D printing',
+      qa_studio_title: 'Product Studio',
+      qa_studio_sub: '3-point AREA lighting + backdrop',
+      qa_shader_title: 'Brushed Metal (Shader)',
+      qa_shader_sub: 'Procedural Principled BSDF tree',
+      card_console_title: 'TELEMETRIC CONSOLE',
+      btn_clear_console: 'Clear',
+
+      modal_rag_title: 'Knowledge Base & RAG Documents',
+      modal_rag_desc: 'Documents indexed in local semantic memory (FAISS). The model retrieves facts without cloud upload.',
+      rag_dropzone_text: 'Click or drag documents here (PDF, TXT, DOCX, MD)',
+      modal_indexed_docs_header: 'Indexed Documents:',
+      no_indexed_docs: 'No documents indexed yet.',
+      btn_delete_doc: 'Delete',
+      btn_reindex_memory: '🔄 Reindex Semantic Memory',
+
+      modal_settings_title: 'AI Assistant Configuration',
+      cfg_language: 'Interface Language:',
+      cfg_temp: 'Creativity / Temperature:',
+      cfg_tokens: 'Maximum Response Tokens:',
+      cfg_sysprompt: 'System Prompt:',
+      btn_reset_defaults: 'Reset to Defaults',
+      btn_save_settings: 'Save Settings',
+
+      confirm_reset_defaults: 'Reset all interface preferences to factory defaults (English, default sidebar widths, clean layout)?',
+      confirm_clear_session: 'Are you sure you want to clear message history for this session?',
+      confirm_delete_rag_doc: 'Are you sure you want to remove "{name}" from RAG index?',
+      new_chat_title: 'New chat',
+      copy_code: 'Copy',
+      copied_code: 'Copied!',
+      you: 'You',
+      stopped_pill: '⏹ Generation stopped',
+      rag_status_files: 'RAG: {docs} files ({chunks} chunks)',
+      blender_connected: 'Connected',
+      blender_offline: 'Offline',
+      config_saved: 'Configuration saved successfully.',
+      error_save_config: 'Failed to save configuration',
+      error_saving_config: 'Error saving configuration',
+      log_session_deleted: 'Session {id} deleted.',
+    },
+    cs: {
+      status_llm: 'Qwen2.5-7B GGUF',
+      status_blender_checking: 'Blender: Ověřuji',
+      status_blender_connected: 'Blender: Připojen',
+      status_blender_offline: 'Blender: Offline',
+      status_rag: 'RAG: 100% Offline',
+      btn_knowledge: 'Znalosti',
+      btn_knowledge_title: 'Správa RAG dokumentů a paměti',
+      btn_settings: 'Nastavení',
+      btn_settings_title: 'Nastavení a konfigurace',
+
+      btn_new_chat: 'Nová konverzace',
+      search_sessions_placeholder: 'Hledat v relacích...',
+      section_history: 'HISTORIE KONVERZACÍ',
+      engine_name: 'Polygon Beater Core',
+      engine_sub: '100% Lokální AI • Soukromé',
+      resizer_title_left: 'Tažením změnit šířku levého panelu',
+      no_sessions: 'Žádné relace.',
+      unnamed_session: 'Nepojmenovaná relace',
+      delete_session_title: 'Smazat relaci',
+
+      chat_loading: 'Načítám...',
+      click_to_rename: 'Klikněte pro přejmenování relace',
+      chat_tools_count: '22 Nástrojů aktivních',
+      select_preset_label: 'Metodika',
+      select_preset_title: 'Vyberte expertní analytický rámec',
+      preset_standard: '🧠 Standardní asistent',
+      preset_auto: '⚡ Auto (Doporučit)',
+      preset_auteur: '🎬 Auteur & Vizuální analýza',
+      preset_first_principles: '📐 First Principles (Kód & 3D)',
+      preset_red_team: '🛡️ Red Team & Oponentura hypotéz',
+      preset_taleb: '📊 Hloubková analýza v3.1',
+      toggle_web_tools: 'Web Nástroje',
+      toggle_web_tools_title: 'Povolit webové vyhledávání a externí nástroje',
+      toggle_rag: 'RAG',
+      toggle_rag_title: 'Sémantické vyhledávání z RAG databáze',
+      toggle_tts: 'TTS',
+      toggle_tts_title: 'Hlasová syntéza (čtení odpovědí)',
+      btn_clear_chat_title: 'Vymazat historii relace',
+
+      hero_title: 'AI Assistant Voice CS',
+      hero_subtitle: 'Lokální hlasový asistent & 3D technický ředitel',
+      chip_inspect_title: 'Prozkoumat scénu a viewport v Blenderu',
+      chip_autorig_title: 'Aplikovat Auto-Rig & Skinning (ARMATURE_AUTO)',
+      chip_meshdoctor_title: 'Mesh Doctor audit topologie (3D tisk)',
+      chip_studio_title: 'Vytvořit produktové studio s nasvícením',
+
+      remove_attachment_title: 'Odebrat přílohu',
+      thinking_status: 'Přemýšlím…',
+      prompt_placeholder: 'Napište dotaz nebo příkaz pro Blender... (Enter pro odeslání, Shift+Enter pro nový řádek)',
+      attach_file_title: 'Připojit dokument pro RAG (PDF, TXT, DOCX)',
+      mic_btn_title: 'Hlasový záznam (přepis přes Whisper)',
+      prompt_shortcut_hint: 'Enter pro odeslání • Shift+Enter pro nový řádek',
+      send_btn_title: 'Odeslat zprávu',
+      stop_btn_title: 'Zastavit generování',
+      default_doc_prompt: 'Zpracuj tento přiložený dokument.',
+
+      resizer_title_right: 'Tažením změnit šířku pravého panelu',
+      inspector_title: '3D VIEWPORT & TELEMETRIE',
+      btn_refresh_telemetry_title: 'Obnovit snímek a metriky',
+      card_viewport_title: 'ŽIVÝ NÁHLED VIEWPORTU',
+      viewport_active: 'Aktivní',
+      viewport_offline: 'Offline',
+      btn_snapshot: 'Pořídit snímek',
+      card_metrics_title: 'METRIKY 3D SCÉNY',
+      metric_total_objects: 'Objektů celkem',
+      metric_active_mesh: 'Aktivní MESH',
+      metric_total_faces: 'Počet polygonů',
+      metric_total_verts: 'Počet vrcholů',
+      metric_watertight: 'Vodotěsnost',
+      metric_bones: 'Kostí kostry',
+      metric_yes: 'ANO',
+      metric_no: 'NE',
+      metric_none: 'Žádný',
+
+      card_quick_actions: 'RYCHLÉ 3D PŘÍKAZY (BLENDER)',
+      qa_inspect_title: 'Inspekce viewportu',
+      qa_inspect_sub: 'Snímek a sběr telemetrie',
+      qa_autorig_title: 'Auto-Rig & Skinning',
+      qa_autorig_sub: 'Kostra + ARMATURE_AUTO',
+      qa_meshdoctor_title: 'Mesh Doctor Audit',
+      qa_meshdoctor_sub: 'Kontrola manifold sítě pro 3D tisk',
+      qa_studio_title: 'Produktové studio',
+      qa_studio_sub: 'Tříbodové AREA světlo + pozadí',
+      qa_shader_title: 'Kartáčovaný kov (Shader)',
+      qa_shader_sub: 'Procedurální Principled BSDF strom',
+      card_console_title: 'TELEMETRICKÁ KONZOLE',
+      btn_clear_console: 'Vymazat',
+
+      modal_rag_title: 'Báze znalostí & RAG dokumenty',
+      modal_rag_desc: 'Dokumenty indexované v lokální sémantické paměti (FAISS). Model vyhledává fakta bez cloudu.',
+      rag_dropzone_text: 'Klikněte nebo přetáhněte dokumenty sem (PDF, TXT, DOCX, MD)',
+      modal_indexed_docs_header: 'Indexované dokumenty:',
+      no_indexed_docs: 'Zatím nejsou indexovány žádné dokumenty.',
+      btn_delete_doc: 'Odstranit',
+      btn_reindex_memory: '🔄 Reindexovat sémantickou paměť',
+
+      modal_settings_title: 'Konfigurace AI asistenta',
+      cfg_language: 'Jazyk rozhraní:',
+      cfg_temp: 'Kreativita / Teplota:',
+      cfg_tokens: 'Maximální počet tokenů:',
+      cfg_sysprompt: 'Systémový prompt:',
+      btn_reset_defaults: 'Obnovit výchozí nastavení',
+      btn_save_settings: 'Uložit nastavení',
+
+      confirm_reset_defaults: 'Opravdu chcete obnovit všechna nastavení rozhraní do výchozího stavu (angličtina, výchozí šířky panelů)?',
+      confirm_clear_session: 'Opravdu chcete vymazat historii zpráv této relace?',
+      confirm_delete_rag_doc: 'Opravdu chcete odebrat "{name}" z indexu RAG?',
+      new_chat_title: 'Nový chat',
+      copy_code: 'Kopírovat',
+      copied_code: 'Zkopírováno!',
+      you: 'Vy',
+      stopped_pill: '⏹ Generování zastaveno',
+      rag_status_files: 'RAG: {docs} souborů ({chunks} úseků)',
+      blender_connected: 'Připojen',
+      blender_offline: 'Offline',
+      config_saved: 'Konfigurace byla úspěšně uložena.',
+      error_save_config: 'Nepodařilo se uložit nastavení',
+      error_saving_config: 'Chyba ukládání konfigurace',
+      log_session_deleted: 'Relace {id} smazána.',
+    }
+  };
+
+  const CHIP_PROMPTS = {
+    en: {
+      chip_inspect: 'Inspect current Blender scene, retrieve object count and viewport capture.',
+      chip_autorig: 'Generate an automatic armature skeleton and skinning for the active mesh in Blender.',
+      chip_meshdoctor: 'Perform a topology audit of the active model, check non-manifold geometry and 3D print readiness.',
+      chip_studio: 'Set up a clean product studio scene in Blender with three-point lighting and backdrop.',
+    },
+    cs: {
+      chip_inspect: 'Prozkoumej aktuální scénu v Blenderu, zjisti počet objektů a pořiď snímek viewportu.',
+      chip_autorig: 'Vygeneruj automatickou kostru armature a skinning pro aktivní mesh v Blenderu.',
+      chip_meshdoctor: 'Proveď topologický audit aktivního modelu, zkontroluj non-manifold geometrii a připravenost pro 3D tisk.',
+      chip_studio: 'Nastav v Blenderu čisté produktové studio s tříbodovým nasvícením a nekonečným pozadím.',
+    }
+  };
+
+  function t(key, params = {}) {
+    const lang = state.language || 'en';
+    let str = (I18N[lang] && I18N[lang][key] !== undefined)
+      ? I18N[lang][key]
+      : ((I18N['en'] && I18N['en'][key] !== undefined) ? I18N['en'][key] : key);
+    Object.keys(params).forEach(p => {
+      str = str.replace(new RegExp(`\\{${p}\\}`, 'g'), params[p]);
+    });
+    return str;
+  }
+
+  function applyTranslations(lang = 'en') {
+    if (lang !== 'en' && lang !== 'cs') lang = 'en';
+    document.documentElement.lang = lang;
+
+    // Elements with data-i18n (textContent)
+    document.querySelectorAll('[data-i18n]').forEach(elem => {
+      const key = elem.dataset.i18n;
+      if (I18N[lang] && I18N[lang][key] !== undefined) {
+        elem.textContent = I18N[lang][key];
+      }
+    });
+
+    // Elements with data-i18n-title (title attribute)
+    document.querySelectorAll('[data-i18n-title]').forEach(elem => {
+      const key = elem.dataset.i18nTitle;
+      if (I18N[lang] && I18N[lang][key] !== undefined) {
+        elem.setAttribute('title', I18N[lang][key]);
+      }
+    });
+
+    // Elements with data-i18n-placeholder (placeholder attribute)
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(elem => {
+      const key = elem.dataset.i18nPlaceholder;
+      if (I18N[lang] && I18N[lang][key] !== undefined) {
+        elem.setAttribute('placeholder', I18N[lang][key]);
+      }
+    });
+
+    // Suggestion chips prompt payloads
+    document.querySelectorAll('.suggestion-chip').forEach(btn => {
+      const chipKey = btn.dataset.chipKey;
+      if (chipKey && CHIP_PROMPTS[lang] && CHIP_PROMPTS[lang][chipKey]) {
+        btn.dataset.prompt = CHIP_PROMPTS[lang][chipKey];
+      }
+    });
+
+    // Select dropdown in settings modal
+    if (el.cfgLanguage) {
+      el.cfgLanguage.value = lang;
+    }
+  }
+
+  function setLanguage(lang) {
+    if (lang !== 'en' && lang !== 'cs') lang = 'en';
+    state.language = lang;
+    try {
+      localStorage.setItem('polygon_language', lang);
+    } catch (e) {}
+    applyTranslations(lang);
+    renderSessionsList();
+    refreshBlenderStatus();
+    refreshSystemStatus();
+    logConsole(lang === 'cs' ? 'Jazyk rozhraní přepnut na češtinu.' : 'Interface language set to English.', 'info');
+  }
+
+  function loadStoredPreferences() {
+    try {
+      // 1. Language preference (default EN)
+      const storedLang = localStorage.getItem('polygon_language') || 'en';
+      state.language = (storedLang === 'cs' || storedLang === 'en') ? storedLang : 'en';
+
+      // 2. Sidebar widths
+      const storedLeft = localStorage.getItem('polygon_left_sidebar_width');
+      if (storedLeft) {
+        state.leftSidebarWidth = storedLeft;
+        document.documentElement.style.setProperty('--left-sidebar-width', storedLeft);
+      }
+      const storedRight = localStorage.getItem('polygon_right_sidebar_width');
+      if (storedRight) {
+        state.rightSidebarWidth = storedRight;
+        document.documentElement.style.setProperty('--right-sidebar-width', storedRight);
+      }
+
+      // 3. Toggles
+      const storedOnline = localStorage.getItem('polygon_online_enabled');
+      if (storedOnline !== null) {
+        state.onlineMode = storedOnline === 'true';
+        if (el.toggleOnline) el.toggleOnline.classList.toggle('active', state.onlineMode);
+      }
+      const storedRag = localStorage.getItem('polygon_rag_enabled');
+      if (storedRag !== null) {
+        state.ragEnabled = storedRag === 'true';
+        if (el.toggleRag) el.toggleRag.classList.toggle('active', state.ragEnabled);
+      }
+      const storedTts = localStorage.getItem('polygon_tts_enabled');
+      if (storedTts !== null) {
+        state.ttsEnabled = storedTts === 'true';
+        if (el.toggleTts) el.toggleTts.classList.toggle('active', state.ttsEnabled);
+      }
+
+      // 4. Selected preset
+      const storedPreset = localStorage.getItem('polygon_selected_preset');
+      if (storedPreset) {
+        state.selectedPreset = storedPreset;
+        if (el.selectPreset) el.selectPreset.value = storedPreset;
+      }
+    } catch (e) {
+      // Ignore localStorage read errors
+    }
+  }
+
+  function initSidebarResizers() {
+    // Left resizer
+    if (el.resizerLeft) {
+      let isDraggingLeft = false;
+
+      const onPointerMoveLeft = (e) => {
+        if (!isDraggingLeft) return;
+        const newWidth = Math.min(Math.max(e.clientX, 200), 500);
+        const widthPx = `${newWidth}px`;
+        document.documentElement.style.setProperty('--left-sidebar-width', widthPx);
+        state.leftSidebarWidth = widthPx;
+      };
+
+      const onPointerUpLeft = () => {
+        if (!isDraggingLeft) return;
+        isDraggingLeft = false;
+        document.body.classList.remove('is-resizing-left');
+        try {
+          localStorage.setItem('polygon_left_sidebar_width', state.leftSidebarWidth);
+        } catch (e) {}
+        window.removeEventListener('pointermove', onPointerMoveLeft);
+        window.removeEventListener('pointerup', onPointerUpLeft);
+        window.removeEventListener('pointercancel', onPointerUpLeft);
+      };
+
+      el.resizerLeft.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        isDraggingLeft = true;
+        document.body.classList.add('is-resizing-left');
+        window.addEventListener('pointermove', onPointerMoveLeft);
+        window.addEventListener('pointerup', onPointerUpLeft);
+        window.addEventListener('pointercancel', onPointerUpLeft);
+      });
+    }
+
+    // Right resizer
+    if (el.resizerRight) {
+      let isDraggingRight = false;
+
+      const onPointerMoveRight = (e) => {
+        if (!isDraggingRight) return;
+        const newWidth = Math.min(Math.max(window.innerWidth - e.clientX, 240), 600);
+        const widthPx = `${newWidth}px`;
+        document.documentElement.style.setProperty('--right-sidebar-width', widthPx);
+        state.rightSidebarWidth = widthPx;
+      };
+
+      const onPointerUpRight = () => {
+        if (!isDraggingRight) return;
+        isDraggingRight = false;
+        document.body.classList.remove('is-resizing-right');
+        try {
+          localStorage.setItem('polygon_right_sidebar_width', state.rightSidebarWidth);
+        } catch (e) {}
+        window.removeEventListener('pointermove', onPointerMoveRight);
+        window.removeEventListener('pointerup', onPointerUpRight);
+        window.removeEventListener('pointercancel', onPointerUpRight);
+      };
+
+      el.resizerRight.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        isDraggingRight = true;
+        document.body.classList.add('is-resizing-right');
+        window.addEventListener('pointermove', onPointerMoveRight);
+        window.addEventListener('pointerup', onPointerUpRight);
+        window.addEventListener('pointercancel', onPointerUpRight);
+      });
+    }
+  }
+
+  function resetToDefaults() {
+    if (!confirm(t('confirm_reset_defaults'))) return;
+    try {
+      localStorage.removeItem('polygon_language');
+      localStorage.removeItem('polygon_left_sidebar_width');
+      localStorage.removeItem('polygon_right_sidebar_width');
+      localStorage.removeItem('polygon_online_enabled');
+      localStorage.removeItem('polygon_rag_enabled');
+      localStorage.removeItem('polygon_tts_enabled');
+      localStorage.removeItem('polygon_selected_preset');
+      localStorage.removeItem('polygon_temperature');
+      localStorage.removeItem('polygon_max_tokens');
+      localStorage.removeItem('polygon_system_prompt');
+
+      state.language = 'en';
+      state.leftSidebarWidth = '280px';
+      state.rightSidebarWidth = '340px';
+      state.onlineMode = true;
+      state.ragEnabled = true;
+      state.ttsEnabled = false;
+      state.selectedPreset = 'Vypnuto (Standardní chat)';
+
+      document.documentElement.style.setProperty('--left-sidebar-width', '280px');
+      document.documentElement.style.setProperty('--right-sidebar-width', '340px');
+
+      if (el.toggleOnline) el.toggleOnline.classList.add('active');
+      if (el.toggleRag) el.toggleRag.classList.add('active');
+      if (el.toggleTts) el.toggleTts.classList.remove('active');
+      if (el.selectPreset) el.selectPreset.value = 'Vypnuto (Standardní chat)';
+
+      if (el.cfgTemp) el.cfgTemp.value = 0.7;
+      if (el.cfgTokens) el.cfgTokens.value = 750;
+      if (el.cfgSysprompt) el.cfgSysprompt.value = '';
+      if (el.cfgLanguage) el.cfgLanguage.value = 'en';
+
+      setLanguage('en');
+      closeSettingsModal();
+      logConsole('Factory reset complete. Defaults restored (EN).', 'info');
+    } catch (err) {
+      logConsole(`Reset error: ${err.message}`, 'error');
+    }
+  }
+
+  // ===========================================================================
+  // HELPER FUNCTIONS: TELEMETRIC LOG
   // ===========================================================================
   const MAX_CONSOLE_LINES = 200;
   function logConsole(message, type = 'info') {
@@ -131,7 +629,7 @@
     line.textContent = `[${time}] ${message}`;
     el.consoleOutput.appendChild(line);
 
-    // Omezení počtu položek v DOMu (FIFO) pro prevenci nekonečného růstu paměti
+    // FIFO DOM limiting
     while (el.consoleOutput.children.length > MAX_CONSOLE_LINES) {
       el.consoleOutput.removeChild(el.consoleOutput.firstElementChild || el.consoleOutput.firstChild);
     }
@@ -140,11 +638,11 @@
   }
 
   // ===========================================================================
-  // MARKDOWN RENDERER (LEHKÝ, BEZPEČNÝ, RYCHLÝ)
+  // MARKDOWN RENDERER (LIGHTWEIGHT, SAFE, FAST)
   // ===========================================================================
   function escapeHtml(str) {
     if (!str) return '';
-    return str
+    return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -155,17 +653,19 @@
   function renderMarkdown(rawText) {
     if (!rawText) return '';
 
-    // Extrakce bloků kódu
+    // Code blocks extraction
     const codeBlocks = [];
     let text = rawText.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
       const idx = codeBlocks.length;
       const cleanLang = lang.trim() || 'code';
       const cleanCode = escapeHtml(code.trim());
+      const copyText = escapeHtml(t('copy_code'));
+      const copiedText = escapeHtml(t('copied_code'));
       codeBlocks.push(
         `<div class="code-block">` +
           `<div class="code-block-header">` +
             `<span class="code-block-lang">${cleanLang}</span>` +
-            `<button class="copy-code-btn" onclick="navigator.clipboard.writeText(this.dataset.code); this.textContent='Zkopírováno!'; setTimeout(() => this.textContent='Kopírovat', 2000);" data-code="${escapeHtml(code.trim())}">Kopírovat</button>` +
+            `<button class="copy-code-btn" onclick="navigator.clipboard.writeText(this.dataset.code); this.textContent='${copiedText}'; setTimeout(() => this.textContent='${copyText}', 2000);" data-code="${escapeHtml(code.trim())}">${copyText}</button>` +
           `</div>` +
           `<pre><code>${cleanCode}</code></pre>` +
         `</div>`
@@ -173,38 +673,37 @@
       return `@@@CODEBLOCK_${idx}@@@`;
     });
 
-    // Základní formátování
+    // Basic formatting
     text = escapeHtml(text);
 
-    // Vizuální hlášky / tool alert bloky
+    // Visual alerts / tool alert boxes
     text = text.replace(/^&gt;\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/gim, (m, alertType, content) => {
       return `<div class="tool-result-box ${alertType.toLowerCase()}"><strong>[${alertType}]</strong> ${content}</div>`;
     });
 
-    // Nadpisy
+    // Headers
     text = text.replace(/^### (.*$)/gim, '<h3>$1</h3>');
     text = text.replace(/^## (.*$)/gim, '<h2>$1</h2>');
     text = text.replace(/^# (.*$)/gim, '<h1>$1</h1>');
 
-    // Tučné & kurzíva
+    // Bold & italic
     text = text.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
     text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
 
-    // Inline kód
+    // Inline code
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-    // Odrážky
+    // Lists
     text = text.replace(/^\s*[-*]\s+(.*)$/gim, '<li>$1</li>');
     text = text.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
-    // Oprava vnořených ul
     text = text.replace(/<\/ul>\s*<ul>/g, '');
 
-    // Blokové citace
+    // Blockquotes
     text = text.replace(/^&gt;\s+(.*)$/gim, '<blockquote>$1</blockquote>');
     text = text.replace(/<\/blockquote>\s*<blockquote>/g, '<br>');
 
-    // Odkazy (striktní validace schémat — povoleno pouze http:// a https://; blokování javascript:, data: atd. nahrazením za #)
+    // Links (strict scheme validation: only http:// and https:// allowed)
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, rawUrl) => {
       const trimmedUrl = rawUrl.trim();
       const isSafe = /^https?:\/\//i.test(trimmedUrl);
@@ -212,12 +711,12 @@
       return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     });
 
-    // Detekce obrázku / náhledu viewportu
+    // Viewport preview snapshot link detection
     text = text.replace(/(\/tmp\/[a-zA-Z0-9_\-]+\.png)/g, (match) => {
       return `<div class="chat-viewport-embed"><img src="/api/blender/viewport-image?t=${Date.now()}" alt="Viewport Screenshot" class="clickable-snapshot" onclick="window.openLightbox(this.src)" /><span class="embed-caption">📸 ${match}</span></div>`;
     });
 
-    // Řádkové zlomy v odstavcích
+    // Paragraph breaks
     text = text.replace(/\n\n+/g, '</p><p>');
     text = `<p>${text}</p>`;
     text = text.replace(/<p><\/p>/g, '');
@@ -226,7 +725,7 @@
     text = text.replace(/<p>(<blockquote>.*?<\/blockquote>)<\/p>/g, '$1');
     text = text.replace(/<p>(<h[1-3]>.*?<\/h[1-3]>)<\/p>/g, '$1');
 
-    // Vrácení kódových bloků
+    // Restore code blocks
     text = text.replace(/@@@CODEBLOCK_(\d+)@@@/g, (match, idx) => {
       return codeBlocks[Number(idx)] || '';
     });
@@ -234,7 +733,7 @@
     return text;
   }
 
-  // Zpřístupnit pro inline handlery
+  // Global handler for lightbox preview
   window.openLightbox = (src) => {
     if (el.imageLightbox && el.lightboxImg) {
       el.lightboxImg.src = src;
@@ -243,12 +742,12 @@
   };
 
   // ===========================================================================
-  // SPRÁVA RELACÍ (SESSIONS)
+  // SESSION MANAGEMENT
   // ===========================================================================
   async function loadSessions(targetSelectId = null) {
     try {
       const res = await fetch('/api/sessions');
-      if (!res.ok) throw new Error('Chyba při načítání relací');
+      if (!res.ok) throw new Error('Error loading sessions');
       const data = await res.json();
       state.sessions = data.sessions || [];
       renderSessionsList();
@@ -261,7 +760,7 @@
         await createNewSession();
       }
     } catch (err) {
-      logConsole(`Chyba načtení relací: ${err.message}`, 'error');
+      logConsole(`Error loading sessions: ${err.message}`, 'error');
     }
   }
 
@@ -275,7 +774,7 @@
     });
 
     if (filtered.length === 0) {
-      el.sessionsContainer.innerHTML = '<div style="padding: 12px 14px; font-size: 12px; color: var(--color-text-muted);">Žádné relace.</div>';
+      el.sessionsContainer.innerHTML = `<div style="padding: 12px 14px; font-size: 12px; color: var(--color-text-muted);">${escapeHtml(t('no_sessions'))}</div>`;
       return;
     }
 
@@ -289,11 +788,11 @@
 
       item.innerHTML = `
         <div class="session-item-content">
-          <div class="session-item-title">${escapeHtml(s.title || 'Nepojmenovaná relace')}</div>
+          <div class="session-item-title">${escapeHtml(s.title || t('unnamed_session'))}</div>
           <div class="session-item-time">${dateStr}</div>
         </div>
         <div class="session-actions">
-          <button class="session-action-btn delete-btn" title="Smazat relaci" data-action="delete">
+          <button class="session-action-btn delete-btn" title="${escapeHtml(t('delete_session_title'))}" data-action="delete">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           </button>
         </div>
@@ -301,7 +800,7 @@
 
       item.addEventListener('click', (e) => {
         if (state.isStreaming) {
-          logConsole('Během probíhajícího generování nelze přepínat ani mazat relace.', 'warn');
+          logConsole('Cannot switch or delete sessions while generation is in progress.', 'warn');
           return;
         }
         if (e.target.closest('[data-action="delete"]')) {
@@ -318,21 +817,22 @@
 
   async function createNewSession() {
     if (state.isStreaming) {
-      logConsole('Nelze vytvořit novou relaci během probíhajícího generování.', 'warn');
+      logConsole('Cannot create a new session while generation is in progress.', 'warn');
       return;
     }
     try {
-      const res = await fetch('/api/sessions?title=Nový%20chat', { method: 'POST' });
-      if (!res.ok) throw new Error('Nepodařilo se vytvořit relaci');
+      const defaultTitle = encodeURIComponent(t('new_chat_title'));
+      const res = await fetch(`/api/sessions?title=${defaultTitle}`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to create session');
       const newSess = await res.json();
       state.sessions.unshift(newSess);
       const sid = newSess.session_id || newSess.id;
       await selectSession(sid);
       renderSessionsList();
-      logConsole(`Vytvořena nová relace: ${sid}`, 'info');
+      logConsole(`Session created: ${sid}`, 'info');
       el.promptInput.focus();
     } catch (err) {
-      logConsole(`Chyba vytvoření relace: ${err.message}`, 'error');
+      logConsole(`Error creating session: ${err.message}`, 'error');
     }
   }
 
@@ -340,11 +840,10 @@
     if (!sessionId) return;
 
     if (state.isStreaming) {
-      logConsole('Nelze přepínat konverzace během probíhajícího generování. Nejprve zastavte generování.', 'warn');
+      logConsole('Cannot switch sessions during generation. Stop generation first.', 'warn');
       return;
     }
 
-    // Zrušit dřívější nedokončený dotaz na relaci
     if (state.selectSessionAbortController) {
       state.selectSessionAbortController.abort();
     }
@@ -353,27 +852,26 @@
 
     state.sessionId = sessionId;
 
-    // Aktualizace aktivní třídy v sidebar
+    // Update active highlight in sidebar
     document.querySelectorAll('.session-item').forEach(node => {
       node.classList.toggle('active', node.dataset.id === sessionId);
     });
 
-    // Načíst zprávy
     try {
       const res = await fetch(`/api/sessions/${sessionId}`, {
         signal: state.selectSessionAbortController.signal,
       });
-      if (!res.ok) throw new Error('Relace nenalezena');
+      if (!res.ok) throw new Error('Session not found');
       const data = await res.json();
 
-      // Ochrana proti Race Condition: ignorovat zpožděné odpovědi starších požadavků
+      // Race condition guard
       if (currentSeq !== state.selectSessionSeq || state.sessionId !== sessionId) {
         return;
       }
       
       const current = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (el.activeSessionTitle) {
-        el.activeSessionTitle.textContent = current ? (current.title || 'Nepojmenovaná relace') : 'Konverzace';
+        el.activeSessionTitle.textContent = current ? (current.title || t('unnamed_session')) : t('new_chat_title');
       }
 
       renderMessages(data.messages || []);
@@ -381,19 +879,19 @@
       if (err.name === 'AbortError') {
         return;
       }
-      logConsole(`Chyba načítání zpráv: ${err.message}`, 'error');
+      logConsole(`Error loading messages: ${err.message}`, 'error');
     }
   }
 
   async function deleteSession(sessionId) {
     if (state.isStreaming) {
-      logConsole('Během probíhajícího generování nelze mazat relace.', 'warn');
+      logConsole('Cannot delete session while generation is active.', 'warn');
       return;
     }
-    if (!confirm('Opravdu chcete smazat tuto relaci?')) return;
+    // Hard delete directly on single click in UI without blocking confirm popup
     try {
       const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Chyba při mazání relace');
+      if (!res.ok) throw new Error('Failed to delete session');
       state.sessions = state.sessions.filter(s => (s.session_id !== sessionId && s.id !== sessionId));
       if (state.sessionId === sessionId) {
         state.sessionId = null;
@@ -405,9 +903,9 @@
         }
       }
       renderSessionsList();
-      logConsole(`Relace ${sessionId} smazána.`, 'warn');
+      logConsole(t('log_session_deleted', { id: sessionId }), 'warn');
     } catch (err) {
-      logConsole(`Chyba při mazání: ${err.message}`, 'error');
+      logConsole(`Delete error: ${err.message}`, 'error');
     }
   }
 
@@ -420,31 +918,31 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: clean }),
       });
-      if (!res.ok) throw new Error('Nepodařilo se přejmenovat');
+      if (!res.ok) throw new Error('Failed to rename');
       const target = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (target) target.title = clean;
       renderSessionsList();
-      logConsole(`Relace přejmenována na: ${clean}`, 'info');
+      logConsole(`Session renamed to: ${clean}`, 'info');
     } catch (err) {
-      logConsole(`Chyba přejmenování: ${err.message}`, 'error');
+      logConsole(`Rename error: ${err.message}`, 'error');
     }
   }
 
   async function clearCurrentSession() {
     if (!state.sessionId) return;
-    if (!confirm('Opravdu chcete vymazat historii zpráv této relace?')) return;
+    if (!confirm(t('confirm_clear_session'))) return;
     try {
       const res = await fetch(`/api/sessions/${state.sessionId}/messages`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Nepodařilo se vymazat zprávy');
+      if (!res.ok) throw new Error('Failed to clear messages');
       renderMessages([]);
-      logConsole(`Historie relace ${state.sessionId} vymazána.`, 'warn');
+      logConsole(`Session messages cleared: ${state.sessionId}`, 'warn');
     } catch (err) {
-      logConsole(`Chyba: ${err.message}`, 'error');
+      logConsole(`Error: ${err.message}`, 'error');
     }
   }
 
   // ===========================================================================
-  // VYKRESLOVÁNÍ ZPRÁV V CHATU
+  // MESSAGE RENDERING IN CHAT VIEWPORT
   // ===========================================================================
   function renderMessages(messages) {
     if (!el.messagesContainer || !el.welcomeHero) return;
@@ -474,12 +972,12 @@
 
     const isUser = role === 'user';
     const avatarLetter = isUser ? 'U' : 'A';
-    const authorName = isUser ? 'Vy' : 'Polygon Beater Core';
+    const authorName = isUser ? t('you') : 'Polygon Beater Core';
 
     card.innerHTML = `
       <div class="message-card-header">
         <div class="message-avatar">${avatarLetter}</div>
-        <span class="message-author">${authorName}</span>
+        <span class="message-author">${escapeHtml(authorName)}</span>
         <span class="message-timestamp">${new Date().toLocaleTimeString()}</span>
       </div>
       <div class="message-tool-status-area" style="display: none;"></div>
@@ -506,13 +1004,12 @@
     const rawPrompt = el.promptInput.value.trim();
     if (!rawPrompt && !state.attachedFile) return;
 
-    // Pokud je prázdný prompt, ale je přiložena příloha, doplníme výchozí text
-    // aby backend (který vyžaduje neprázdné pole prompt) nevrátil chybu 400.
+    // Default prompt when sending attachment with empty input
     const effectivePrompt = (rawPrompt || (state.attachedFile
-      ? 'Zpracuj tento přiložený dokument.'
+      ? t('default_doc_prompt')
       : ''));
 
-    // 1. Zpracování přílohy, pokud je přítomna
+    // Process attachment if present
     if (state.attachedFile) {
       const uploaded = await uploadPendingAttachment();
       if (!uploaded) return;
@@ -522,14 +1019,15 @@
     el.promptInput.value = '';
     el.promptInput.style.height = 'auto';
 
-    // Zajistit platné ID aktivní relace
+    // Ensure valid session exists
     if (!state.sessionId) {
       if (state.sessions && state.sessions.length > 0) {
         const first = state.sessions[0];
         state.sessionId = first.session_id || first.id;
       } else {
         try {
-          const sRes = await fetch('/api/sessions?title=Nov%C3%BD%20chat', { method: 'POST' });
+          const defaultTitle = encodeURIComponent(t('new_chat_title'));
+          const sRes = await fetch(`/api/sessions?title=${defaultTitle}`, { method: 'POST' });
           if (sRes.ok) {
             const sData = await sRes.json();
             state.sessionId = sData.session_id || sData.id;
@@ -542,10 +1040,10 @@
       }
     }
 
-    // Vložení uživatelské zprávy
+    // Append user card
     appendMessageCard('user', promptText, false);
 
-    // Příprava asistenta
+    // Prepare assistant response card
     state.isStreaming = true;
     updateStreamingUi(true);
 
@@ -597,7 +1095,7 @@
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');
-        buffer = lines.pop(); // poslední neúplný chunk zůstává
+        buffer = lines.pop();
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -628,40 +1126,40 @@
               logConsole(data.content, 'info');
               scrollToBottom();
             } else if (data.type === 'methodology') {
-              logConsole(`Detekována metodika: ${data.content}`, 'info');
+              logConsole(`Methodology: ${data.content}`, 'info');
             } else if (data.type === 'done') {
               fullText = data.content || fullText;
               bodyEl.innerHTML = renderMarkdown(fullText);
               scrollToBottom();
             } else if (data.type === 'error') {
               bodyEl.innerHTML += `<div class="error-badge">⚠️ ${escapeHtml(data.content)}</div>`;
-              logConsole(`Chyba: ${data.content}`, 'error');
+              logConsole(`Error: ${data.content}`, 'error');
             }
           } catch (e) {
-            // Parsovací reziduum
+            // parsing error fallback
           }
         }
       }
 
-      // Aktualizace názvu relace, pokud jde o první zprávu
+      // Auto rename session on first prompt
       const current = state.sessions.find(s => (s.session_id === state.sessionId || s.id === state.sessionId));
-      if (current && (current.title === 'Nový chat' || current.title === 'Nepojmenovaná relace')) {
+      if (current && (current.title === 'Nový chat' || current.title === 'New chat' || current.title === t('new_chat_title') || current.title === 'Nepojmenovaná relace' || current.title === t('unnamed_session'))) {
         const autoTitle = promptText.slice(0, 32).trim() + (promptText.length > 32 ? '…' : '');
         renameSession(state.sessionId, autoTitle);
       }
 
-      // Volitelná hlasová syntéza (TTS)
+      // Optional TTS voice playback
       if (state.ttsEnabled && fullText) {
         speakText(fullText);
       }
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        logConsole('Generování bylo přerušeno uživatelem.', 'warn');
-        bodyEl.innerHTML += `<div class="tool-status-pill abort-pill">⏹ Generování zastaveno</div>`;
+        logConsole('Generation interrupted by user.', 'warn');
+        bodyEl.innerHTML += `<div class="tool-status-pill abort-pill">${escapeHtml(t('stopped_pill'))}</div>`;
       } else {
-        logConsole(`Chyba komunikace s backendem: ${err.message}`, 'error');
-        bodyEl.innerHTML += `<div class="error-badge">Chyba spojení: ${escapeHtml(err.message)}</div>`;
+        logConsole(`Backend communication error: ${err.message}`, 'error');
+        bodyEl.innerHTML += `<div class="error-badge">Connection Error: ${escapeHtml(err.message)}</div>`;
       }
     } finally {
       state.isStreaming = false;
@@ -684,7 +1182,7 @@
         body: JSON.stringify({ session_id: sid, sessionId: sid }),
       });
     } catch (e) {
-      // Ignorovat
+      // Ignore
     }
   }
 
@@ -694,7 +1192,7 @@
       el.btnStop.style.display = isStreaming ? 'flex' : 'none';
       el.liveStatusBadge.style.display = isStreaming ? 'inline-flex' : 'none';
       if (isStreaming) {
-        el.liveStatusText.textContent = 'Přemýšlím…';
+        el.liveStatusText.textContent = t('thinking_status');
       }
     }
     if (el.sessionsContainer) {
@@ -708,7 +1206,7 @@
   }
 
   // ===========================================================================
-  // RAG PŘÍLOHY & UPLOAD
+  // RAG ATTACHMENTS & UPLOAD
   // ===========================================================================
   function setAttachedFile(file) {
     state.attachedFile = file;
@@ -727,7 +1225,7 @@
     formData.append('file', state.attachedFile);
 
     try {
-      logConsole(`Nahrávám dokument do RAG: ${state.attachedFile.name}...`, 'info');
+      logConsole(`Uploading document to RAG: ${state.attachedFile.name}...`, 'info');
       const res = await fetch('/api/rag/upload', {
         method: 'POST',
         body: formData,
@@ -738,26 +1236,26 @@
           const data = await res.json();
           detail = data.detail || detail;
         } catch (e) {
-          // Keep the HTTP status text when the error response is not JSON.
+          // Keep status text
         }
         throw new Error(`HTTP ${res.status}: ${detail}`);
       }
       const data = await res.json();
       if (!Number.isInteger(data.chunks_indexed) || data.chunks_indexed < 1) {
-        throw new Error('V souboru nebyl nalezen žádný indexovatelný text.');
+        throw new Error('No indexable text found in file.');
       }
-      logConsole(`Indexace dokončena: ${data.filename} (${data.chunks_indexed} chunků)`, 'info');
+      logConsole(`Indexing complete: ${data.filename} (${data.chunks_indexed} chunks)`, 'info');
       setAttachedFile(null);
       await refreshSystemStatus();
       return true;
     } catch (err) {
-      logConsole(`Chyba indexace přílohy: ${err.message}`, 'error');
+      logConsole(`Attachment indexing error: ${err.message}`, 'error');
       return false;
     }
   }
 
   // ===========================================================================
-  // 3D BLENDER BRIDGE & TELEMETRIE
+  // 3D BLENDER BRIDGE & TELEMETRY
   // ===========================================================================
   async function refreshBlenderStatus() {
     try {
@@ -768,43 +1266,43 @@
 
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = `status-indicator ${data.connected ? 'online' : 'offline'}`;
-        el.blenderStatusText.textContent = `Blender: ${data.connected ? 'Připojen' : 'Offline'}`;
+        el.blenderStatusText.textContent = `Blender: ${data.connected ? t('blender_connected') : t('blender_offline')}`;
       }
 
       if (el.viewportBadge) {
         el.viewportBadge.className = `card-badge ${data.connected ? 'badge-online' : 'badge-offline'}`;
-        el.viewportBadge.textContent = data.connected ? 'Aktivní' : 'Offline';
+        el.viewportBadge.textContent = data.connected ? t('viewport_active') : t('viewport_offline');
       }
     } catch (e) {
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = 'status-indicator offline';
-        el.blenderStatusText.textContent = 'Blender: Offline';
+        el.blenderStatusText.textContent = `Blender: ${t('blender_offline')}`;
       }
     }
   }
 
   async function takeBlenderInspection() {
-    logConsole('Vyžaduji inspekci viewportu a sběr telemetrie...', 'info');
+    logConsole('Requesting viewport inspection and telemetry...', 'info');
     try {
       const res = await fetch('/api/blender/inspect', { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       if (data.status === 'error') {
-        throw new Error(data.detail || data.message || data.error || 'Inspekce Blenderu selhala.');
+        throw new Error(data.detail || data.message || data.error || 'Blender inspection failed.');
       }
       
-      // Aktualizovat obrázek s cache bustem
+      // Update snapshot with cache buster
       if (el.viewportSnapshotImg) {
         el.viewportSnapshotImg.src = `/api/blender/viewport-image?t=${Date.now()}`;
       }
 
-      // Aktualizovat metriky
+      // Update telemetry metrics
       updateTelemetryMetrics(data);
       const metrics = data.scene_metrics || data;
-      const activeName = metrics.active_object?.name || metrics.active_object || 'žádný';
-      logConsole(`Inspekce hotova: ${metrics.total_objects ?? metrics.objects_count ?? 0} objektů, aktivní: ${activeName}`, 'info');
+      const activeName = metrics.active_object?.name || metrics.active_object || t('metric_none');
+      logConsole(`Inspection done: ${metrics.total_objects ?? metrics.objects_count ?? 0} objects, active: ${activeName}`, 'info');
     } catch (err) {
-      logConsole(`Chyba inspekce Blenderu: ${err.message}`, 'error');
+      logConsole(`Blender inspection error: ${err.message}`, 'error');
     }
   }
 
@@ -813,7 +1311,7 @@
     const metrics = data.scene_metrics || data;
     const activeObject = metrics.active_object;
     if (el.valTotalObjects) el.valTotalObjects.textContent = metrics.total_objects ?? metrics.objects_count ?? '-';
-    if (el.valActiveMesh) el.valActiveMesh.textContent = activeObject?.name || activeObject || 'Žádný';
+    if (el.valActiveMesh) el.valActiveMesh.textContent = activeObject?.name || activeObject || t('metric_none');
     const faces = activeObject?.polygons ?? metrics.faces_count;
     const vertices = activeObject?.vertices ?? metrics.vertices_count;
     if (el.valTotalFaces) el.valTotalFaces.textContent = faces != null ? Number(faces).toLocaleString() : '-';
@@ -821,7 +1319,7 @@
     
     if (el.valWatertight) {
       if (data.watertight !== undefined) {
-        el.valWatertight.textContent = data.watertight ? 'ANO' : 'NE';
+        el.valWatertight.textContent = data.watertight ? t('metric_yes') : t('metric_no');
         el.valWatertight.className = `metric-value ${data.watertight ? 'metric-ok' : 'metric-warn'}`;
       } else {
         el.valWatertight.textContent = '-';
@@ -834,7 +1332,7 @@
   }
 
   async function executeQuick3DAction(endpoint, actionName, bodyObj = null) {
-    logConsole(`Spouštím 3D operaci: ${actionName}...`, 'info');
+    logConsole(`Executing 3D operation: ${actionName}...`, 'info');
     try {
       const options = { method: 'POST' };
       if (bodyObj) {
@@ -843,12 +1341,12 @@
       }
       const res = await fetch(endpoint, options);
       const data = await res.json();
-      logConsole(`Výsledek [${actionName}]: ${JSON.stringify(data)}`, 'info');
+      logConsole(`Result [${actionName}]: ${JSON.stringify(data)}`, 'info');
 
-      // Obnovit náhled a metriky po akci
+      // Refresh snapshot and telemetry
       setTimeout(takeBlenderInspection, 500);
     } catch (err) {
-      logConsole(`Chyba při operaci ${actionName}: ${err.message}`, 'error');
+      logConsole(`Error during operation ${actionName}: ${err.message}`, 'error');
     }
   }
 
@@ -873,7 +1371,7 @@
       const docs = data.documents || [];
       
       if (docs.length === 0) {
-        el.modalDocsList.innerHTML = '<div style="color: var(--color-text-muted); font-size: 13px;">Zatím nejsou indexovány žádné dokumenty.</div>';
+        el.modalDocsList.innerHTML = `<div style="color: var(--color-text-muted); font-size: 13px;">${escapeHtml(t('no_indexed_docs'))}</div>`;
         return;
       }
 
@@ -888,7 +1386,7 @@
 
         const removeButton = document.createElement('button');
         removeButton.className = 'doc-delete-btn';
-        removeButton.textContent = 'Odstranit';
+        removeButton.textContent = t('btn_delete_doc');
         removeButton.addEventListener('click', () => window.deleteRagDoc(doc));
 
         item.append(title, removeButton);
@@ -896,42 +1394,45 @@
       });
 
     } catch (err) {
-      logConsole(`Chyba načtení RAG dokumentů: ${err.message}`, 'error');
+      logConsole(`Error loading RAG documents: ${err.message}`, 'error');
     }
   }
 
   window.deleteRagDoc = async (docName) => {
-    if (!confirm(`Opravdu chcete odebrat "${docName}" z indexu RAG?`)) return;
+    if (!confirm(t('confirm_delete_rag_doc', { name: docName }))) return;
     try {
       const res = await fetch(`/api/rag/documents/${encodeURIComponent(docName)}`, { method: 'DELETE' });
       if (res.ok) {
-        logConsole(`Dokument "${docName}" odstraněn.`, 'info');
+        logConsole(`Document "${docName}" removed.`, 'info');
         await loadRagDocuments();
         await refreshSystemStatus();
       }
     } catch (e) {
-      logConsole(`Chyba mazání: ${e.message}`, 'error');
+      logConsole(`Delete error: ${e.message}`, 'error');
     }
   };
 
   async function reindexAllMemory() {
-    logConsole('Spouštím reindexaci sémantické paměti a relací...', 'info');
+    logConsole('Triggering semantic memory & session reindexing...', 'info');
     try {
       const res = await fetch('/api/rag/memory/reindex', { method: 'POST' });
       const data = await res.json();
-      logConsole(`Reindexace hotova: ${JSON.stringify(data.result || data)}`, 'info');
+      logConsole(`Reindexing complete: ${JSON.stringify(data.result || data)}`, 'info');
       await refreshSystemStatus();
     } catch (e) {
-      logConsole(`Chyba reindexace: ${e.message}`, 'error');
+      logConsole(`Reindex error: ${e.message}`, 'error');
     }
   }
 
   // ===========================================================================
-  // NASTAVENÍ MODAL
+  // SETTINGS MODAL & PERSISTENCE
   // ===========================================================================
   async function openSettingsModal() {
     if (!el.modalSettings) return;
     el.modalSettings.style.display = 'flex';
+    if (el.cfgLanguage) {
+      el.cfgLanguage.value = state.language;
+    }
     try {
       const res = await fetch('/api/config');
       const data = await res.json();
@@ -942,7 +1443,7 @@
       if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 750;
       if (el.cfgSysprompt) el.cfgSysprompt.value = llama.system_prompt ?? data.default_system_prompt ?? '';
     } catch (e) {
-      logConsole(`Chyba načítání konfigurace: ${e.message}`, 'error');
+      logConsole(`Error loading config: ${e.message}`, 'error');
     }
   }
 
@@ -952,6 +1453,9 @@
 
   async function saveSettings() {
     try {
+      if (el.cfgLanguage) {
+        setLanguage(el.cfgLanguage.value);
+      }
       const payload = {
         temperature: parseFloat(el.cfgTemp.value) || 0.7,
         max_tokens: parseInt(el.cfgTokens.value, 10) || 750,
@@ -964,16 +1468,16 @@
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error('Nepodařilo se uložit nastavení');
-      logConsole('Konfigurace uložena.', 'info');
+      if (!res.ok) throw new Error(t('error_save_config'));
+      logConsole(t('config_saved'), 'info');
       closeSettingsModal();
     } catch (err) {
-      logConsole(`Chyba ukládání konfigurace: ${err.message}`, 'error');
+      logConsole(`${t('error_saving_config')}: ${err.message}`, 'error');
     }
   }
 
   // ===========================================================================
-  // SYSTÉMOVÝ STAV (STATUS POLL)
+  // SYSTEM STATUS POLL
   // ===========================================================================
   async function refreshSystemStatus() {
     try {
@@ -985,10 +1489,10 @@
       if (el.ragStatusText) {
         const docCount = data.rag?.total_documents ?? 0;
         const chunkCount = data.rag?.total_chunks ?? 0;
-        el.ragStatusText.textContent = `RAG: ${docCount} souborů (${chunkCount} úseků)`;
+        el.ragStatusText.textContent = t('rag_status_files', { docs: docCount, chunks: chunkCount });
       }
 
-      // Presety
+      // Presets
       if (data.analytical_presets && el.selectPreset) {
         const currentVal = el.selectPreset.value;
         const existingValues = Array.from(el.selectPreset.options).map(o => o.value);
@@ -1003,35 +1507,35 @@
         if (currentVal) el.selectPreset.value = currentVal;
       }
     } catch (e) {
-      // Ignorovat
+      // Ignore
     }
   }
 
   // ===========================================================================
-  // HLASOVÉ NAHRÁVÁNÍ (MIC / SPEECH-TO-TEXT) & TTS
+  // VOICE RECORDING (MIC / SPEECH-TO-TEXT) & TTS
   // ===========================================================================
   async function toggleMicrophoneRecording() {
     if (state.isStreaming) {
-      logConsole('Během probíhajícího generování nelze spustit přepis hlasu.', 'warn');
+      logConsole('Cannot record audio while generation is in progress.', 'warn');
       return;
     }
 
     if (state.transcriptionAbortController) {
       state.transcriptionAbortController.abort();
-      logConsole('Přepis hlasové nahrávky byl zrušen.', 'warn');
+      logConsole('Voice transcription cancelled.', 'warn');
       return;
     }
 
     if (state.isRecording) {
-      // Zastavit nahrávání
+      // Stop recording
       if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
         state.mediaRecorder.stop();
       }
       state.isRecording = false;
       el.btnMic.classList.remove('recording');
-      logConsole('Nahrávání zvuku zastaveno.', 'info');
+      logConsole('Voice recording stopped.', 'info');
     } else {
-      // Spustit nahrávání
+      // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         state.audioChunks = [];
@@ -1057,7 +1561,7 @@
             type: state.mediaRecorder.mimeType || 'audio/webm',
           });
           state.audioChunks = [];
-          logConsole(`Zvuk zaznamenán (${Math.round(audioBlob.size / 1024)} kB). Připravuji přepis...`, 'info');
+          logConsole(`Audio recorded (${Math.round(audioBlob.size / 1024)} kB). Transcribing...`, 'info');
           await transcribeRecordedAudio(audioBlob);
         };
 
@@ -1066,23 +1570,23 @@
           state.audioChunks = [];
           state.isRecording = false;
           el.btnMic.classList.remove('recording');
-          logConsole('Nahrávání mikrofonu selhalo.', 'error');
+          logConsole('Microphone recording failed.', 'error');
         };
 
         state.mediaRecorder.start();
         state.isRecording = true;
         el.btnMic.classList.add('recording');
-        logConsole('Hlasový odposlech aktivní (mluvte do mikrofonu)...', 'info');
+        logConsole('Voice input active (speak into microphone)...', 'info');
       } catch (err) {
         state.audioChunks = [];
-        logConsole(`Přístup k mikrofonu odmítnut: ${err.message}`, 'warn');
+        logConsole(`Microphone permission denied: ${err.message}`, 'warn');
       }
     }
   }
 
   async function transcribeRecordedAudio(audioBlob) {
     if (!audioBlob.size) {
-      logConsole('Nahrávka neobsahuje žádná zvuková data.', 'warn');
+      logConsole('Audio recording contains no data.', 'warn');
       return;
     }
 
@@ -1095,7 +1599,7 @@
     const mimeType = audioBlob.type.split(';', 1)[0].toLowerCase();
     const extension = extensionByType[mimeType];
     if (!extension) {
-      logConsole(`Nepodporovaný formát nahrávky: ${audioBlob.type || 'neznámý'}`, 'error');
+      logConsole(`Unsupported recording format: ${audioBlob.type || 'unknown'}`, 'error');
       return;
     }
 
@@ -1116,24 +1620,24 @@
           const data = await response.json();
           detail = data.detail || detail;
         } catch (e) {
-          // Keep the HTTP status text when the error response is not JSON.
+          // Keep status text
         }
         throw new Error(`HTTP ${response.status}: ${detail}`);
       }
       const data = await response.json();
       const transcript = typeof data.text === 'string' ? data.text.trim() : '';
       if (!transcript) {
-        logConsole('V nahrávce nebyla rozpoznána žádná řeč.', 'warn');
+        logConsole('No speech recognized in recording.', 'warn');
         return;
       }
-      logConsole(`Hlasový přepis: "${transcript}"`, 'info');
+      logConsole(`Speech transcribed: "${transcript}"`, 'info');
       el.promptInput.value = transcript;
       await sendMessage();
     } catch (err) {
       if (err.name === 'AbortError') {
-        logConsole('Přepis hlasové nahrávky byl zrušen.', 'warn');
+        logConsole('Voice transcription was cancelled.', 'warn');
       } else {
-        logConsole(`Chyba lokálního přepisu: ${err.message}`, 'error');
+        logConsole(`Transcription error: ${err.message}`, 'error');
       }
     } finally {
       if (state.transcriptionAbortController === controller) {
@@ -1149,13 +1653,13 @@
     const clean = text.replace(/```[\s\S]*?```/g, '').replace(/[#*`_>]/g, '').trim();
     if (!clean) return;
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'cs-CZ';
+    utterance.lang = state.language === 'cs' ? 'cs-CZ' : 'en-US';
     utterance.rate = 1.05;
     window.speechSynthesis.speak(utterance);
   }
 
   // ===========================================================================
-  // EVENT LISTENERS & INICIALIZACE
+  // EVENT LISTENERS & SETUP
   // ===========================================================================
   function setupEventListeners() {
     // Send / Stop
@@ -1188,7 +1692,7 @@
       });
     });
 
-    // Přejmenování relace kliknutím
+    // Rename session on title blur or enter
     if (el.activeSessionTitle) {
       el.activeSessionTitle.addEventListener('blur', () => {
         if (state.sessionId) {
@@ -1203,33 +1707,39 @@
       });
     }
 
-    // Tlačítko nové relace
+    // New conversation button
     if (el.btnNewChat) el.btnNewChat.addEventListener('click', createNewSession);
 
-    // Vyhledávání v relacích
+    // Filter sessions search input
     if (el.sessionSearch) {
       el.sessionSearch.addEventListener('input', (e) => {
         renderSessionsList(e.target.value);
       });
     }
 
-    // Vymazat chat
+    // Clear session chat
     if (el.btnClearChat) el.btnClearChat.addEventListener('click', clearCurrentSession);
 
-    // Výběr metodiky
+    // Preset selector change
     if (el.selectPreset) {
       el.selectPreset.addEventListener('change', (e) => {
         state.selectedPreset = e.target.value;
-        logConsole(`Aktivována metodika: ${state.selectedPreset}`, 'info');
+        try {
+          localStorage.setItem('polygon_selected_preset', state.selectedPreset);
+        } catch (err) {}
+        logConsole(`Methodology: ${state.selectedPreset}`, 'info');
       });
     }
 
-    // Toggles
+    // Toggles with localStorage persistence
     if (el.toggleOnline) {
       el.toggleOnline.addEventListener('click', () => {
         state.onlineMode = !state.onlineMode;
         el.toggleOnline.classList.toggle('active', state.onlineMode);
-        logConsole(`Web Tools: ${state.onlineMode ? 'ZAPNUTO' : 'VYPNUTO'}`, 'info');
+        try {
+          localStorage.setItem('polygon_online_enabled', state.onlineMode ? 'true' : 'false');
+        } catch (err) {}
+        logConsole(`Web Tools: ${state.onlineMode ? 'ON' : 'OFF'}`, 'info');
       });
     }
 
@@ -1237,7 +1747,10 @@
       el.toggleRag.addEventListener('click', () => {
         state.ragEnabled = !state.ragEnabled;
         el.toggleRag.classList.toggle('active', state.ragEnabled);
-        logConsole(`RAG paměť: ${state.ragEnabled ? 'ZAPNUTO' : 'VYPNUTO'}`, 'info');
+        try {
+          localStorage.setItem('polygon_rag_enabled', state.ragEnabled ? 'true' : 'false');
+        } catch (err) {}
+        logConsole(`RAG: ${state.ragEnabled ? 'ON' : 'OFF'}`, 'info');
       });
     }
 
@@ -1245,11 +1758,14 @@
       el.toggleTts.addEventListener('click', () => {
         state.ttsEnabled = !state.ttsEnabled;
         el.toggleTts.classList.toggle('active', state.ttsEnabled);
-        logConsole(`TTS hlasová syntéza: ${state.ttsEnabled ? 'ZAPNUTO' : 'VYPNUTO'}`, 'info');
+        try {
+          localStorage.setItem('polygon_tts_enabled', state.ttsEnabled ? 'true' : 'false');
+        } catch (err) {}
+        logConsole(`TTS Voice: ${state.ttsEnabled ? 'ON' : 'OFF'}`, 'info');
       });
     }
 
-    // Přílohy souborů
+    // File attachments
     if (el.fileInput) {
       el.fileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
@@ -1262,10 +1778,10 @@
       el.btnRemoveAttachment.addEventListener('click', () => setAttachedFile(null));
     }
 
-    // Mikrofon
+    // Microphone toggle
     if (el.btnMic) el.btnMic.addEventListener('click', toggleMicrophoneRecording);
 
-    // 3D Blender tlačítka
+    // 3D Blender actions
     if (el.btnTakeSnapshot) el.btnTakeSnapshot.addEventListener('click', takeBlenderInspection);
     if (el.btnRefreshTelemetry) el.btnRefreshTelemetry.addEventListener('click', () => {
       refreshBlenderStatus();
@@ -1275,8 +1791,8 @@
     if (el.btnQuickInspect) el.btnQuickInspect.addEventListener('click', takeBlenderInspection);
     if (el.btnQuickAutorig) el.btnQuickAutorig.addEventListener('click', () => executeQuick3DAction('/api/blender/auto-rig', 'Auto-Rig & Skinning'));
     if (el.btnQuickMeshdoctor) el.btnQuickMeshdoctor.addEventListener('click', () => executeQuick3DAction('/api/blender/mesh-doctor', 'Mesh Doctor Audit'));
-    if (el.btnQuickStudio) el.btnQuickStudio.addEventListener('click', () => executeQuick3DAction('/api/blender/product-studio', 'Produktové Studio'));
-    if (el.btnQuickShader) el.btnQuickShader.addEventListener('click', () => executeQuick3DAction('/api/blender/procedural-shader', 'Kartáčovaný kov Shader'));
+    if (el.btnQuickStudio) el.btnQuickStudio.addEventListener('click', () => executeQuick3DAction('/api/blender/product-studio', 'Product Studio'));
+    if (el.btnQuickShader) el.btnQuickShader.addEventListener('click', () => executeQuick3DAction('/api/blender/procedural-shader', 'Brushed Metal Shader'));
 
     if (el.btnClearConsole) {
       el.btnClearConsole.addEventListener('click', () => {
@@ -1284,22 +1800,30 @@
       });
     }
 
-    // Viewport image zoom na kliknutí
+    // Viewport image zoom on click
     if (el.viewportSnapshotImg) {
       el.viewportSnapshotImg.addEventListener('click', () => {
         window.openLightbox(el.viewportSnapshotImg.src);
       });
     }
 
-    // Modaly
+    // Modals open/close
     if (el.btnOpenRag) el.btnOpenRag.addEventListener('click', openRagModal);
     if (el.btnCloseRagModal) el.btnCloseRagModal.addEventListener('click', closeRagModal);
     if (el.btnOpenSettings) el.btnOpenSettings.addEventListener('click', openSettingsModal);
     if (el.btnCloseSettingsModal) el.btnCloseSettingsModal.addEventListener('click', closeSettingsModal);
     if (el.btnSaveSettings) el.btnSaveSettings.addEventListener('click', saveSettings);
+    if (el.btnResetDefaults) el.btnResetDefaults.addEventListener('click', resetToDefaults);
     if (el.btnReindexMemory) el.btnReindexMemory.addEventListener('click', reindexAllMemory);
 
-    // Zavření modalů klikem mimo okno
+    // Language switcher in settings
+    if (el.cfgLanguage) {
+      el.cfgLanguage.addEventListener('change', (e) => {
+        setLanguage(e.target.value);
+      });
+    }
+
+    // Close modals when clicking backdrop
     window.addEventListener('click', (e) => {
       if (e.target === el.modalRag) closeRagModal();
       if (e.target === el.modalSettings) closeSettingsModal();
@@ -1312,7 +1836,7 @@
       });
     }
 
-    // Drag & drop pro RAG modal
+    // Drag & drop for RAG modal
     if (el.ragDropzone && el.ragFileInput) {
       el.ragDropzone.addEventListener('click', () => el.ragFileInput.click());
       el.ragDropzone.addEventListener('dragover', (e) => {
@@ -1329,7 +1853,7 @@
           const file = e.dataTransfer.files[0];
           const formData = new FormData();
           formData.append('file', file);
-          logConsole(`Nahrávám "${file.name}" přes drag-and-drop...`, 'info');
+          logConsole(`Uploading "${file.name}" via drag-and-drop...`, 'info');
           const res = await fetch('/api/rag/upload', { method: 'POST', body: formData });
           if (res.ok) {
             await loadRagDocuments();
@@ -1342,7 +1866,7 @@
           const file = e.target.files[0];
           const formData = new FormData();
           formData.append('file', file);
-          logConsole(`Nahrávám "${file.name}"...`, 'info');
+          logConsole(`Uploading "${file.name}"...`, 'info');
           const res = await fetch('/api/rag/upload', { method: 'POST', body: formData });
           if (res.ok) {
             await loadRagDocuments();
@@ -1352,7 +1876,7 @@
       });
     }
 
-    // Globální klávesové zkratky
+    // Global keyboard shortcuts
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
@@ -1367,21 +1891,25 @@
   }
 
   // ===========================================================================
-  // START APLIKACE
+  // APPLICATION INIT
   // ===========================================================================
   async function init() {
-    logConsole('Inicializuji Polygon Beater Web UI klienta...', 'info');
+    loadStoredPreferences();
+    initSidebarResizers();
+    applyTranslations(state.language);
     setupEventListeners();
+
+    logConsole(state.language === 'cs' ? 'Inicializuji Polygon Beater Web UI klienta...' : 'Initializing Polygon Beater Web UI client...', 'info');
     await loadSessions();
     await refreshSystemStatus();
     await refreshBlenderStatus();
 
-    // Pravidelný polling Blenderu každých 8 sekund
+    // Regular Blender polling interval (8s)
     state.blenderPollInterval = setInterval(refreshBlenderStatus, 8000);
-    logConsole('Polygon Beater klient plně připraven k práci.', 'info');
+    logConsole(state.language === 'cs' ? 'Polygon Beater klient plně připraven k práci.' : 'Polygon Beater client ready.', 'info');
   }
 
-  // Spuštění po načtení DOM
+  // Run upon DOM readiness
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

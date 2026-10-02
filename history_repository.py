@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -73,6 +74,18 @@ class HistoryRepository:
         except Exception as exc:
             logger.exception("Chyba při automatické indexaci relace %s do sémantické paměti: %s", session_id, exc)
 
+    def get_session_dir(self, session_id: str) -> Path:
+        """Vrátí dedikovanou složku relace na disku a zajistí její existenci."""
+        if not session_id or Path(session_id).name != session_id or not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+            raise ValueError("Neplatné ID relace.")
+        session_folder = self.sessions_dir / session_id
+        session_folder.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(session_folder, 0o700)
+        except OSError:
+            pass
+        return session_folder
+
     def create_session(self, title: str = "Nový chat") -> SessionSummary:
         with self._lock:
             session_id = f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:8]}"
@@ -84,6 +97,7 @@ class HistoryRepository:
                 "messages": [],
             }
             self._write_session(session_id, session)
+            self.get_session_dir(session_id)
             return self._summary(session)
 
     def list_sessions(self) -> list[SessionSummary]:
@@ -115,7 +129,7 @@ class HistoryRepository:
                 "timestamp": self._now(),
             }
             session["messages"].append(message)
-            if role == "user" and session["title"] == "Nový chat":
+            if role == "user" and session["title"] in ("Nový chat", "New chat"):
                 session["title"] = self._clean_title(content)
             session["updated_at"] = message["timestamp"]
             self._write_session(session_id, session)
@@ -142,20 +156,50 @@ class HistoryRepository:
                     pass
 
     def delete_session(self, session_id: str) -> bool:
+        """Kompletní smazání relace z disku (Hard Delete) včetně její celé složky a historie."""
+        if not session_id or Path(session_id).name != session_id or not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+            return False
         with self._lock:
+            deleted = False
             path = self.sessions_dir / f"{session_id}.json"
+            session_folder = self.sessions_dir / session_id
+
+            # 1. Kompletní smazání celé složky relace z disku
+            if session_folder.exists():
+                try:
+                    if session_folder.is_dir():
+                        shutil.rmtree(session_folder)
+                    else:
+                        session_folder.unlink()
+                    deleted = True
+                    logger.info("Složka relace %s byla kompletně smazána z disku.", session_id)
+                except OSError as err:
+                    logger.warning("Chyba při mazání složky relace %s: %s", session_id, err)
+
+            # 2. Smazání souboru relace (.json)
             if path.is_file():
                 try:
                     path.unlink()
-                    if self.memory_service:
-                        try:
-                            self.memory_service.delete_session(session_id)
-                        except Exception:
-                            pass
-                    return True
+                    deleted = True
                 except OSError:
                     pass
-            return False
+
+            # 3. Smazání případného dočasného souboru (.tmp)
+            tmp = path.with_suffix(".tmp")
+            if tmp.is_file():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+
+            # 4. Odstranění ze sémantické paměti
+            if self.memory_service:
+                try:
+                    self.memory_service.delete_session(session_id)
+                except Exception:
+                    pass
+
+            return deleted
 
     def reindex_all_to_memory(self) -> dict[str, int]:
         """Projde všechny existující relace a zindexuje je do sémantické paměti."""
@@ -170,8 +214,8 @@ class HistoryRepository:
                 try:
                     session = self._read_session(path.stem)
                     if not session.get("messages"):
-                        path.unlink()
-                        removed += 1
+                        if self.delete_session(path.stem):
+                            removed += 1
                 except Exception:
                     continue
         return removed
