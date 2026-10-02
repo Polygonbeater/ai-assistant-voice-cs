@@ -31,7 +31,7 @@
     onlineMode: true,
     ragEnabled: true,
     ttsEnabled: false,
-    selectedPreset: 'Vypnuto (Standardní chat)',
+    selectedPreset: 'standard',
     
     // Blender polling
     blenderConnected: false,
@@ -159,12 +159,17 @@
       chat_tools_count: '22 Tools Active',
       select_preset_label: 'Methodology',
       select_preset_title: 'Select expert analytical framework',
-      preset_standard: '🧠 Standard Assistant',
+      preset_standard: '🧠 Standard Assistant (Off)',
       preset_auto: '⚡ Auto-Select Methodology',
       preset_auteur: '🎬 Auteur & Visual Style',
       preset_first_principles: '📐 First Principles (3D CAD)',
       preset_red_team: '🛡️ Red Team & Counter-Analysis',
+      preset_deep_analysis: '📊 In-Depth Analysis v3.1',
       preset_taleb: '📊 In-Depth Analysis v3.1',
+      preset_assumption_audit: '🔍 Assumption Audit (Standard)',
+      preset_assumption_audit_crisis: '🚨 Assumption Audit (Crisis)',
+      preset_meta_analysis: '📑 Meta-Analysis (Full Template)',
+      card_v_resizer_title: 'Drag to resize panel height',
       toggle_web_tools: 'Web Tools',
       toggle_web_tools_title: 'Enable web search and external tools',
       toggle_rag: 'RAG',
@@ -280,12 +285,17 @@
       chat_tools_count: '22 Nástrojů aktivních',
       select_preset_label: 'Metodika',
       select_preset_title: 'Vyberte expertní analytický rámec',
-      preset_standard: '🧠 Standardní asistent',
+      preset_standard: '🧠 Standardní asistent (Vypnuto)',
       preset_auto: '⚡ Auto (Doporučit)',
-      preset_auteur: '🎬 Auteur & Vizuální analýza',
-      preset_first_principles: '📐 First Principles (Kód & 3D)',
+      preset_auteur: '🎬 Auteur & Vizuální analýza (Mise-en-scène)',
+      preset_first_principles: '📐 First Principles (Kód & 3D dekonstrukce)',
       preset_red_team: '🛡️ Red Team & Oponentura hypotéz',
+      preset_deep_analysis: '📊 Hloubková analýza v3.1',
       preset_taleb: '📊 Hloubková analýza v3.1',
+      preset_assumption_audit: '🔍 Audit předpokladů (Standard)',
+      preset_assumption_audit_crisis: '🚨 Audit předpokladů (Krizový režim)',
+      preset_meta_analysis: '📑 Meta-analýza (Plná šablona)',
+      card_v_resizer_title: 'Tažením změnit výšku panelu',
       toggle_web_tools: 'Web Nástroje',
       toggle_web_tools_title: 'Povolit webové vyhledávání a externí nástroje',
       toggle_rag: 'RAG',
@@ -443,6 +453,11 @@
     if (el.cfgLanguage) {
       el.cfgLanguage.value = lang;
     }
+
+    // Keep active preset select value in sync
+    if (el.selectPreset && state.selectedPreset) {
+      el.selectPreset.value = state.selectedPreset;
+    }
   }
 
   function setLanguage(lang) {
@@ -457,6 +472,45 @@
     refreshSystemStatus();
     logConsole(lang === 'cs' ? 'Jazyk rozhraní přepnut na češtinu.' : 'Interface language set to English.', 'info');
   }
+
+  const LEGACY_PRESET_MAP = {
+    'Vypnuto (Standardní chat)': 'standard',
+    'Standard Assistant (Off)': 'standard',
+    'Standard Assistant': 'standard',
+    'standard': 'standard',
+    'Auto (Doporučit)': 'auto',
+    'Auto-Select Methodology': 'auto',
+    'auto': 'auto',
+    'Auteur & Vizuální analýza (Mise-en-scène)': 'auteur',
+    'Auteur & Vizuální analýza': 'auteur',
+    'Auteur & Visual Style': 'auteur',
+    'auteur': 'auteur',
+    'First Principles (Kód & 3D dekonstrukce)': 'first_principles',
+    'First Principles (Kód & 3D)': 'first_principles',
+    'First Principles (3D CAD)': 'first_principles',
+    'first_principles': 'first_principles',
+    'Red Team & Oponentura hypotéz': 'red_team',
+    'Red Team & Oponentura': 'red_team',
+    'Red Team & Counter-Analysis': 'red_team',
+    'red_team': 'red_team',
+    'Hloubková analýza v3.1': 'deep_analysis',
+    'Hloubková analýza (Taleb/Munger)': 'deep_analysis',
+    'In-Depth Analysis v3.1': 'deep_analysis',
+    'deep_analysis': 'deep_analysis',
+    'Audit předpokladů (Standard)': 'assumption_audit',
+    'Audit předpokladů': 'assumption_audit',
+    'Assumption Audit (Standard)': 'assumption_audit',
+    'Assumption Audit': 'assumption_audit',
+    'assumption_audit': 'assumption_audit',
+    'Audit předpokladů (Krizový režim)': 'assumption_audit_crisis',
+    'Assumption Audit (Crisis)': 'assumption_audit_crisis',
+    'assumption_audit_crisis': 'assumption_audit_crisis',
+    'Meta-analýza (Plná šablona)': 'meta_analysis',
+    'Meta-analýza': 'meta_analysis',
+    'Meta-Analysis (Full Template)': 'meta_analysis',
+    'Meta-Analysis': 'meta_analysis',
+    'meta_analysis': 'meta_analysis',
+  };
 
   function loadStoredPreferences() {
     try {
@@ -493,11 +547,24 @@
         if (el.toggleTts) el.toggleTts.classList.toggle('active', state.ttsEnabled);
       }
 
-      // 4. Selected preset
-      const storedPreset = localStorage.getItem('polygon_selected_preset');
-      if (storedPreset) {
-        state.selectedPreset = storedPreset;
-        if (el.selectPreset) el.selectPreset.value = storedPreset;
+      // 4. Selected preset (canonical ID)
+      const rawStoredPreset = localStorage.getItem('polygon_selected_preset');
+      const canonicalPreset = LEGACY_PRESET_MAP[rawStoredPreset] || rawStoredPreset;
+      state.selectedPreset = canonicalPreset || 'standard';
+      if (el.selectPreset) el.selectPreset.value = state.selectedPreset;
+
+      // 5. Inspector card heights (vertical resizers)
+      const storedHeights = localStorage.getItem('polygon_inspector_card_heights');
+      if (storedHeights) {
+        try {
+          const heights = JSON.parse(storedHeights);
+          Object.keys(heights).forEach(id => {
+            const card = document.getElementById(id);
+            if (card && heights[id]) {
+              card.style.height = heights[id];
+            }
+          });
+        } catch (e) {}
       }
     } catch (e) {
       // Ignore localStorage read errors
@@ -574,12 +641,67 @@
     }
   }
 
+  function initVerticalResizers() {
+    document.querySelectorAll('.card-v-resizer').forEach(resizer => {
+      const targetId = resizer.dataset.target;
+      const targetCard = targetId ? document.getElementById(targetId) : resizer.closest('.inspector-card');
+      if (!targetCard) return;
+
+      let isDragging = false;
+      let startY = 0;
+      let startHeight = 0;
+
+      const onPointerMove = (e) => {
+        if (!isDragging) return;
+        const deltaY = e.clientY - startY;
+        const newHeight = Math.max(70, Math.min(startHeight + deltaY, 900));
+        targetCard.style.height = `${newHeight}px`;
+      };
+
+      const onPointerUp = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        resizer.classList.remove('dragging');
+        document.body.classList.remove('is-resizing-card');
+
+        try {
+          const heights = {};
+          document.querySelectorAll('.inspector-card[id]').forEach(card => {
+            if (card.style.height) {
+              heights[card.id] = card.style.height;
+            }
+          });
+          localStorage.setItem('polygon_inspector_card_heights', JSON.stringify(heights));
+        } catch (e) {}
+
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+      };
+
+      resizer.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        isDragging = true;
+        startY = e.clientY;
+        startHeight = targetCard.getBoundingClientRect().height;
+        resizer.classList.add('dragging');
+        document.body.classList.add('is-resizing-card');
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+      });
+    });
+  }
+
   function resetToDefaults() {
     if (!confirm(t('confirm_reset_defaults'))) return;
     try {
       localStorage.removeItem('polygon_language');
       localStorage.removeItem('polygon_left_sidebar_width');
       localStorage.removeItem('polygon_right_sidebar_width');
+      localStorage.removeItem('polygon_inspector_card_heights');
       localStorage.removeItem('polygon_online_enabled');
       localStorage.removeItem('polygon_rag_enabled');
       localStorage.removeItem('polygon_tts_enabled');
@@ -594,15 +716,18 @@
       state.onlineMode = true;
       state.ragEnabled = true;
       state.ttsEnabled = false;
-      state.selectedPreset = 'Vypnuto (Standardní chat)';
+      state.selectedPreset = 'standard';
 
       document.documentElement.style.setProperty('--left-sidebar-width', '280px');
       document.documentElement.style.setProperty('--right-sidebar-width', '340px');
+      document.querySelectorAll('.inspector-card[id]').forEach(card => {
+        card.style.height = '';
+      });
 
       if (el.toggleOnline) el.toggleOnline.classList.add('active');
       if (el.toggleRag) el.toggleRag.classList.add('active');
       if (el.toggleTts) el.toggleTts.classList.remove('active');
-      if (el.selectPreset) el.selectPreset.value = 'Vypnuto (Standardní chat)';
+      if (el.selectPreset) el.selectPreset.value = 'standard';
 
       if (el.cfgTemp) el.cfgTemp.value = 0.7;
       if (el.cfgTokens) el.cfgTokens.value = 1024;
@@ -798,14 +923,24 @@
         </div>
       `;
 
-      item.addEventListener('click', (e) => {
-        if (state.isStreaming) {
-          logConsole('Cannot switch or delete sessions while generation is in progress.', 'warn');
-          return;
-        }
-        if (e.target.closest('[data-action="delete"]')) {
+      // Direct click handler on delete button to prevent bubbling issues
+      const deleteBtn = item.querySelector('[data-action="delete"]');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
+          e.preventDefault();
+          if (state.isStreaming) {
+            logConsole(state.language === 'cs' ? 'Nelze mazat relaci během generování.' : 'Cannot delete session during generation.', 'warn');
+            return;
+          }
           deleteSession(sid);
+        });
+      }
+
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="delete"]')) return;
+        if (state.isStreaming) {
+          logConsole(state.language === 'cs' ? 'Během generování nelze přepínat relace.' : 'Cannot switch sessions while generation is in progress.', 'warn');
           return;
         }
         selectSession(sid);
@@ -884,28 +1019,42 @@
   }
 
   async function deleteSession(sessionId) {
+    if (!sessionId) return;
     if (state.isStreaming) {
-      logConsole('Cannot delete session while generation is active.', 'warn');
+      logConsole(state.language === 'cs' ? 'Nelze mazat relaci během generování.' : 'Cannot delete session while generation is active.', 'warn');
       return;
     }
-    // Hard delete directly on single click in UI without blocking confirm popup
+
+    // 1. Optimistic UI update: immediately remove from state and re-render sidebar
+    const previousSessions = [...state.sessions];
+    const wasActive = (state.sessionId === sessionId);
+    state.sessions = state.sessions.filter(s => (s.session_id !== sessionId && s.id !== sessionId));
+    renderSessionsList();
+
+    // 2. If the deleted session was currently opened, immediately switch
+    if (wasActive) {
+      state.sessionId = null;
+      if (state.sessions.length > 0) {
+        const nextFirst = state.sessions[0];
+        const nextId = nextFirst.session_id || nextFirst.id;
+        selectSession(nextId);
+      } else {
+        createNewSession();
+      }
+    }
+
+    // 3. Issue background hard-delete call to backend
     try {
       const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete session');
-      state.sessions = state.sessions.filter(s => (s.session_id !== sessionId && s.id !== sessionId));
-      if (state.sessionId === sessionId) {
-        state.sessionId = null;
-        if (state.sessions.length > 0) {
-          const nextFirst = state.sessions[0];
-          await selectSession(nextFirst.session_id || nextFirst.id);
-        } else {
-          await createNewSession();
-        }
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
       }
-      renderSessionsList();
       logConsole(t('log_session_deleted', { id: sessionId }), 'warn');
     } catch (err) {
       logConsole(`Delete error: ${err.message}`, 'error');
+      // Rollback optimistic removal on network error
+      state.sessions = previousSessions;
+      renderSessionsList();
     }
   }
 
@@ -1065,6 +1214,7 @@
         online_mode: Boolean(state.onlineMode),
         tools_enabled: Boolean(state.onlineMode),
         rag_enabled: Boolean(state.ragEnabled),
+        language: state.language || 'en',
       };
 
       const response = await fetch('/api/chat', {
@@ -1492,21 +1642,35 @@
         el.ragStatusText.textContent = t('rag_status_files', { docs: docCount, chunks: chunkCount });
       }
 
-      // Presets
-      if (data.analytical_presets && el.selectPreset) {
+      // Presets catalog & bilingual synchronization
+      if (el.selectPreset) {
         const targetVal = state.selectedPreset || el.selectPreset.value;
-        const existingValues = Array.from(el.selectPreset.options).map(o => o.value);
-        data.analytical_presets.forEach(presetName => {
-          if (!existingValues.includes(presetName)) {
-            const opt = document.createElement('option');
-            opt.value = presetName;
-            opt.textContent = presetName;
-            el.selectPreset.appendChild(opt);
-          }
-        });
-        if (targetVal && Array.from(el.selectPreset.options).some(o => o.value === targetVal)) {
-          el.selectPreset.value = targetVal;
-          state.selectedPreset = targetVal;
+        const currentLang = state.language || 'en';
+
+        if (data.presets_catalog) {
+          const catalogList = Array.isArray(data.presets_catalog)
+            ? data.presets_catalog
+            : Object.values(data.presets_catalog);
+
+          catalogList.forEach(item => {
+            if (!item || !item.id) return;
+            const label = (currentLang === 'cs') ? (item.name_cs || item.name_en) : (item.name_en || item.name_cs);
+            let opt = Array.from(el.selectPreset.options).find(o => o.value === item.id);
+            if (opt) {
+              opt.textContent = label;
+            } else {
+              opt = document.createElement('option');
+              opt.value = item.id;
+              opt.textContent = label;
+              el.selectPreset.appendChild(opt);
+            }
+          });
+        }
+
+        const canonicalTarget = LEGACY_PRESET_MAP[targetVal] || targetVal;
+        if (canonicalTarget && Array.from(el.selectPreset.options).some(o => o.value === canonicalTarget)) {
+          el.selectPreset.value = canonicalTarget;
+          state.selectedPreset = canonicalTarget;
         }
       }
     } catch (e) {
@@ -1899,6 +2063,7 @@
   async function init() {
     loadStoredPreferences();
     initSidebarResizers();
+    initVerticalResizers();
     applyTranslations(state.language);
     setupEventListeners();
 

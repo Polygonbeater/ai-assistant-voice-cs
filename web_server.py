@@ -43,6 +43,7 @@ from llama_module import (
     ANALYTICAL_PRESETS,
     DEFAULT_ANALYTICAL_PRESET,
     DEFAULT_SYSTEM_PROMPT,
+    PRESETS_CATALOG,
     classify_methodology,
     detect_analytical_mode,
     generate_response,
@@ -176,6 +177,7 @@ class ChatRequest(BaseModel):
     sessionId: Optional[str] = None
     prompt: Optional[str] = None
     message: Optional[str] = None
+    language: Optional[str] = "en"
     analytical_preset: Optional[str] = None
     analyticalPreset: Optional[str] = None
     methodology: Optional[str] = None
@@ -230,6 +232,7 @@ def get_system_status():
             "memory_chunks": mem_stats.get("total_chunks", 0),
         },
         "analytical_presets": list(ANALYTICAL_PRESETS.keys()),
+        "presets_catalog": PRESETS_CATALOG,
         "current_preset": config.get("llama", {}).get("analytical_preset", DEFAULT_ANALYTICAL_PRESET),
     }
 
@@ -293,9 +296,7 @@ def delete_session(session_id: str):
     cleanup_session_stop_event(session_id)
     # Kompletní odstranění složky relace a její historie z disku
     success = history_repository.delete_session(session_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Relaci se nepodařilo smazat.")
-    return {"status": "success", "session_id": session_id, "deleted": True}
+    return {"status": "success", "session_id": session_id, "deleted": success}
 
 @app.delete("/api/sessions/{session_id}/messages")
 def clear_session_messages(session_id: str):
@@ -428,6 +429,9 @@ async def chat_stream(req: ChatRequest, request: Request):
     # 7. Dočasné nastavení konfigurace pro request
     req_config = json.loads(json.dumps(config))
     req_config.setdefault("llama", {})
+    req_lang = (req.language or "en").lower().strip()
+    req_config["language"] = req_lang
+    req_config["llama"]["language"] = req_lang
     req_config["llama"]["online_mode"] = online_active
     if preset:
         req_config["llama"]["analytical_preset"] = preset
@@ -446,9 +450,10 @@ async def chat_stream(req: ChatRequest, request: Request):
             event_queue.put({"type": "session_id", "content": session_id})
             preset_now = req_config.get("llama", {}).get("analytical_preset", "")
 
-            if preset_now == "⚡ Auto (Doporučit)":
-                event_queue.put({"type": "status", "content": "● 🧠 Určuji optimální analytickou metodiku…"})
-                detected = classify_methodology(llm, user_prompt)
+            if preset_now in ("⚡ Auto (Doporučit)", "⚡ Auto-Select Methodology", "auto"):
+                auto_status = "● 🧠 Determining optimal analytical methodology…" if req_lang == "en" else "● 🧠 Určuji optimální analytickou metodiku…"
+                event_queue.put({"type": "status", "content": auto_status})
+                detected = classify_methodology(llm, user_prompt, language=req_lang)
                 req_config["llama"]["analytical_preset"] = detected
                 event_queue.put({"type": "methodology", "content": detected})
 

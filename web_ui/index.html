@@ -130,12 +130,15 @@
             <div class="select-wrapper">
               <label for="select-preset" class="sr-only" data-i18n="select_preset_label">Methodology</label>
               <select id="select-preset" class="polygon-select" data-i18n-title="select_preset_title" title="Select expert analytical framework">
-                <option value="Vypnuto (Standardní chat)" data-i18n="preset_standard">🧠 Standard Assistant</option>
-                <option value="⚡ Auto (Doporučit)" data-i18n="preset_auto">⚡ Auto-Select Methodology</option>
-                <option value="🎬 Auteur & Vizuální analýza (Mise-en-scène)" data-i18n="preset_auteur">🎬 Auteur & Visual Style</option>
-                <option value="📐 First Principles (Kód & 3D dekonstrukce)" data-i18n="preset_first_principles">📐 First Principles (3D CAD)</option>
-                <option value="🛡️ Red Team & Oponentura hypotéz" data-i18n="preset_red_team">🛡️ Red Team & Counter-Analysis</option>
-                <option value="Hloubková analýza v3.1" data-i18n="preset_taleb">📊 In-Depth Analysis v3.1</option>
+                <option value="standard" data-i18n="preset_standard">🧠 Standard Assistant (Off)</option>
+                <option value="auto" data-i18n="preset_auto">⚡ Auto-Select Methodology</option>
+                <option value="auteur" data-i18n="preset_auteur">🎬 Auteur & Visual Style</option>
+                <option value="first_principles" data-i18n="preset_first_principles">📐 First Principles (3D CAD)</option>
+                <option value="red_team" data-i18n="preset_red_team">🛡️ Red Team & Counter-Analysis</option>
+                <option value="deep_analysis" data-i18n="preset_deep_analysis">📊 In-Depth Analysis v3.1</option>
+                <option value="assumption_audit" data-i18n="preset_assumption_audit">🔍 Assumption Audit (Standard)</option>
+                <option value="assumption_audit_crisis" data-i18n="preset_assumption_audit_crisis">🚨 Assumption Audit (Crisis)</option>
+                <option value="meta_analysis" data-i18n="preset_meta_analysis">📑 Meta-Analysis (Full Template)</option>
               </select>
             </div>
 
@@ -284,7 +287,7 @@
         <div class="inspector-scroll-area">
           
           <!-- VIEWPORT PREVIEW CARD -->
-          <div class="inspector-card">
+          <div class="inspector-card" id="card-viewport">
             <div class="card-header">
               <span class="card-title" data-i18n="card_viewport_title">LIVE VIEWPORT PREVIEW</span>
               <span class="card-badge" id="viewport-badge" data-i18n="viewport_offline">Offline</span>
@@ -298,10 +301,11 @@
                 </button>
               </div>
             </div>
+            <div class="card-v-resizer" data-target="card-viewport" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
           <!-- SCENE METRICS GRID -->
-          <div class="inspector-card">
+          <div class="inspector-card" id="card-metrics">
             <div class="card-header">
               <span class="card-title" data-i18n="card_metrics_title">3D SCENE METRICS</span>
             </div>
@@ -331,10 +335,11 @@
                 <span class="metric-value" id="val-bones">-</span>
               </div>
             </div>
+            <div class="card-v-resizer" data-target="card-metrics" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
           <!-- QUICK 3D ACTIONS -->
-          <div class="inspector-card">
+          <div class="inspector-card" id="card-actions">
             <div class="card-header">
               <span class="card-title" data-i18n="card_quick_actions">QUICK 3D COMMANDS (BLENDER)</span>
             </div>
@@ -379,10 +384,11 @@
                 </div>
               </button>
             </div>
+            <div class="card-v-resizer" data-target="card-actions" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
           <!-- REALTIME CONSOLE / TELEMETRY LOG -->
-          <div class="inspector-card">
+          <div class="inspector-card" id="card-console">
             <div class="card-header">
               <span class="card-title" data-i18n="card_console_title">TELEMETRIC CONSOLE</span>
               <button class="clear-log-btn" id="btn-clear-console" data-i18n="btn_clear_console">Clear</button>
@@ -391,6 +397,7 @@
               <div class="console-line info">[System] Polygon Beater Web Engine initialized.</div>
               <div class="console-line">[Socket] Waiting for Blender TCP events...</div>
             </div>
+            <div class="card-v-resizer" data-target="card-console" data-i18n-title="card_v_resizer_title" title="Drag to resize height"></div>
           </div>
 
         </div>

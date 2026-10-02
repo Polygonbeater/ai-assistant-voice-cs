@@ -8,20 +8,81 @@ from llama_cpp import Llama
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-ANALYTICAL_PRESETS = {
-    "⚡ Auto (Doporučit)": "AUTO",
-    "🎬 Auteur & Vizuální analýza (Mise-en-scène)": "prompts/frameworks/auteur_visual_analysis.md",
-    "📐 First Principles (Kód & 3D dekonstrukce)": "prompts/frameworks/first_principles_technical.md",
-    "🛡️ Red Team & Oponentura hypotéz": "prompts/frameworks/advanced_assumption_audit.md",
-    "Hloubková analýza v3.1": "prompts/Advanced-Analytical-Prompts-main/Enhanced_Analysis_Prompts_v3.1_CZ.md",
-    "Audit předpokladů (Standard)": "prompts/assumption-audit-main/CZ/Assumption_Audit.md",
-    "Audit předpokladů (Krizový režim)": "prompts/assumption-audit-main/CZ/Assumption_Audit_Crisis.md",
-    "Meta-analýza (Plná šablona)": "prompts/assumption-audit-main/templates/meta_full_CZ.txt",
-    "Vypnuto (Standardní chat)": None,
+PRESETS_CATALOG = {
+    "standard": {
+        "id": "standard",
+        "name_cs": "Vypnuto (Standardní chat)",
+        "name_en": "Standard Assistant (Off)",
+        "path_cs": None,
+        "path_en": None,
+    },
+    "auto": {
+        "id": "auto",
+        "name_cs": "⚡ Auto (Doporučit)",
+        "name_en": "⚡ Auto-Select Methodology",
+        "path_cs": "AUTO",
+        "path_en": "AUTO",
+    },
+    "auteur": {
+        "id": "auteur",
+        "name_cs": "🎬 Auteur & Vizuální analýza (Mise-en-scène)",
+        "name_en": "🎬 Auteur & Visual Analysis (Mise-en-scène)",
+        "path_cs": "prompts/frameworks/auteur_visual_analysis.md",
+        "path_en": "prompts/frameworks/auteur_visual_analysis_en.md",
+    },
+    "first_principles": {
+        "id": "first_principles",
+        "name_cs": "📐 First Principles (Kód & 3D dekonstrukce)",
+        "name_en": "📐 First Principles (Code & 3D Deconstruction)",
+        "path_cs": "prompts/frameworks/first_principles_technical.md",
+        "path_en": "prompts/frameworks/first_principles_technical_en.md",
+    },
+    "red_team": {
+        "id": "red_team",
+        "name_cs": "🛡️ Red Team & Oponentura hypotéz",
+        "name_en": "🛡️ Red Team & Counter-Analysis",
+        "path_cs": "prompts/frameworks/advanced_assumption_audit.md",
+        "path_en": "prompts/frameworks/advanced_assumption_audit_en.md",
+    },
+    "deep_analysis": {
+        "id": "deep_analysis",
+        "name_cs": "Hloubková analýza v3.1",
+        "name_en": "In-Depth Analytical Framework v3.1",
+        "path_cs": "prompts/Advanced-Analytical-Prompts-main/Enhanced_Analysis_Prompts_v3.1_CZ.md",
+        "path_en": "prompts/Advanced-Analytical-Prompts-main/Enhanced_Analysis_Prompts_v3.1_EN.md",
+    },
+    "assumption_audit": {
+        "id": "assumption_audit",
+        "name_cs": "Audit předpokladů (Standard)",
+        "name_en": "Assumption Audit (Standard)",
+        "path_cs": "prompts/assumption-audit-main/CZ/Assumption_Audit.md",
+        "path_en": "prompts/assumption-audit-main/EN/Assumption_Audit.md",
+    },
+    "assumption_audit_crisis": {
+        "id": "assumption_audit_crisis",
+        "name_cs": "Audit předpokladů (Krizový režim)",
+        "name_en": "Assumption Audit (Crisis Mode)",
+        "path_cs": "prompts/assumption-audit-main/CZ/Assumption_Audit_Crisis.md",
+        "path_en": "prompts/assumption-audit-main/EN/Assumption_Audit_Crisis.md",
+    },
+    "meta_analysis": {
+        "id": "meta_analysis",
+        "name_cs": "Meta-analýza (Plná šablona)",
+        "name_en": "Meta-Analysis (Full Template)",
+        "path_cs": "prompts/assumption-audit-main/templates/meta_full_CZ.txt",
+        "path_en": "prompts/assumption-audit-main/templates/meta_full_EN.txt",
+    },
 }
 
-DEFAULT_ANALYTICAL_PRESET = "Vypnuto (Standardní chat)"
-DEFAULT_SYSTEM_PROMPT = (
+ANALYTICAL_PRESETS = {}
+for _k, _v in PRESETS_CATALOG.items():
+    ANALYTICAL_PRESETS[_v["name_cs"]] = _v["path_cs"]
+    ANALYTICAL_PRESETS[_v["name_en"]] = _v["path_en"]
+    ANALYTICAL_PRESETS[_k] = _v["path_cs"]
+
+DEFAULT_ANALYTICAL_PRESET = "standard"
+
+DEFAULT_SYSTEM_PROMPT_CS = (
     "Jsi užitečná a zdvořilá AI asistentka s expertními schopnostmi v 3D grafice a CAD modelování. "
     "Odpovídej stručně a k věci v češtině.\n"
     "KOGNITIVNÍ PARAMETRIZACE (VISION AI):\n"
@@ -29,6 +90,17 @@ DEFAULT_SYSTEM_PROMPT = (
     "vizuálně obrázek zanalyzuj, odhadni poměry a reálné rozměry v mm, a následně rovnou zavolej náš existující nástroj "
     "generate_parametric_model s těmito odhadnutými parametry."
 )
+
+DEFAULT_SYSTEM_PROMPT_EN = (
+    "You are a helpful and courteous AI assistant with expert capabilities in 3D computer graphics and CAD modeling. "
+    "Answer concisely and to the point in English.\n"
+    "COGNITIVE PARAMETERIZATION (VISION AI):\n"
+    "If the user provides a photo of a mechanical part (such as an enclosure, bracket, or gear) with a request to model it, "
+    "visually analyze the image, estimate proportions and real-world dimensions in millimeters, and directly call the "
+    "generate_parametric_model tool with these estimated parameters."
+)
+
+DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_EN
 
 
 ANALYSIS_MODE_PATTERNS = {
@@ -74,12 +146,13 @@ def detect_analytical_mode(
     prompt: str,
     llm: Llama | None = None,
     allow_llm_classifier: bool = False,
+    language: str = "en",
 ) -> str | None:
     """
     Automaticky rozpozná, zda uživatel v dotazu požaduje hluboký analytický režim:
-    - 🎬 Auteur & Vizuální analýza (Mise-en-scène)
-    - 📐 First Principles (Kód & 3D dekonstrukce)
-    - 🛡️ Red Team & Oponentura hypotéz
+    - 🎬 Auteur & Vizuální analýza (Mise-en-scène) / Auteur & Visual Analysis
+    - 📐 First Principles (Kód & 3D dekonstrukce) / First Principles (Code & 3D)
+    - 🛡️ Red Team & Oponentura hypotéz / Red Team & Counter-Analysis
 
     1. Fáze: Rychlá pravidlová detekce klíčových frází (0 ms latence).
     2. Fáze: Pokud je povoleno a pravidla nenašla shodu (např. v režimu Auto), blesková LLM klasifikace.
@@ -88,20 +161,29 @@ def detect_analytical_mode(
     if not clean_p:
         return None
 
+    res_key = None
     # 1. Pravidlová detekce podle regexů
     for mode, regexes in ANALYSIS_MODE_PATTERNS.items():
         for pattern in regexes:
             if re.search(pattern, clean_p, re.IGNORECASE):
                 logging.info("Analytický router: Pravidlová detekce -> %s", mode)
-                return mode
+                if "Auteur" in mode:
+                    res_key = "auteur"
+                elif "First Principles" in mode:
+                    res_key = "first_principles"
+                elif "Red Team" in mode:
+                    res_key = "red_team"
+                break
+        if res_key:
+            break
 
     # 2. Blesková klasifikace modelem (pokud je explicitně vyžádána v režimu Auto)
-    if allow_llm_classifier and llm is not None:
+    if not res_key and allow_llm_classifier and llm is not None:
         try:
             resp = llm.create_chat_completion(
                 messages=[
                     {"role": "system", "content": ANALYTICAL_ROUTER_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Dotaz: {prompt[:300]}\nFramework:"}
+                    {"role": "user", "content": f"Query: {prompt[:300]}\nFramework:"}
                 ],
                 max_tokens=6,
                 temperature=0.0,
@@ -110,41 +192,98 @@ def detect_analytical_mode(
             decision = resp["choices"][0]["message"].get("content", "").strip().upper()
             logging.info("Analytický router LLM vyhodnocení: '%s'", decision)
             if "AUTEUR" in decision:
-                return "🎬 Auteur & Vizuální analýza (Mise-en-scène)"
-            if "FIRST_PRINCIPLES" in decision:
-                return "📐 First Principles (Kód & 3D dekonstrukce)"
-            if "RED_TEAM" in decision:
-                return "🛡️ Red Team & Oponentura hypotéz"
+                res_key = "auteur"
+            elif "FIRST_PRINCIPLES" in decision:
+                res_key = "first_principles"
+            elif "RED_TEAM" in decision:
+                res_key = "red_team"
         except Exception as exc:
             logging.warning("Analytický router LLM selhal: %s", exc)
 
+    if res_key:
+        item = PRESETS_CATALOG.get(res_key)
+        if item:
+            return item["name_en"] if language == "en" else item["name_cs"]
+
     return None
+
+def classify_methodology(llm_or_text=None, text_or_llm=None, *, language: str = "en") -> str:
+    """Rychlá klasifikace metodiky pro volbu analytického frameworku."""
+    if isinstance(llm_or_text, str):
+        prompt = llm_or_text
+        llm = text_or_llm
+    else:
+        llm = llm_or_text
+        prompt = text_or_llm if isinstance(text_or_llm, str) else ""
+
+    detected = detect_analytical_mode(prompt, llm=llm, allow_llm_classifier=True, language=language)
+    if detected:
+        return detected
+
+    item = PRESETS_CATALOG.get("standard", {})
+    return item.get("name_en" if language == "en" else "name_cs", "Standard Assistant (Off)")
 
 
 def load_analytical_prompt(
     preset_name: str,
     *,
+    language: str = "en",
     project_root: str | Path | None = None,
 ) -> str | None:
-    """Bezpečně načte zvolenou metodiku, nebo vrátí None pro standardní chat."""
-    if preset_name in ("⚡ Auto (Doporučit)", "Vypnuto (Standardní chat)"):
-        return None
-    if preset_name not in ANALYTICAL_PRESETS:
-        raise ValueError(f"Neznámá analytická metodika: {preset_name!r}")
-
-    rel_path = ANALYTICAL_PRESETS[preset_name]
-    if not rel_path or rel_path == "AUTO":
+    """Bezpečně načte zvolenou metodiku v požadovaném jazyce (en/cs), nebo vrátí None pro standardní chat."""
+    if not preset_name:
         return None
 
-    root = Path(project_root) if project_root else Path(__file__).resolve().parent
-    prompt_path = (root / rel_path).resolve()
+    clean = str(preset_name).strip()
+    if clean in ("⚡ Auto (Doporučit)", "⚡ Auto-Select Methodology", "auto", "Vypnuto (Standardní chat)", "Standard Assistant (Off)", "standard", "none", "null"):
+        return None
 
-    try:
-        return prompt_path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"Soubor analytické metodiky nebyl nalezen: {prompt_path}") from exc
-    except OSError as exc:
-        raise OSError(f"Analytickou metodiku nelze načíst: {prompt_path}") from exc
+    target_lang = (language or "en").lower().strip()
+
+    # Hledání v PRESETS_CATALOG
+    for item in PRESETS_CATALOG.values():
+        if clean in (item["id"], item["name_cs"], item["name_en"]):
+            if item["id"] in ("standard", "auto") or item["path_cs"] is None:
+                return None
+
+            # Pokud byl vybrán explicitně anglický název, preferujeme EN
+            if clean == item["name_en"]:
+                use_lang = "en"
+            elif clean == item["name_cs"]:
+                use_lang = "cs" if target_lang != "en" else "en"
+            else:
+                use_lang = target_lang
+
+            rel_path = item["path_en"] if use_lang == "en" else item["path_cs"]
+            if not rel_path and use_lang == "en":
+                rel_path = item["path_cs"]
+
+            if not rel_path or rel_path == "AUTO":
+                return None
+
+            root = Path(project_root) if project_root else Path(__file__).resolve().parent
+            prompt_path = (root / rel_path).resolve()
+            if not prompt_path.is_file() and use_lang == "en" and item["path_cs"]:
+                prompt_path = (root / item["path_cs"]).resolve()
+
+            try:
+                return prompt_path.read_text(encoding="utf-8")
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(f"Soubor analytické metodiky nebyl nalezen: {prompt_path}") from exc
+            except OSError as exc:
+                raise OSError(f"Analytickou metodiku nelze načíst: {prompt_path}") from exc
+
+    # Zpětná kompatibilita pro přímé zadání z ANALYTICAL_PRESETS
+    if clean in ANALYTICAL_PRESETS:
+        rel_path = ANALYTICAL_PRESETS[clean]
+        if not rel_path or rel_path == "AUTO":
+            return None
+        root = Path(project_root) if project_root else Path(__file__).resolve().parent
+        prompt_path = (root / rel_path).resolve()
+        if prompt_path.is_file():
+            return prompt_path.read_text(encoding="utf-8")
+
+    return None
 
 
 def get_physical_cpu_cores() -> int:
@@ -285,34 +424,6 @@ def _try_evaluate_math(prompt: str) -> str | None:
     return None
 
 
-def classify_methodology(llm, user_text: str) -> str:
-    """Rychlá mikro-klasifikace dotazu pro volbu metodiky přes Chat API."""
-    messages = [
-        {"role": "system", "content": "Jsi klasifikátor dotazů. Odpovídej výhradně jedním ze zadaných názvů."},
-        {"role": "user", "content": (
-            "Vyber nejvhodnější metodiku pro následující dotaz uživatele:\n"
-            "- Hloubková analýza v3.1\n"
-            "- Audit předpokladů (Standard)\n"
-            "- Audit předpokladů (Krizový režim)\n"
-            "- Vypnuto (Standardní chat)\n\n"
-            f"Dotaz: {user_text[:250]}\n"
-            "Odpověz POUZE přesným názvem možnosti."
-        )}
-    ]
-    try:
-        res = llm.create_chat_completion(messages=messages, max_tokens=15, temperature=0.1)
-        out = res["choices"][0]["message"].get("content", "").strip()
-        for candidate in [
-            "Audit předpokladů (Krizový režim)",
-            "Audit předpokladů (Standard)",
-            "Hloubková analýza v3.1",
-            "Vypnuto (Standardní chat)"
-        ]:
-            if candidate.lower() in out.lower():
-                return candidate
-    except Exception as exc:
-        logging.warning("Klasifikace metodiky selhala: %s", exc)
-    return "Vypnuto (Standardní chat)"
 
 
 CZECH_ABBREVIATIONS = {
@@ -4658,33 +4769,38 @@ def generate_response(
 
     # 1. Zpracování analytické metodiky
     llama_config = config.get("llama", {})
-    system_prompt = llama_config.get("system_prompt", DEFAULT_SYSTEM_PROMPT).strip()
+    req_lang = (llama_config.get("language") or config.get("language") or "en").lower().strip()
+    fallback_sys = DEFAULT_SYSTEM_PROMPT_EN if req_lang == "en" else DEFAULT_SYSTEM_PROMPT_CS
+    configured_sys = llama_config.get("system_prompt")
+    system_prompt = (configured_sys if configured_sys and configured_sys != DEFAULT_SYSTEM_PROMPT_CS and configured_sys != DEFAULT_SYSTEM_PROMPT_EN else fallback_sys).strip()
     preset_name = llama_config.get("analytical_preset", DEFAULT_ANALYTICAL_PRESET)
 
     analytical_prompt = None
-    if preset_name and preset_name not in ("⚡ Auto (Doporučit)", "Vypnuto (Standardní chat)"):
+    if preset_name and preset_name not in ("⚡ Auto (Doporučit)", "⚡ Auto-Select Methodology", "auto", "Vypnuto (Standardní chat)", "Standard Assistant (Off)", "standard", "none", "null"):
         try:
-            analytical_prompt = load_analytical_prompt(preset_name)
+            analytical_prompt = load_analytical_prompt(preset_name, language=req_lang)
         except Exception as exc:
             logging.error("Analytickou metodiku se nepodařilo použít: %s", exc)
             analytical_prompt = None
 
-    auto_requested = (preset_name == "⚡ Auto (Doporučit)")
+    auto_requested = (preset_name in ("⚡ Auto (Doporučit)", "⚡ Auto-Select Methodology", "auto"))
     detected_mode = detect_analytical_mode(
         prompt,
         llm=llm,
         allow_llm_classifier=auto_requested,
+        language=req_lang,
     )
-    if detected_mode and (auto_requested or not analytical_prompt or preset_name == "Vypnuto (Standardní chat)"):
+    if detected_mode and (auto_requested or not analytical_prompt or preset_name in ("Vypnuto (Standardní chat)", "Standard Assistant (Off)", "standard")):
         try:
-            detected_prompt = load_analytical_prompt(detected_mode)
+            detected_prompt = load_analytical_prompt(detected_mode, language=req_lang)
             if detected_prompt:
                 analytical_prompt = detected_prompt
                 preset_name = detected_mode
                 mode_clean = detected_mode.split("(")[0].strip()
                 logging.info("Dynamicky aktivována analytická metodika: %s", detected_mode)
                 if status_callback:
-                    status_callback(f"● Aktivována metodika: {mode_clean}…")
+                    msg = f"● Methodology activated: {mode_clean}…" if req_lang == "en" else f"● Aktivována metodika: {mode_clean}…"
+                    status_callback(msg)
         except Exception as exc:
             logging.error("Chyba při načítání detekované analytické metodiky: %s", exc)
 
@@ -4694,14 +4810,24 @@ def generate_response(
     # Dynamické vložení systémového času a data
     from datetime import datetime
     now = datetime.now()
-    dny = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
-    den_nazev = dny[now.weekday()]
-    cas_info = (
-        f"\n\n[AKTUÁLNÍ SYSTÉMOVÝ ČAS A DATUM: {den_nazev} {now.day}. {now.month}. {now.year}, {now.strftime('%H:%M')}]\n"
-        "PRAVIDLA PRO ČAS A ZPRAVODAJSTVÍ:\n"
-        "- Výše uvedený čas je tvůj přesný reálný čas. Podle něj určuj, co je ráno, odpoledne, dnes či včera.\n"
-        "- Z webových článků NIKDY nekopíruj zastaralé relativní údaje jako 'před hodinou'. Uváděj přesný čas.\n"
-    )
+    if req_lang == "cs":
+        dny = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"]
+        den_nazev = dny[now.weekday()]
+        cas_info = (
+            f"\n\n[AKTUÁLNÍ SYSTÉMOVÝ ČAS A DATUM: {den_nazev} {now.day}. {now.month}. {now.year}, {now.strftime('%H:%M')}]\n"
+            "PRAVIDLA PRO ČAS A ZPRAVODAJSTVÍ:\n"
+            "- Výše uvedený čas je tvůj přesný reálný čas. Podle něj určuj, co je ráno, odpoledne, dnes či včera.\n"
+            "- Z webových článků NIKDY nekopíruj zastaralé relativní údaje jako 'před hodinou'. Uváděj přesný čas.\n"
+        )
+    else:
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        day_name = days[now.weekday()]
+        cas_info = (
+            f"\n\n[CURRENT SYSTEM TIME & DATE: {day_name} {now.strftime('%B %d, %Y, %H:%M')}]\n"
+            "RULES FOR TIME AND REAL-TIME UPDATES:\n"
+            "- The timestamp above is your exact real-world time. Use it to determine morning, afternoon, today, or yesterday.\n"
+            "- Never copy stale relative terms like 'an hour ago' from articles. Provide precise timestamps when relevant.\n"
+        )
     system_prompt = f"{system_prompt}{cas_info}"
 
     # Injektování definic nástrojů, pokud jsou nástroje povoleny

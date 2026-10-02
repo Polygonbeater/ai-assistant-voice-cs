@@ -288,6 +288,12 @@ body.is-resizing-right * {
   user-select: none !important;
 }
 
+body.is-resizing-card,
+body.is-resizing-card * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
 /* ------------------------------------------------------------------------------
    LEFT SIDEBAR: SESSIONS & TOOLS
    ------------------------------------------------------------------------------ */
@@ -416,6 +422,26 @@ body.is-resizing-right * {
   border-left: 3px solid var(--cyan-primary);
 }
 
+.session-item-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.session-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.session-item-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .session-name-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -427,8 +453,11 @@ body.is-resizing-right * {
   display: none;
   align-items: center;
   gap: 4px;
+  margin-left: 6px;
+  flex-shrink: 0;
 }
-.session-item:hover .session-actions {
+.session-item:hover .session-actions,
+.session-item.active .session-actions {
   display: flex;
 }
 .session-action-btn {
@@ -436,12 +465,23 @@ body.is-resizing-right * {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 4px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  z-index: 2;
 }
 .session-action-btn:hover {
   color: var(--rose-accent);
-  background: rgba(248, 113, 113, 0.1);
+  background: rgba(248, 113, 113, 0.15);
+}
+.session-action-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  pointer-events: none;
 }
 
 .sidebar-footer {
@@ -1076,6 +1116,7 @@ pre {
 }
 
 .inspector-card {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -1083,6 +1124,62 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 90px;
+  box-sizing: border-box;
+}
+
+.inspector-card[style*="height"] {
+  flex-shrink: 0;
+}
+.inspector-card[style*="height"] #console-output,
+.inspector-card[style*="height"] .console-box {
+  flex: 1;
+  height: auto;
+  min-height: 60px;
+}
+.inspector-card[style*="height"] .quick-actions-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.inspector-card[style*="height"] .viewport-image-box {
+  flex: 1;
+  min-height: 90px;
+  aspect-ratio: auto;
+}
+
+.card-v-resizer {
+  height: 10px;
+  cursor: row-resize;
+  margin: 6px -12px -12px -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+  transition: background-color 0.15s ease;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  z-index: 5;
+}
+
+.card-v-resizer:hover,
+.card-v-resizer.dragging {
+  background-color: rgba(56, 189, 248, 0.25);
+}
+
+.card-v-resizer::after {
+  content: '';
+  width: 36px;
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.card-v-resizer:hover::after,
+.card-v-resizer.dragging::after {
+  background: var(--cyan-primary);
 }
 
 .card-header {
