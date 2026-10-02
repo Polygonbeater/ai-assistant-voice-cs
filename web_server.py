@@ -520,6 +520,8 @@ async def chat_stream(req: ChatRequest, request: Request):
     async def event_generator():
         done_sent = False
         full_reply_text = ""
+        last_event_time = time.monotonic()
+        heartbeat_interval = 15.0  # Periodický ping každých 15 sekund, dokud model nebo nástroj počítá
         try:
             while True:
                 # Detekce odpojení klienta (zavření okna prohlížeče / přerušení spojení)
@@ -533,9 +535,15 @@ async def chat_stream(req: ChatRequest, request: Request):
                 except queue.Empty:
                     if not thread.is_alive() and event_queue.empty():
                         break
-                    await asyncio.sleep(0.015)
+                    # Odeslat heartbeat ping při nečinnosti fronty každých 15 sekund
+                    now = time.monotonic()
+                    if now - last_event_time >= heartbeat_interval:
+                        last_event_time = now
+                        yield f"data: {json.dumps({'type': 'ping'}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.02)
                     continue
 
+                last_event_time = time.monotonic()
                 msg_type = item.get("type")
                 if msg_type == "finish":
                     break

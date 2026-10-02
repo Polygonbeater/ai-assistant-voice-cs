@@ -1443,24 +1443,39 @@
 
     let fullText = '';
     let reader = null;
-    let timeoutId = null;
+    let inactivityTimerId = null;
+    let hardLimitTimerId = null;
     state.abortController = new AbortController();
 
-    // Univerzální watchdog timeout (120s nečinnosti)
+    // 1. Inactivity timeout (90s od posledního přijatého bytu/zprávy/pingu)
+    const INACTIVITY_TIMEOUT_MS = 90000;
     const resetWatchdog = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
+      if (inactivityTimerId) clearTimeout(inactivityTimerId);
+      inactivityTimerId = setTimeout(() => {
         if (state.isStreaming) {
-          logConsole('Streaming watchdog timeout triggered. Forcing UI reset.', 'warn');
+          logConsole('Streaming inactivity timeout (90s without bytes/ping). Forcing UI reset.', 'warn');
           if (state.abortController) {
             try {
               state.abortController.abort();
             } catch (e) {}
           }
         }
-      }, 120000);
+      }, INACTIVITY_TIMEOUT_MS);
     };
     resetWatchdog();
+
+    // 2. Celkový hard-limit pro web search a těžké CPU úlohy (300 s)
+    const TOTAL_HARD_LIMIT_MS = 300000;
+    hardLimitTimerId = setTimeout(() => {
+      if (state.isStreaming) {
+        logConsole('Streaming maximum hard-limit reached (300s). Forcing UI reset.', 'warn');
+        if (state.abortController) {
+          try {
+            state.abortController.abort();
+          } catch (e) {}
+        }
+      }
+    }, TOTAL_HARD_LIMIT_MS);
 
     try {
       const payload = {
@@ -1529,6 +1544,12 @@
           try {
             data = JSON.parse(payloadStr);
           } catch (e) {
+            continue;
+          }
+
+          if (data.type === 'ping') {
+            // Heartbeat z backendu indikující aktivní výpočet modelu nebo nástroje
+            resetWatchdog();
             continue;
           }
 
@@ -1642,9 +1663,13 @@
         bodyEl.innerHTML += `<div class="error-badge"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>Connection Error: ${escapeHtml(err.message)}</span></div>`;
       }
     } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
+      if (inactivityTimerId) {
+        clearTimeout(inactivityTimerId);
+        inactivityTimerId = null;
+      }
+      if (hardLimitTimerId) {
+        clearTimeout(hardLimitTimerId);
+        hardLimitTimerId = null;
       }
       if (reader) {
         try {

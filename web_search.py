@@ -384,7 +384,8 @@ async def _fetch_and_clean_article_async(
 async def search_multi_source_async(
     queries: list[str],
     max_sources: int = 3,
-    max_total_chars: int = 3600
+    max_total_chars: int = 3600,
+    max_chars_per_source: int = 1200
 ) -> tuple[str, list[dict]]:
     """
     Kompletní asynchronní Multi-Source vyhledávací pipeline:
@@ -471,9 +472,10 @@ async def search_multi_source_async(
         return "Nepodařilo se stáhnout ani extrahovat obsah z nalezených zdrojů.", []
 
     # 4. Dynamické přizpůsobení délky obsahu (budgeting) proti přetečení kontextu LLM
+    valid_sources = valid_sources[:max_sources]
     n_sources = len(valid_sources)
-    # Rezerva na zdroj (obvykle 1000 - 1300 znaků)
-    per_source_max = max(700, max_total_chars // n_sources)
+    # Přísný limit: max 1 200 znaků na zdroj a celkem nejvýše max_total_chars (3600 znaků)
+    per_source_max = min(max_chars_per_source, max(500, max_total_chars // max(1, n_sources))) if n_sources else max_chars_per_source
 
     formatted_docs = []
     for idx, src in enumerate(valid_sources, start=1):
@@ -514,7 +516,8 @@ async def search_multi_source_async(
 def search_web_multi_source(
     queries: list[str] | str,
     max_sources: int = 3,
-    max_total_chars: int = 3600
+    max_total_chars: int = 3600,
+    max_chars_per_source: int = 1200
 ) -> str:
     """
     Synchronní fasáda pro bezpečné a rychlé volání asynchronního Multi-Source RAG z libovolného vlákna.
@@ -535,16 +538,16 @@ def search_web_multi_source(
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             context, _ = pool.submit(
                 asyncio.run,
-                search_multi_source_async(query_list, max_sources, max_total_chars)
+                search_multi_source_async(query_list, max_sources, max_total_chars, max_chars_per_source)
             ).result()
             return context
     else:
         context, _ = asyncio.run(
-            search_multi_source_async(query_list, max_sources, max_total_chars)
+            search_multi_source_async(query_list, max_sources, max_total_chars, max_chars_per_source)
         )
         return context
 
 
 def search_web_context(query: str, *, max_articles: int = 3, timeout: float = 10.0) -> str:
     """Zpětně kompatibilní rozhraní pro vyhledávání."""
-    return search_web_multi_source([query], max_sources=max_articles)
+    return search_web_multi_source([query], max_sources=max_articles, max_total_chars=3600, max_chars_per_source=1200)

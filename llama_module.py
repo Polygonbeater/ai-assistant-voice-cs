@@ -2242,7 +2242,7 @@ class UnifiedToolDispatcher:
 
         from web_search import search_web_multi_source
         try:
-            context = search_web_multi_source(query, max_sources=3)
+            context = search_web_multi_source(query, max_sources=3, max_total_chars=3600, max_chars_per_source=1200)
             return {
                 "status": "success",
                 "tool": "search_web",
