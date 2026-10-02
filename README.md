@@ -185,6 +185,60 @@ These frameworks function as an internal cognitive toolkit for the local LLM. Ra
 
 ---
 
+## 🖥️ Section 5: Modern Developer IDE & Context-Aware Workspace
+
+The web interface has been engineered to match the ergonomics of high-end developer IDEs (such as VS Code and Cursor), optimized for maximum visual clarity, technical density, and 100% offline reliability.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 HEADER / STATUS BAR                                    │
+│ [Status: Qwen 2.5]  [Blender: Connected]  [RAG: Offline]  [Knowledge Base] [Settings] │
+├─────────────────┬──────────────────────────────────────┬───────────────────────────────┤
+│  LEFT SIDEBAR   │            CHAT WORKSPACE            │      CONTEXT WORKSPACE        │
+│ • Session Tree  │ • Markdown with Atom One Dark        │ ┌───────────────────────────┐ │
+│ • Hard Delete   │ • Inline Code Execution & Copy       │ │ [3D]    [Research]  [Log] │ │
+│ • Search Filter │ • Methodology Framework Selector     │ ├───────────────────────────┤ │
+│ • Drag Resizer  │ • Prompt Bar (Whisper Mic + RAG Doc) │ │ Active Tab Pane & Cards   │ │
+│                 │ • Streaming State & Instant Stop     │ │ (Inner Scroll & Resizers) │ │
+└─────────────────┴──────────────────────────────────────┴───────────────────────────────┘
+```
+
+### 1. Developer IDE Aesthetics & Typography
+* **Atom One Dark Syntax Highlighting:** Integrated via Highlight.js to render code blocks with precise token coloring that perfectly blends into the dark developer palette. Features single-click copy buttons with instant visual feedback.
+* **100% Offline Lucide Vector Icons:** All UI controls (RAG, Web Tools, Presets, Actions, Viewport, Audio) utilize clean, inline SVG Lucide icons (`viewBox="0 0 24 24"`). Zero external font downloads, zero CDN tracking, and 100% functional in isolated air-gapped environments.
+* **Multi-Directional Drag Resizers:**
+  * **Horizontal sidebar resizing:** Smooth pointer-drag resizing for both left and right sidebars with clamped min/max boundaries and auto-persistence to `localStorage`.
+  * **Vertical card height resizers:** Independent vertical dragging handles on every inspector card, respecting element-aware minimum heights (`min-height`) with internal card scrolling (`overflow-y: auto`).
+* **Bilingual Localization (EN / CS):** Comprehensive language switcher (English by default, Czech fully supported) with complete translation coverage for all analytical methodologies, Blender tool actions, and settings.
+* **Hard Delete Session Management:** Complete removal of chat sessions with full recursive directory cleanup from the local disk via `history_repository.delete_session()`.
+
+### 2. Context-Aware Workspace (Tabbed Right Inspector)
+The right inspector features a dynamic 3-mode tab switcher that adapts to the user's current workflow:
+* 🧊 **3D Workspace (`tab-btn-3d`, Box icon):**
+  * **Live Viewport Snapshot:** Direct capture of Blender's active viewport (`/api/blender/viewport-image`) with click-to-enlarge lightbox mode.
+  * **Scene Metrics Dashboard:** Live telemetry showing object counts, active mesh name, polygon and vertex counts, watertight manifold verification, and armature bones.
+  * **Quick 3D Command Deck:** One-click shortcuts for Viewport Inspection, Auto-Rig & Skinning, Mesh Doctor topology audit, Product Studio backdrop generation, and Procedural Brushed Metal shader creation.
+* 🌐 **Research (`tab-btn-research`, Globe icon):**
+  * **Live Web Research & Sources:** Real-time search query feed displaying clickable citation links and excerpt summaries extracted via DuckDuckGo and `trafilatura`.
+  * **Semantic Memory (RAG) Chunks:** Live display of retrieved FAISS vector chunks with similarity match percentages (`% match`) and source document metadata.
+  * **Knowledge Base Launcher:** Instant button to open the modal document manager for adding and reindexing technical PDFs and DOCX files.
+* ⚡ **Agent Log (`tab-btn-agent`, Terminal icon):**
+  * **Agent Workflow & Tool Traces:** Realtime timeline showing each step of the agent's reasoning loop (tool dispatch, RAG query, web search, analytical framework classification).
+  * **Telemetric Console:** Low-level event log recording TCP socket packets, Blender timer execution, and background worker state.
+* **Tab State Persistence:** The active inspector tab is remembered across restarts via `localStorage` (`polygon_active_right_tab`).
+
+### 3. Security Hardening & Architectural Integrity
+* **Strict Loopback Binding:** Both the FastAPI web backend (`127.0.0.1:8000`) and the Blender bridge socket (`127.0.0.1:9876`) bind exclusively to loopback addresses, completely blocking unauthorized network access from the local area network (LAN).
+* **Robust SSE Stream Lifecycle:** Server-Sent Events (SSE) stream reader implements deterministic cancellation and lock release (`reader.cancel()`, `reader.releaseLock()`), ensuring that streaming flags (`state.isStreaming`), prompt inputs, and the "Thinking..." status indicator immediately reset to idle mode as soon as generation completes or stops.
+* **Audio Watchdog & VAD Safety:** Whisper speech-to-text and Silero Voice Activity Detection incorporate strict recording timeouts and fallback abort controllers to eliminate lingering microphone capturing.
+* **Thread-Safe Resource Allocation:** Coqui TTS audio synthesis and Llama.cpp inference execute within dedicated, thread-safe asynchronous workers.
+
+### 4. Standalone Desktop Application (Click-and-Run Launcher)
+* **Single-Window Desktop Mode:** Running `python main.py` or `python start_app.py` launches the FastAPI service and immediately spawns a native, clean desktop window (via Chromium `--app` mode or `pywebview`) without URL bars or browser tabs.
+* **Unified Process Lifecycle:** Closing the application window automatically intercepts the window event and cleanly shuts down the background FastAPI/Uvicorn processes, leaving zero orphaned zombie tasks.
+
+---
+
 ## 🧪 Testing & Production Stability: 176 Unit Tests (100% Pass)
 
 Every single tool, socket payload, LLM prompt parser, and inference fallback is covered by our unit test suite:
@@ -273,16 +327,14 @@ pip install git+https://github.com/tatsy/torchmcubes.git
 3. Open `blender_receiver.py` and click **Run Script** (`Alt + P`).
 4. The system console will output: `[AI-Blender] Server naslouchá na 127.0.0.1:9876`.
 
-### 5. Launch the Assistant (Polygon Beater Web UI)
+### 5. Launch the Assistant (Polygon Beater Desktop Experience)
 ```bash
-# Launch modern Polygon Beater Web Interface (recommended)
+# Launch Click-and-Run Desktop App / Web Interface (recommended)
 python main.py
 
-# Or launch legacy desktop GUI
-python gui.py
+# Or launch standalone launcher
+python start_app.py
 ```
-
----
 
 ## 👨‍💻 Author
 

@@ -185,6 +185,60 @@ Tyto metodické rámce slouží jako strukturovaný kognitivní toolkit pro lok�
 
 ---
 
+## 🖥️ Sekce 5: Moderní vývojářské IDE & Kontextový Workspace
+
+Webové uživatelské rozhraní bylo přepracováno do podoby moderního vývojářského prostředí (ve stylu Cursoru a VS Code), navrženého pro maximální přehlednost, technickou přesnost a 100% offline spolehlivost.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   HLAVIČKA / STAVOVÝ ŘÁDEK                             │
+│ [Status: Qwen 2.5]  [Blender: Připojen]  [RAG: Offline]  [Báze Znalostí] [Nastavení]   │
+├─────────────────┬──────────────────────────────────────┬───────────────────────────────┤
+│   LEVÝ PANEL    │            CHAT WORKSPACE            │       KONTEXTOVÝ PANEL        │
+│ • Strom relací  │ • Markdown s tématem Atom One Dark   │ ┌───────────────────────────┐ │
+│ • Hard Delete   │ • Zvýraznění kódu a kopírování       │ │ [3D]    [Rešerše]   [Log] │ │
+│ • Hledání chatu │ • Výběr expertní analytické metodiky │ ├───────────────────────────┤ │
+│ • Změna šířky   │ • Prompt bar (Whisper STT + RAG doc) │ │ Karta aktivní záložky     │ │
+│                 │ • Stav streamu & okamžité zastavení  │ │ (Interní scroll & resizer)│ │
+└─────────────────┴──────────────────────────────────────┴───────────────────────────────┘
+```
+
+### 1. Ergonomie a vizuální styl moderního IDE
+* **Barevné zvýraznění kódu Atom One Dark:** Kódové bloky v chatu využívají knihovnu Highlight.js s tématem Atom One Dark. Bloky obsahují tlačítko pro kopírování na jedno kliknutí s okamžitou vizuální odezvou.
+* **100% offline Lucide ikony:** Veškeré ovládací prvky, indikátory stavu a tlačítka používají čisté inline SVG ikony v designu Lucide (`viewBox="0 0 24 24"`). Aplikace nestahuje žádná externí webová písma, nepoužívá CDN a funguje zcela bez připojení k internetu.
+* **Vícesměrné resizery pro změnu velikosti:**
+  * **Horizontální posuvníky:** Uživatel může plynule tažením myši měnit šířku levého i pravého postranního panelu s bezpečným omezením a ukládáním do `localStorage`.
+  * **Vertikální resizery jednotlivých boxů:** Každá karta v pravém panelu má vlastní posuvník pro změnu výšky. Resizery respektují minimální výšku prvků (`min-height`), zatímco vnitřní obsah plynule scrolluje (`overflow-y: auto`).
+* **Bilingvní lokalizace (EN / CS):** Kompletní lokalizační slovník (výchozí angličtina, plná čeština) s dynamickým přepínáním v nastavení a trvalým ukládáním předvoleb.
+* **Kompletní mazání relací (Hard Delete):** Kliknutím na ikonu koše v levém panelu se bezpečně a rekurzivně smaže celá složka relace z disku včetně indexovaných kontextů.
+
+### 2. Kontextově závislý pravý panel (Context-Aware Workspace)
+Pravý panel nabízí tabulátorové přepínání mezi 3 specializovanými režimy:
+* 🧊 **3D Workspace (`tab-btn-3d`, ikona Box / Cube):**
+  * **Živý náhled Viewportu:** Snímek aktuálního 3D pohledu z Blenderu (`/api/blender/viewport-image`) s možností zvětšení do lightboxu.
+  * **Panel metrik 3D scény:** Živá telemetrie (počet objektů, aktivní MESH, polygony, vrcholy, test vodotěsnosti sítě a kosti kostry).
+  * **Rychlé 3D akce:** Tlačítka pro inspekci viewportu, Auto-Rig & Skinning, Mesh Doctor audit pro 3D tisk, generování produktového studia a procedurální shader kartáčovaného kovu.
+* 🌐 **Rešerše (`tab-btn-research`, ikona Globe):**
+  * **Živé webové zdroje a citace:** Přehled výsledků webového vyhledávání přes DuckDuckGo s klikatelnými odkazy a úryvky textu.
+  * **Sémantická paměť (RAG úryvky):** Přehled nalezených bloků z FAISS vektorové báze s procentuální shodou relevance (`% match`) a názvem dokumentu.
+  * **Správa znalostní báze:** Přímé tlačítko pro otevření modálního okna pro indexaci PDF a DOCX dokumentů.
+* ⚡ **Agent Log (`tab-btn-agent`, ikona Terminal):**
+  * **Průběh agenta & volání nástrojů:** Časová osa kroků agenta s barevnými odznaky jednotlivých akcí (nástroje, RAG, rešerše, přepnutí metodiky).
+  * **Telemetrická konzole:** Záznam TCP paketů, časovačů Blenderu a systémových událostí v reálném čase.
+* **Trvalé ukládání stavu:** Poslední aktivní záložka se automaticky ukládá do `localStorage` (`polygon_active_right_tab`) a obnovuje se při startu.
+
+### 3. Bezpečnostní a architektonická vylepšení
+* **Výhradní loopback bind (127.0.0.1):** Webový server FastAPI (`127.0.0.1:8000`) i Blender socket server (`127.0.0.1:9876`) naslouchají striktně na loopback rozhraní, čímž je zamezeno přístupu ze sítě LAN.
+* **Robustní životní cyklus SSE streamů:** Čtecí smyčka SSE streamu spolehlivě uvolňuje zámky a ruší čtečku (`reader.cancel()`, `reader.releaseLock()`). Indikátor "Přemýšlím..." i tlačítko odeslání se okamžitě vrací do klidového stavu bez zasekávání.
+* **Časové limity a ochrana mikrofonu:** Záznam zvuku s neuronovou detekcí Silero VAD disponuje bezpečnostními watchdogy a abort signály, které zabraňují nechtěnému visení mikrofonu.
+* **Vláknová bezpečnost (Thread-Safety):** Generování řeči přes Coqui TTS i inference Llama.cpp probíhají v oddělených, vláknově bezpečných workerech.
+
+### 4. Spuštění jako samostatná desktopová aplikace (Click-and-Run)
+* **Režim aplikace bez rámů:** Spuštěním `python main.py` nebo `python start_app.py` se ticho na pozadí nastartuje FastAPI a otevře se nativní desktopové okno (přes Chromium `--app` nebo `pywebview`) bez adresního řádku a záložek.
+* **Sjednocený životní cyklus:** Zavřením desktopového okna křížkem skript automaticky a čistě ukončí běžící FastAPI server bez zanechání zombie procesů.
+
+---
+
 ## 🧪 Testování a produkční stabilita: 176 Unit Testů (100% Úspěšnost)
 
 Stabilita celého ekosystému je doložena rozsáhlým testovacím balíkem pokrývajícím všech 20 nástrojů, socketový protokol, parser i sémantickou paměť:
@@ -288,13 +342,13 @@ pip install git+https://github.com/tatsy/torchmcubes.git
 3. Otevřete soubor `blender_receiver.py` a stiskněte **Run Script** (`Alt + P`).
 4. V konzoli Blenderu se potvrdí: `[AI-Blender] Server naslouchá na 127.0.0.1:9876`.
 
-### 5. Spuštění asistenta (Polygon Beater Web UI)
+### 5. Spuštění asistenta (Polygon Beater Desktop Experience)
 ```bash
-# Spuštění moderního webového rozhraní Polygon Beater (doporučeno)
+# Spuštění Click-and-Run Desktopové aplikace / Web UI (doporučeno)
 python main.py
 
-# Případně spuštění staršího desktopového okna
-python gui.py
+# Případně spuštění samostatného desktopového okna
+python start_app.py
 ```
 Můžete ihned mluvit do mikrofonu nebo psát do chatu:
 * *"Zkontroluj aktivní model přes Mesh Doctor a oprav případné chyby."*
