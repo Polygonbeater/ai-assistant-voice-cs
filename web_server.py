@@ -12,13 +12,16 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import anyio
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -68,13 +71,15 @@ history_repository = HistoryRepository()
 document_service = DocumentService(config=config)
 memory_service = ConversationMemoryService(
     config=config,
-    shared_model=document_service.get_embedding_model() if hasattr(document_service, "get_embedding_model") else None,
+    shared_model_provider=document_service.get_embedding_model if hasattr(document_service, "get_embedding_model") else None,
 )
 history_repository.set_memory_service(memory_service)
 
 # Llama Model inicializace (lazy load / resilient fallback)
 _llm_instance = None
 _llm_lock = threading.Lock()
+_whisper_instance = None
+_whisper_lock = threading.Lock()
 
 def get_llm():
     global _llm_instance
@@ -89,8 +94,44 @@ def get_llm():
                 _llm_instance = None
         return _llm_instance
 
-# Globální stop event pro probíhající generování
-active_stop_event = threading.Event()
+def get_whisper():
+    global _whisper_instance
+    with _whisper_lock:
+        if _whisper_instance is None:
+            from stt_module import initialize_whisper
+
+            _whisper_instance = initialize_whisper(config)
+        return _whisper_instance
+
+# ------------------------------------------------------------------------------
+# Správa životního cyklu generování & stop eventů (izolace podle session_id)
+# ------------------------------------------------------------------------------
+active_stop_event = threading.Event()  # Zachováno pro zpětnou kompatibilitu
+_session_stop_events: dict[str, threading.Event] = {}
+_session_stop_lock = threading.Lock()
+
+def get_session_stop_event(session_id: str) -> threading.Event:
+    with _session_stop_lock:
+        if session_id not in _session_stop_events:
+            _session_stop_events[session_id] = threading.Event()
+        else:
+            _session_stop_events[session_id].clear()
+        return _session_stop_events[session_id]
+
+def stop_session(session_id: Optional[str] = None):
+    with _session_stop_lock:
+        if session_id and session_id in _session_stop_events:
+            _session_stop_events[session_id].set()
+            logger.info("Vyžádáno zastavení pro relaci %s", session_id)
+        elif not session_id:
+            for ev in _session_stop_events.values():
+                ev.set()
+            active_stop_event.set()
+            logger.info("Vyžádáno zastavení všech aktivních relací.")
+
+def cleanup_session_stop_event(session_id: str):
+    with _session_stop_lock:
+        _session_stop_events.pop(session_id, None)
 
 # ------------------------------------------------------------------------------
 # FastAPI Aplikace
@@ -102,13 +143,27 @@ app = FastAPI(
     version="2.3.0",
 )
 
+ALLOWED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
+    "http://localhost",
+    "http://localhost:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+SESSION_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def is_safe_session_id(sid: str) -> bool:
+    """Ověří, že session_id obsahuje pouze povolené znaky (alfanumerické a pomlčky/podtržítka)."""
+    return bool(sid and SESSION_ID_REGEX.match(sid))
 
 # ------------------------------------------------------------------------------
 # Pydantic Schémata
@@ -205,6 +260,8 @@ def create_session(title: str = "Nový chat"):
 
 @app.get("/api/sessions/{session_id}")
 def get_session(session_id: str):
+    if not is_safe_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
         messages = history_repository.load_session(session_id)
         return {"session_id": session_id, "messages": messages}
@@ -213,6 +270,8 @@ def get_session(session_id: str):
 
 @app.patch("/api/sessions/{session_id}")
 def rename_session(session_id: str, req: SessionRenameRequest):
+    if not is_safe_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
         with history_repository._lock:
             session = history_repository._read_session(session_id)
@@ -225,6 +284,8 @@ def rename_session(session_id: str, req: SessionRenameRequest):
 
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str):
+    if not is_safe_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     success = history_repository.delete_session(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Relaci se nepodařilo smazat.")
@@ -232,6 +293,8 @@ def delete_session(session_id: str):
 
 @app.delete("/api/sessions/{session_id}/messages")
 def clear_session_messages(session_id: str):
+    if not is_safe_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
         history_repository.clear(session_id)
         return {"status": "success", "session_id": session_id}
@@ -243,33 +306,49 @@ def clear_session_messages(session_id: str):
 # ------------------------------------------------------------------------------
 
 @app.post("/api/chat/stop")
-def stop_generation():
-    global active_stop_event
-    active_stop_event.set()
-    logger.info("Zastavení generování bylo vyžádáno uživatelem.")
-    return {"status": "stopped"}
+async def stop_generation(request: Request):
+    """
+    Zastaví probíhající generování pro konkrétní relaci (nebo globálně, pokud není zadána).
+    """
+    sid = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            sid = (body.get("session_id") or body.get("sessionId") or "").strip() or None
+    except Exception:
+        pass
+    if not sid:
+        sid = request.query_params.get("session_id") or None
+
+    stop_session(sid)
+    return {"status": "stopped", "session_id": sid}
 
 @app.post("/api/chat")
-async def chat_stream(req: ChatRequest):
+async def chat_stream(req: ChatRequest, request: Request):
     """
     Streamovaný SSE endpoint pro interakci s asistentem.
     Podporuje Server-Sent Events (SSE) s okamžitým přenosem tokenů a statusů.
+    Neblokuje FastAPI Event Loop a řádně uvolňuje prostředky při odpojení klienta.
     """
-    global active_stop_event
-    active_stop_event.clear()
-
-    # 1. Bezpečná resoluce session_id
+    # 1. Bezpečná resoluce a validace session_id
     session_id = (req.session_id or req.sessionId or "").strip()
+    if session_id and not is_safe_session_id(session_id):
+        logger.warning("Detekován neplatný formát session_id: %r", session_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Neplatné session_id. Povoleny jsou pouze alfanumerické znaky a pomlčky.",
+        )
+
     if not session_id:
-        existing = history_repository.list_sessions()
+        existing = await anyio.to_thread.run_sync(history_repository.list_sessions)
         if existing and (existing[0].get("session_id") or existing[0].get("id")):
             session_id = existing[0].get("session_id") or existing[0].get("id")
         else:
-            new_sess = history_repository.create_session("Nový chat")
+            new_sess = await anyio.to_thread.run_sync(history_repository.create_session, "Nový chat")
             session_id = new_sess.get("session_id") or new_sess.get("id")
     else:
         # Ověříme, že relace existuje na disku, jinak ji vytvoříme
-        try:
+        def _ensure_session():
             session_file = history_repository.sessions_dir / f"{session_id}.json"
             if not session_file.exists():
                 session_data = {
@@ -280,6 +359,8 @@ async def chat_stream(req: ChatRequest):
                     "messages": [],
                 }
                 history_repository._write_session(session_id, session_data)
+        try:
+            await anyio.to_thread.run_sync(_ensure_session)
         except Exception as exc:
             logger.warning("Inicializace souboru relace %s selhala: %s", session_id, exc)
 
@@ -288,8 +369,8 @@ async def chat_stream(req: ChatRequest):
     if not user_prompt:
         raise HTTPException(status_code=400, detail="Prázdný dotaz.")
 
-    # 3. Uložení zprávy uživatele do historie
-    history_repository.append(session_id, "user", user_prompt)
+    # 3. Uložení zprávy uživatele do historie (neblokující I/O)
+    await anyio.to_thread.run_sync(history_repository.append, session_id, "user", user_prompt)
 
     # 4. Resoluce příznaků (RAG, Web Tools, Metodika)
     rag_active = True
@@ -310,14 +391,18 @@ async def chat_stream(req: ChatRequest):
 
     preset = req.analytical_preset or req.analyticalPreset or req.methodology
 
-    # 5. Příprava RAG kontextu, pokud je zapnut
+    # 5. Příprava RAG kontextu, pokud je zapnut (neblokující vektorové vyhledávání)
     retrieved_chunks = []
     rag_context = ""
     if rag_active and document_service and document_service.total_chunks() > 0:
         try:
-            retrieved_chunks = document_service.search(user_prompt, top_k=document_service.top_k)
+            retrieved_chunks = await anyio.to_thread.run_sync(
+                document_service.search, user_prompt, document_service.top_k
+            )
             if retrieved_chunks:
-                rag_context = document_service.format_chunks_for_prompt(retrieved_chunks)
+                rag_context = await anyio.to_thread.run_sync(
+                    document_service.format_chunks_for_prompt, retrieved_chunks
+                )
         except Exception as exc:
             logger.error("Chyba při RAG vyhledávání: %s", exc)
 
@@ -330,8 +415,8 @@ async def chat_stream(req: ChatRequest):
             f"DOTAZ UŽIVATELE:\n{user_prompt}"
         )
 
-    # 6. Příprava historie (posledních 6 zpráv)
-    raw_history = history_repository.load_session(session_id) or []
+    # 6. Příprava historie (posledních 6 zpráv, neblokující I/O)
+    raw_history = await anyio.to_thread.run_sync(history_repository.load_session, session_id) or []
     chat_history = raw_history[:-1][-6:] if len(raw_history) > 1 else []
 
     # 7. Dočasné nastavení konfigurace pro request
@@ -341,31 +426,33 @@ async def chat_stream(req: ChatRequest):
     if preset:
         req_config["llama"]["analytical_preset"] = preset
 
+    # Izolovaný stop event pro konkrétní relaci
+    session_stop = get_session_stop_event(session_id)
+
     # Fronta pro přenos událostí z worker vlákna do SSE streamu
     event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
     collected_tokens: list[str] = []
     collected_sentences: list[str] = []
 
     def worker():
-        llm = get_llm()
-        event_queue.put({"type": "session_id", "content": session_id})
-        preset_now = req_config.get("llama", {}).get("analytical_preset", "")
-
-        # Auto-detekce metodiky
-        if preset_now == "⚡ Auto (Doporučit)":
-            event_queue.put({"type": "status", "content": "● 🧠 Určuji optimální analytickou metodiku…"})
-            detected = classify_methodology(llm, user_prompt)
-            req_config["llama"]["analytical_preset"] = detected
-            event_queue.put({"type": "methodology", "content": detected})
-
-        def _on_token(token: str):
-            collected_tokens.append(token)
-            event_queue.put({"type": "token", "content": token})
-
-        def _on_status(status: str):
-            event_queue.put({"type": "status", "content": status})
-
         try:
+            llm = get_llm()
+            event_queue.put({"type": "session_id", "content": session_id})
+            preset_now = req_config.get("llama", {}).get("analytical_preset", "")
+
+            if preset_now == "⚡ Auto (Doporučit)":
+                event_queue.put({"type": "status", "content": "● 🧠 Určuji optimální analytickou metodiku…"})
+                detected = classify_methodology(llm, user_prompt)
+                req_config["llama"]["analytical_preset"] = detected
+                event_queue.put({"type": "methodology", "content": detected})
+
+            def _on_token(token: str):
+                collected_tokens.append(token)
+                event_queue.put({"type": "token", "content": token})
+
+            def _on_status(status: str):
+                event_queue.put({"type": "status", "content": status})
+
             for chunk in generate_response(
                 llm,
                 full_prompt,
@@ -373,7 +460,7 @@ async def chat_stream(req: ChatRequest):
                 chat_history=chat_history,
                 callback_on_token=_on_token,
                 status_callback=_on_status,
-                stop_event=active_stop_event,
+                stop_event=session_stop,
                 document_service=document_service,
                 memory_service=memory_service,
                 active_session_id=session_id,
@@ -397,20 +484,31 @@ async def chat_stream(req: ChatRequest):
     thread.start()
 
     async def event_generator():
-        while True:
-            try:
-                item = event_queue.get_nowait()
-            except queue.Empty:
-                if not thread.is_alive() and event_queue.empty():
+        try:
+            while True:
+                # Detekce odpojení klienta (zavření okna prohlížeče / přerušení spojení)
+                if await request.is_disconnected():
+                    logger.info("Klient se odpojil, ukončuji SSE stream pro relaci: %s", session_id)
+                    session_stop.set()
                     break
-                await asyncio.sleep(0.015)
-                continue
 
-            msg_type = item.get("type")
-            if msg_type == "finish":
-                break
+                try:
+                    item = event_queue.get_nowait()
+                except queue.Empty:
+                    if not thread.is_alive() and event_queue.empty():
+                        break
+                    await asyncio.sleep(0.015)
+                    continue
 
-            yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+                msg_type = item.get("type")
+                if msg_type == "finish":
+                    break
+
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+        finally:
+            if thread.is_alive():
+                session_stop.set()
+            cleanup_session_stop_event(session_id)
 
     return StreamingResponse(
         event_generator(),
@@ -512,24 +610,118 @@ def get_rag_documents():
 
 @app.post("/api/rag/upload")
 async def upload_rag_document(file: UploadFile = File(...)):
-    """Nahraje a zindexuje dokument do RAG databáze."""
-    temp_dir = Path(tempfile.gettempdir()) / "rag_uploads"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / file.filename
+    """
+    Nahraje a zindexuje dokument do RAG databáze.
+    Neblokuje FastAPI Event Loop a spolehlivě odstraňuje dočasné soubory po indexaci.
+    """
+    raw_filename = file.filename or "upload.txt"
+    # Původní název uchováme pouze jako bezpečná metadata
+    safe_metadata_filename = Path(raw_filename).name.strip() or "upload.txt"
+    suffix = Path(safe_metadata_filename).suffix.lower()
 
-    with temp_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Vygenerujeme bezpečný náhodný název na disku (uuid) pro zamezení path traversal
+    random_disk_filename = f"{uuid.uuid4().hex}{suffix}"
+
+    temp_dir = (Path(tempfile.gettempdir()) / "rag_uploads").resolve()
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = (temp_dir / random_disk_filename).resolve()
+
+    # Striktní ověření, že cesta neleží mimo vyhrazený dočasný adresář
+    if not temp_path.is_relative_to(temp_dir):
+        raise HTTPException(status_code=400, detail="Neplatný název souboru.")
 
     try:
-        chunk_count = document_service.index_file(temp_path)
+        def _save_file():
+            with temp_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+        await anyio.to_thread.run_sync(_save_file)
+
+        if not document_service:
+            raise HTTPException(status_code=400, detail="RAG služba není dostupná.")
+
+        chunk_count = await anyio.to_thread.run_sync(document_service.index_file, temp_path)
         return {
             "status": "success",
-            "filename": file.filename,
+            "filename": safe_metadata_filename,
             "chunks_indexed": chunk_count,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Chyba při indexaci dokumentu: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+                logger.info("Dočasný soubor po RAG uploadu byl bezpečně odstraněn: %s", temp_path)
+        except Exception as cleanup_err:
+            logger.warning("Nepodařilo se odstranit dočasný soubor %s: %s", temp_path, cleanup_err)
+
+@app.post("/api/stt/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """Přepíše krátkou nahrávku lokálním modelem Whisper."""
+    max_audio_bytes = 15 * 1024 * 1024
+    media_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    audio_suffixes = {
+        "audio/webm": ".webm",
+        "audio/ogg": ".ogg",
+        "audio/mp4": ".mp4",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/flac": ".flac",
+    }
+    suffix = audio_suffixes.get(media_type)
+    if not suffix:
+        raise HTTPException(status_code=415, detail="Nepodporovaný formát zvukové nahrávky.")
+
+    contents = await file.read(max_audio_bytes + 1)
+    if not contents:
+        raise HTTPException(status_code=400, detail="Zvuková nahrávka je prázdná.")
+    if len(contents) > max_audio_bytes:
+        raise HTTPException(status_code=413, detail="Zvuková nahrávka překračuje limit 15 MB.")
+
+    temp_dir = (Path(tempfile.gettempdir()) / "stt_uploads").resolve()
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / f"{uuid.uuid4().hex}{suffix}"
+    try:
+        await anyio.to_thread.run_sync(temp_path.write_bytes, contents)
+
+        def _transcribe() -> str:
+            model = get_whisper()
+            whisper_cfg = config.get("whisper", {})
+            segments, _ = model.transcribe(
+                str(temp_path),
+                language=whisper_cfg.get("language", "cs"),
+                beam_size=int(whisper_cfg.get("beam_size", 1)),
+                temperature=float(whisper_cfg.get("temperature", 0.0)),
+                condition_on_previous_text=False,
+                vad_filter=True,
+            )
+            valid_segments = []
+            for segment in segments:
+                if segment.no_speech_prob is not None and segment.no_speech_prob > 0.6:
+                    continue
+                if segment.compression_ratio is not None and segment.compression_ratio > 2.4:
+                    continue
+                text = segment.text.strip()
+                if text:
+                    valid_segments.append(text)
+            return " ".join(valid_segments).strip()
+
+        text = await anyio.to_thread.run_sync(_transcribe)
+        return {"text": text}
+    except Exception as exc:
+        logger.exception("Lokální přepis nahrávky selhal: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Lokální přepis selhal: {exc}") from exc
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError as cleanup_err:
+            logger.warning("Nepodařilo se odstranit dočasnou nahrávku %s: %s", temp_path, cleanup_err)
 
 @app.delete("/api/rag/documents/{doc_name}")
 def delete_rag_document(doc_name: str):

@@ -750,7 +750,7 @@ def handle_blender_command(
     a nechá LLM kód automaticky opravit (až 2 pokusy o opravu).
     Využívá případnou dlouhodobou sémantickou paměť pro návaznost na minulý kód.
     """
-    from blender_connector import send_code_to_blender, is_blender_available
+    from blender_connector import DEFAULT_TIMEOUT, send_code_to_blender, is_blender_available
 
     blender_cfg = config.get("blender", {})
     host = blender_cfg.get("host", "127.0.0.1")
@@ -826,7 +826,7 @@ def handle_blender_command(
                 else:
                     status_callback(f"● Odesílám opravený kód do Blenderu ({attempt}/{max_retries})…")
 
-            res = send_code_to_blender(clean_code, host=host, port=port, timeout=10.0)
+            res = send_code_to_blender(clean_code, host=host, port=port, timeout=DEFAULT_TIMEOUT)
             last_res = res
 
             # Vyhodnocení výsledku
@@ -861,8 +861,19 @@ def handle_blender_command(
             tb = res.get("traceback", "")
             err_short = err_msg.splitlines()[-1] if "\n" in err_msg else err_msg
 
-            # Síťová chyba (odmítnuto / timeout socketu)
-            if res.get("error_type") in ("ConnectionRefused", "Timeout") and not is_blender_available(host, port):
+            if res.get("error_type") in ("Timeout", "ExecutionTimeout"):
+                fail_ui = (
+                    f"\n\n⚠️ **Blender neodpověděl včas:** {err_msg}\n"
+                    "Automatický retry byl vynechán, protože původní skript může být stále spuštěný.\n"
+                    f"**Odeslaný kód:**\n```python\n{clean_code}\n```"
+                )
+                if callback_on_token:
+                    callback_on_token(fail_ui)
+                yield "Blender neodpověděl včas; automatické opakování bylo vynecháno."
+                return
+
+            # Síťová chyba — pokud port přestal odpovídat, další pokusy nepomohou.
+            if res.get("error_type") == "ConnectionRefused" and not is_blender_available(host, port):
                 fail_ui = (
                     f"\n\n❌ **Spojení s Blenderem selhalo:** {err_msg}\n"
                     f"**Poslední kód:**\n```python\n{clean_code}\n```"
@@ -2211,7 +2222,7 @@ class UnifiedToolDispatcher:
             }
 
     def _execute_blender_code(self, code: str) -> dict[str, Any]:
-        from blender_connector import send_code_to_blender, is_blender_available
+        from blender_connector import DEFAULT_TIMEOUT, send_code_to_blender, is_blender_available
 
         blender_cfg = self.config.get("blender", {})
         host = blender_cfg.get("host", "127.0.0.1")
@@ -2252,7 +2263,7 @@ class UnifiedToolDispatcher:
                 if self.callback_on_token:
                     self.callback_on_token(f"\n🔄 *Self-Healing smyčka (pokus {attempt}/{max_retries}): Odesílám opravený kód...*\n")
 
-            res = send_code_to_blender(current_code, host=host, port=port, timeout=10.0)
+            res = send_code_to_blender(current_code, host=host, port=port, timeout=DEFAULT_TIMEOUT)
             last_res = res
 
             if res.get("status") == "success":
@@ -4888,4 +4899,3 @@ def generate_response(
 def generate_response_text(llm: Llama, prompt: str, config: dict, **kwargs) -> str:
     """Pomocná funkce, která vyčerpá stream a vrátí celou odpověď jako jeden řetězec."""
     return " ".join(generate_response(llm, prompt, config, **kwargs)).strip()
-

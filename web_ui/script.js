@@ -15,10 +15,13 @@
     sessions: [],
     isStreaming: false,
     abortController: null,
+    selectSessionSeq: 0,
+    selectSessionAbortController: null,
     attachedFile: null,
     isRecording: false,
     mediaRecorder: null,
     audioChunks: [],
+    transcriptionAbortController: null,
     
     // Toggles
     onlineMode: true,
@@ -119,6 +122,7 @@
   // ===========================================================================
   // POMOCNÉ FUNKCE: TELEMETRICKÝ LOG
   // ===========================================================================
+  const MAX_CONSOLE_LINES = 200;
   function logConsole(message, type = 'info') {
     if (!el.consoleOutput) return;
     const line = document.createElement('div');
@@ -126,6 +130,12 @@
     const time = new Date().toLocaleTimeString();
     line.textContent = `[${time}] ${message}`;
     el.consoleOutput.appendChild(line);
+
+    // Omezení počtu položek v DOMu (FIFO) pro prevenci nekonečného růstu paměti
+    while (el.consoleOutput.children.length > MAX_CONSOLE_LINES) {
+      el.consoleOutput.removeChild(el.consoleOutput.firstElementChild || el.consoleOutput.firstChild);
+    }
+
     el.consoleOutput.scrollTop = el.consoleOutput.scrollHeight;
   }
 
@@ -194,8 +204,13 @@
     text = text.replace(/^&gt;\s+(.*)$/gim, '<blockquote>$1</blockquote>');
     text = text.replace(/<\/blockquote>\s*<blockquote>/g, '<br>');
 
-    // Odkazy
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Odkazy (striktní validace schémat — povoleno pouze http:// a https://; blokování javascript:, data: atd. nahrazením za #)
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, rawUrl) => {
+      const trimmedUrl = rawUrl.trim();
+      const isSafe = /^https?:\/\//i.test(trimmedUrl);
+      const safeHref = isSafe ? escapeHtml(trimmedUrl) : '#';
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
 
     // Detekce obrázku / náhledu viewportu
     text = text.replace(/(\/tmp\/[a-zA-Z0-9_\-]+\.png)/g, (match) => {
@@ -285,6 +300,10 @@
       `;
 
       item.addEventListener('click', (e) => {
+        if (state.isStreaming) {
+          logConsole('Během probíhajícího generování nelze přepínat ani mazat relace.', 'warn');
+          return;
+        }
         if (e.target.closest('[data-action="delete"]')) {
           e.stopPropagation();
           deleteSession(sid);
@@ -298,6 +317,10 @@
   }
 
   async function createNewSession() {
+    if (state.isStreaming) {
+      logConsole('Nelze vytvořit novou relaci během probíhajícího generování.', 'warn');
+      return;
+    }
     try {
       const res = await fetch('/api/sessions?title=Nový%20chat', { method: 'POST' });
       if (!res.ok) throw new Error('Nepodařilo se vytvořit relaci');
@@ -315,6 +338,19 @@
 
   async function selectSession(sessionId) {
     if (!sessionId) return;
+
+    if (state.isStreaming) {
+      logConsole('Nelze přepínat konverzace během probíhajícího generování. Nejprve zastavte generování.', 'warn');
+      return;
+    }
+
+    // Zrušit dřívější nedokončený dotaz na relaci
+    if (state.selectSessionAbortController) {
+      state.selectSessionAbortController.abort();
+    }
+    state.selectSessionAbortController = new AbortController();
+    const currentSeq = ++state.selectSessionSeq;
+
     state.sessionId = sessionId;
 
     // Aktualizace aktivní třídy v sidebar
@@ -324,9 +360,16 @@
 
     // Načíst zprávy
     try {
-      const res = await fetch(`/api/sessions/${sessionId}`);
+      const res = await fetch(`/api/sessions/${sessionId}`, {
+        signal: state.selectSessionAbortController.signal,
+      });
       if (!res.ok) throw new Error('Relace nenalezena');
       const data = await res.json();
+
+      // Ochrana proti Race Condition: ignorovat zpožděné odpovědi starších požadavků
+      if (currentSeq !== state.selectSessionSeq || state.sessionId !== sessionId) {
+        return;
+      }
       
       const current = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (el.activeSessionTitle) {
@@ -335,11 +378,18 @@
 
       renderMessages(data.messages || []);
     } catch (err) {
+      if (err.name === 'AbortError') {
+        return;
+      }
       logConsole(`Chyba načítání zpráv: ${err.message}`, 'error');
     }
   }
 
   async function deleteSession(sessionId) {
+    if (state.isStreaming) {
+      logConsole('Během probíhajícího generování nelze mazat relace.', 'warn');
+      return;
+    }
     if (!confirm('Opravdu chcete smazat tuto relaci?')) return;
     try {
       const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
@@ -456,16 +506,21 @@
     const rawPrompt = el.promptInput.value.trim();
     if (!rawPrompt && !state.attachedFile) return;
 
-    // Reset textarea
-    el.promptInput.value = '';
-    el.promptInput.style.height = 'auto';
+    // Pokud je prázdný prompt, ale je přiložena příloha, doplníme výchozí text
+    // aby backend (který vyžaduje neprázdné pole prompt) nevrátil chybu 400.
+    const effectivePrompt = (rawPrompt || (state.attachedFile
+      ? 'Zpracuj tento přiložený dokument.'
+      : ''));
 
     // 1. Zpracování přílohy, pokud je přítomna
     if (state.attachedFile) {
-      await uploadPendingAttachment();
+      const uploaded = await uploadPendingAttachment();
+      if (!uploaded) return;
     }
 
-    const promptText = rawPrompt;
+    const promptText = effectivePrompt;
+    el.promptInput.value = '';
+    el.promptInput.style.height = 'auto';
 
     // Zajistit platné ID aktivní relace
     if (!state.sessionId) {
@@ -622,7 +677,12 @@
       if (state.abortController) {
         state.abortController.abort();
       }
-      await fetch('/api/chat/stop', { method: 'POST' });
+      const sid = state.sessionId || '';
+      await fetch('/api/chat/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sid, sessionId: sid }),
+      });
     } catch (e) {
       // Ignorovat
     }
@@ -636,6 +696,14 @@
       if (isStreaming) {
         el.liveStatusText.textContent = 'Přemýšlím…';
       }
+    }
+    if (el.sessionsContainer) {
+      el.sessionsContainer.classList.toggle('disabled-streaming', isStreaming);
+    }
+    if (el.btnNewChat) {
+      el.btnNewChat.disabled = isStreaming;
+      el.btnNewChat.style.opacity = isStreaming ? '0.5' : '1';
+      el.btnNewChat.style.pointerEvents = isStreaming ? 'none' : 'auto';
     }
   }
 
@@ -664,13 +732,27 @@
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Upload do RAG selhal');
+      if (!res.ok) {
+        let detail = res.statusText;
+        try {
+          const data = await res.json();
+          detail = data.detail || detail;
+        } catch (e) {
+          // Keep the HTTP status text when the error response is not JSON.
+        }
+        throw new Error(`HTTP ${res.status}: ${detail}`);
+      }
       const data = await res.json();
+      if (!Number.isInteger(data.chunks_indexed) || data.chunks_indexed < 1) {
+        throw new Error('V souboru nebyl nalezen žádný indexovatelný text.');
+      }
       logConsole(`Indexace dokončena: ${data.filename} (${data.chunks_indexed} chunků)`, 'info');
       setAttachedFile(null);
       await refreshSystemStatus();
+      return true;
     } catch (err) {
       logConsole(`Chyba indexace přílohy: ${err.message}`, 'error');
+      return false;
     }
   }
 
@@ -705,7 +787,11 @@
     logConsole('Vyžaduji inspekci viewportu a sběr telemetrie...', 'info');
     try {
       const res = await fetch('/api/blender/inspect', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
+      if (data.status === 'error') {
+        throw new Error(data.detail || data.message || data.error || 'Inspekce Blenderu selhala.');
+      }
       
       // Aktualizovat obrázek s cache bustem
       if (el.viewportSnapshotImg) {
@@ -714,7 +800,9 @@
 
       // Aktualizovat metriky
       updateTelemetryMetrics(data);
-      logConsole(`Inspekce hotova: ${data.objects_count || 0} objektů, aktivní: ${data.active_object || 'žádný'}`, 'info');
+      const metrics = data.scene_metrics || data;
+      const activeName = metrics.active_object?.name || metrics.active_object || 'žádný';
+      logConsole(`Inspekce hotova: ${metrics.total_objects ?? metrics.objects_count ?? 0} objektů, aktivní: ${activeName}`, 'info');
     } catch (err) {
       logConsole(`Chyba inspekce Blenderu: ${err.message}`, 'error');
     }
@@ -722,10 +810,14 @@
 
   function updateTelemetryMetrics(data) {
     if (!data) return;
-    if (el.valTotalObjects) el.valTotalObjects.textContent = data.objects_count ?? '-';
-    if (el.valActiveMesh) el.valActiveMesh.textContent = data.active_object ?? 'Žádný';
-    if (el.valTotalFaces) el.valTotalFaces.textContent = data.faces_count ? Number(data.faces_count).toLocaleString() : '-';
-    if (el.valTotalVerts) el.valTotalVerts.textContent = data.vertices_count ? Number(data.vertices_count).toLocaleString() : '-';
+    const metrics = data.scene_metrics || data;
+    const activeObject = metrics.active_object;
+    if (el.valTotalObjects) el.valTotalObjects.textContent = metrics.total_objects ?? metrics.objects_count ?? '-';
+    if (el.valActiveMesh) el.valActiveMesh.textContent = activeObject?.name || activeObject || 'Žádný';
+    const faces = activeObject?.polygons ?? metrics.faces_count;
+    const vertices = activeObject?.vertices ?? metrics.vertices_count;
+    if (el.valTotalFaces) el.valTotalFaces.textContent = faces != null ? Number(faces).toLocaleString() : '-';
+    if (el.valTotalVerts) el.valTotalVerts.textContent = vertices != null ? Number(vertices).toLocaleString() : '-';
     
     if (el.valWatertight) {
       if (data.watertight !== undefined) {
@@ -785,12 +877,23 @@
         return;
       }
 
-      el.modalDocsList.innerHTML = docs.map(doc => `
-        <div class="indexed-doc-item">
-          <div class="doc-item-title">📄 ${escapeHtml(doc)}</div>
-          <button class="doc-delete-btn" onclick="window.deleteRagDoc('${escapeHtml(doc)}')">Odstranit</button>
-        </div>
-      `).join('');
+      el.modalDocsList.innerHTML = '';
+      docs.forEach(doc => {
+        const item = document.createElement('div');
+        item.className = 'indexed-doc-item';
+
+        const title = document.createElement('div');
+        title.className = 'doc-item-title';
+        title.textContent = `📄 ${doc}`;
+
+        const removeButton = document.createElement('button');
+        removeButton.className = 'doc-delete-btn';
+        removeButton.textContent = 'Odstranit';
+        removeButton.addEventListener('click', () => window.deleteRagDoc(doc));
+
+        item.append(title, removeButton);
+        el.modalDocsList.appendChild(item);
+      });
 
     } catch (err) {
       logConsole(`Chyba načtení RAG dokumentů: ${err.message}`, 'error');
@@ -908,6 +1011,17 @@
   // HLASOVÉ NAHRÁVÁNÍ (MIC / SPEECH-TO-TEXT) & TTS
   // ===========================================================================
   async function toggleMicrophoneRecording() {
+    if (state.isStreaming) {
+      logConsole('Během probíhajícího generování nelze spustit přepis hlasu.', 'warn');
+      return;
+    }
+
+    if (state.transcriptionAbortController) {
+      state.transcriptionAbortController.abort();
+      logConsole('Přepis hlasové nahrávky byl zrušen.', 'warn');
+      return;
+    }
+
     if (state.isRecording) {
       // Zastavit nahrávání
       if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
@@ -921,7 +1035,15 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         state.audioChunks = [];
-        state.mediaRecorder = new MediaRecorder(stream);
+        const supportedMimeType = [
+          'audio/webm;codecs=opus',
+          'audio/ogg;codecs=opus',
+          'audio/mp4',
+        ].find(type => MediaRecorder.isTypeSupported(type));
+        state.mediaRecorder = new MediaRecorder(
+          stream,
+          supportedMimeType ? { mimeType: supportedMimeType } : undefined,
+        );
 
         state.mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
@@ -931,10 +1053,20 @@
 
         state.mediaRecorder.onstop = async () => {
           stream.getTracks().forEach(track => track.stop());
-          const audioBlob = new Blob(state.audioChunks, { type: 'audio/wav' });
+          const audioBlob = new Blob(state.audioChunks, {
+            type: state.mediaRecorder.mimeType || 'audio/webm',
+          });
+          state.audioChunks = [];
           logConsole(`Zvuk zaznamenán (${Math.round(audioBlob.size / 1024)} kB). Připravuji přepis...`, 'info');
-          // Pokud je k dispozici Web Speech API nebo lokální STT
-          useBrowserSpeechRecognitionFallback();
+          await transcribeRecordedAudio(audioBlob);
+        };
+
+        state.mediaRecorder.onerror = () => {
+          stream.getTracks().forEach(track => track.stop());
+          state.audioChunks = [];
+          state.isRecording = false;
+          el.btnMic.classList.remove('recording');
+          logConsole('Nahrávání mikrofonu selhalo.', 'error');
         };
 
         state.mediaRecorder.start();
@@ -942,44 +1074,73 @@
         el.btnMic.classList.add('recording');
         logConsole('Hlasový odposlech aktivní (mluvte do mikrofonu)...', 'info');
       } catch (err) {
+        state.audioChunks = [];
         logConsole(`Přístup k mikrofonu odmítnut: ${err.message}`, 'warn');
-        useBrowserSpeechRecognitionFallback();
       }
     }
   }
 
-  function useBrowserSpeechRecognitionFallback() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      logConsole('Prohlížeč nepodporuje přímé SpeechRecognition rozhraní. Zadejte text ručně.', 'warn');
+  async function transcribeRecordedAudio(audioBlob) {
+    if (!audioBlob.size) {
+      logConsole('Nahrávka neobsahuje žádná zvuková data.', 'warn');
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'cs-CZ';
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      el.btnMic.classList.add('recording');
-      logConsole('Hlasové rozpoznávání CS spuštěno...', 'info');
+    const extensionByType = {
+      'audio/webm': 'webm',
+      'audio/ogg': 'ogg',
+      'audio/mp4': 'mp4',
+      'audio/wav': 'wav',
     };
+    const mimeType = audioBlob.type.split(';', 1)[0].toLowerCase();
+    const extension = extensionByType[mimeType];
+    if (!extension) {
+      logConsole(`Nepodporovaný formát nahrávky: ${audioBlob.type || 'neznámý'}`, 'error');
+      return;
+    }
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+    const formData = new FormData();
+    formData.append('file', audioBlob, `voice.${extension}`);
+    const controller = new AbortController();
+    state.transcriptionAbortController = controller;
+    el.btnMic.classList.add('recording');
+    try {
+      const response = await fetch('/api/stt/transcribe', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let detail = response.statusText;
+        try {
+          const data = await response.json();
+          detail = data.detail || detail;
+        } catch (e) {
+          // Keep the HTTP status text when the error response is not JSON.
+        }
+        throw new Error(`HTTP ${response.status}: ${detail}`);
+      }
+      const data = await response.json();
+      const transcript = typeof data.text === 'string' ? data.text.trim() : '';
+      if (!transcript) {
+        logConsole('V nahrávce nebyla rozpoznána žádná řeč.', 'warn');
+        return;
+      }
       logConsole(`Hlasový přepis: "${transcript}"`, 'info');
       el.promptInput.value = transcript;
-      sendMessage();
-    };
-
-    recognition.onerror = (event) => {
-      logConsole(`Chyba rozpoznávání hlasu: ${event.error}`, 'warn');
-    };
-
-    recognition.onend = () => {
+      await sendMessage();
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        logConsole('Přepis hlasové nahrávky byl zrušen.', 'warn');
+      } else {
+        logConsole(`Chyba lokálního přepisu: ${err.message}`, 'error');
+      }
+    } finally {
+      if (state.transcriptionAbortController === controller) {
+        state.transcriptionAbortController = null;
+      }
       el.btnMic.classList.remove('recording');
-    };
-
-    recognition.start();
+    }
   }
 
   function speakText(text) {

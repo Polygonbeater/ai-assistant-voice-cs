@@ -64,6 +64,7 @@ Jádro systému tvoří tři dokonale synchronizované pilíře, které určují
 
 ### 👂 Jak asistent slyší (Whisper)
 * **Faster-Whisper (CTranslate2 int8):** Místo standardního pomalého Whisperu využíváme 8bitovou kvantizaci a optimalizovaný C++ engine. Přepis češtiny probíhá až 4× rychleji při zachování maximální přesnosti bez halucinací.
+* **Soukromý hlasový vstup ve Web UI:** Nahrávka z mikrofonu se odesílá pouze na lokální endpoint FastAPI `/api/stt/transcribe` a zpracovává ji Whisper; cloudové rozhraní SpeechRecognition v prohlížeči se nepoužívá. Model Whisper se načte až při prvním použití.
 * **Hands-Free aktivace (`openWakeWord`):** Asistent běží neustále na pozadí s minimální zátěží CPU. Po vyslovení aktivačního hesla (*"Hey Jarvis"*) zazní jemný tón a asistent okamžitě naslouchá.
 * **Detekce hlasu (`Silero VAD`):** Pokročilá neuronová detekce hlasu přesně odfiltruje klikání klávesnice a hluk okolí, a ukončí záznam přesně ve chvíli, kdy domluvíte.
 

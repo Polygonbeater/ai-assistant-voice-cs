@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 import logging
 import threading
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class DocumentService:
         self._index = None
         self.chunks: list[DocumentChunk] = []
         self.registry: dict[str, dict[str, Any]] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Automatické načtení uloženého indexu, pokud existuje
         self._load_storage()
@@ -652,6 +652,7 @@ class ConversationMemoryService:
         chunk_overlap: int = 50,
         top_k: int = 2,
         shared_model=None,
+        shared_model_provider: Callable[[], Any] | None = None,
     ):
         rag_cfg = (config or {}).get("rag", {})
         default_dir = Path(rag_cfg.get("storage_dir", "rag_storage")) / "memory"
@@ -664,10 +665,11 @@ class ConversationMemoryService:
 
         self.embedding_dim = 384
         self._model = shared_model
+        self._shared_model_provider = shared_model_provider
         self._index = None
         self.chunks: list[MemoryChunk] = []
         self.registry: dict[str, dict[str, Any]] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         self._load_storage()
 
@@ -676,14 +678,17 @@ class ConversationMemoryService:
         if self._model is None:
             with self._lock:
                 if self._model is None:
-                    try:
-                        from sentence_transformers import SentenceTransformer
-                        logger.info("Načítám CPU embedding model pro paměť: %s", self.embedding_model_name)
-                        self._model = SentenceTransformer(self.embedding_model_name, device="cpu")
-                    except ImportError as exc:
-                        raise RuntimeError(
-                            "Pro vektorové embeddings nainstalujte: pip install sentence-transformers"
-                        ) from exc
+                    if self._shared_model_provider:
+                        self._model = self._shared_model_provider()
+                    else:
+                        try:
+                            from sentence_transformers import SentenceTransformer
+                            logger.info("Načítám CPU embedding model pro paměť: %s", self.embedding_model_name)
+                            self._model = SentenceTransformer(self.embedding_model_name, device="cpu")
+                        except ImportError as exc:
+                            raise RuntimeError(
+                                "Pro vektorové embeddings nainstalujte: pip install sentence-transformers"
+                            ) from exc
         return self._model
 
     def _ensure_index(self):

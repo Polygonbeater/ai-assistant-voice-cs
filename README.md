@@ -64,6 +64,7 @@ The assistant's cognitive core synchronizes three tightly integrated pillars: he
 
 ### 👂 How the Assistant Hears (Whisper)
 * **Faster-Whisper (CTranslate2 int8):** Rather than relying on slow, unoptimized standard models, our transcription uses 8-bit quantization with an optimized C++ execution engine. Transcription runs up to 4× faster while retaining flawless grammatical accuracy.
+* **Private Web UI voice input:** Microphone recordings are sent only to the local FastAPI `/api/stt/transcribe` endpoint and processed by Whisper; the browser's cloud-backed SpeechRecognition API is not used. The Whisper model loads on first use.
 * **Hands-free Activation (`openWakeWord`):** Continuously monitors the audio stream with minimal CPU overhead. Upon hearing the activation keyword (*"Hey Jarvis"*), an auditory chime indicates the assistant is engaged.
 * **Voice Activity Detection (`Silero VAD`):** High-precision neural voice boundary detector that rejects keyboard clicks, breathing, and background ambient noise, cleanly capturing user speech boundaries.
 
