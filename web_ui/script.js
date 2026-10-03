@@ -337,6 +337,7 @@
     btnDisableAllTools: document.getElementById('btn-disable-all-tools'),
     btnResetToolsDefaults: document.getElementById('btn-reset-tools-defaults'),
     selectPreset: document.getElementById('select-preset'),
+    presetIcon: document.getElementById('preset-icon'),
     toggleOnline: document.getElementById('toggle-online'),
     toggleRag: document.getElementById('toggle-rag'),
     toggleTts: document.getElementById('toggle-tts'),
@@ -462,6 +463,28 @@
     diffRunBtn: document.getElementById('diff-run-btn'),
   };
 
+  const PRESET_ICON_PATHS = {
+    standard: '<rect x="5" y="5" width="14" height="14" rx="3"></rect><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01M9 9l6 6M15 9l-6 6"></path><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"></path>',
+    auto: '<path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z"></path><path d="m19 14 1.2 2.8L23 18l-2.8 1.2L19 22l-1.2-2.8L15 18l2.8-1.2L19 14Z"></path>',
+    auteur: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><path d="m12 7 2.5 5-5 2.5"></path>',
+    first_principles: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"></path><path d="m4.3 7.7 7.7 4.4 7.7-4.4"></path><path d="M12 12.1V21M2 6v12M1 8h2M1 16h2"></path>',
+    red_team: '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"></path><path d="m9 12 2 2 4-4"></path>',
+    deep_analysis: '<path d="M3 3v18h18"></path><path d="m7 14 4-4 3 3 6-7"></path><path d="M16 6h4v4"></path>',
+    assumption_audit: '<circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5M8 10.5l1.7 1.7 3.3-3.4"></path>',
+    assumption_audit_crisis: '<path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4M12 17h.01"></path>',
+    meta_analysis: '<path d="M12 3 2.5 8l9.5 5 9.5-5L12 3Z"></path><path d="m2.5 12 9.5 5 9.5-5M2.5 16l9.5 5 9.5-5"></path>',
+  };
+
+  function updatePresetIcon(preset = el.selectPreset?.value) {
+    if (!el.presetIcon) return;
+    const paths = PRESET_ICON_PATHS[preset] || PRESET_ICON_PATHS.standard;
+    el.presetIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  }
+
+  function cleanPresetLabel(label) {
+    return String(label || '').replace(/^(?:⚡|🎬|📐|🛡️)\s*/u, '');
+  }
+
   // ===========================================================================
   // LOCALIZATION & I18N DICTIONARY (EN/CS)
   // ===========================================================================
@@ -504,16 +527,16 @@
       tool_status_disabled: 'Disabled',
       select_preset_label: 'Methodology',
       select_preset_title: 'Select expert analytical framework',
-      preset_standard: '🧠 Standard Assistant (Off)',
-      preset_auto: '⚡ Auto-Select Methodology',
-      preset_auteur: '🎬 Auteur & Visual Style',
-      preset_first_principles: '📐 First Principles (3D CAD)',
-      preset_red_team: '🛡️ Red Team & Counter-Analysis',
-      preset_deep_analysis: '📊 In-Depth Analysis v3.1',
-      preset_taleb: '📊 In-Depth Analysis v3.1',
-      preset_assumption_audit: '🔍 Assumption Audit (Standard)',
-      preset_assumption_audit_crisis: '🚨 Assumption Audit (Crisis)',
-      preset_meta_analysis: '📑 Meta-Analysis (Full Template)',
+      preset_standard: 'Standard Assistant (Off)',
+      preset_auto: 'Auto-Select Methodology',
+      preset_auteur: 'Auteur & Visual Style',
+      preset_first_principles: 'First Principles (3D CAD)',
+      preset_red_team: 'Red Team & Counter-Analysis',
+      preset_deep_analysis: 'In-Depth Analysis v3.1',
+      preset_taleb: 'In-Depth Analysis v3.1',
+      preset_assumption_audit: 'Assumption Audit (Standard)',
+      preset_assumption_audit_crisis: 'Assumption Audit (Crisis)',
+      preset_meta_analysis: 'Meta-Analysis (Full Template)',
       card_v_resizer_title: 'Drag to resize panel height',
       toggle_web_tools: 'Web Tools',
       toggle_web_tools_title: 'Enable web search and external tools',
@@ -755,16 +778,16 @@
       tool_status_disabled: 'Vypnuto',
       select_preset_label: 'Metodika',
       select_preset_title: 'Vyberte expertní analytický rámec',
-      preset_standard: '🧠 Standardní asistent (Vypnuto)',
-      preset_auto: '⚡ Auto (Doporučit)',
-      preset_auteur: '🎬 Auteur & Vizuální analýza (Mise-en-scène)',
-      preset_first_principles: '📐 First Principles (Kód & 3D dekonstrukce)',
-      preset_red_team: '🛡️ Red Team & Oponentura hypotéz',
-      preset_deep_analysis: '📊 Hloubková analýza v3.1',
-      preset_taleb: '📊 Hloubková analýza v3.1',
-      preset_assumption_audit: '🔍 Audit předpokladů (Standard)',
-      preset_assumption_audit_crisis: '🚨 Audit předpokladů (Krizový režim)',
-      preset_meta_analysis: '📑 Meta-analýza (Plná šablona)',
+      preset_standard: 'Standardní asistent (Vypnuto)',
+      preset_auto: 'Auto (Doporučit)',
+      preset_auteur: 'Auteur & Vizuální analýza (Mise-en-scène)',
+      preset_first_principles: 'First Principles (Kód & 3D dekonstrukce)',
+      preset_red_team: 'Red Team & Oponentura hypotéz',
+      preset_deep_analysis: 'Hloubková analýza v3.1',
+      preset_taleb: 'Hloubková analýza v3.1',
+      preset_assumption_audit: 'Audit předpokladů (Standard)',
+      preset_assumption_audit_crisis: 'Audit předpokladů (Krizový režim)',
+      preset_meta_analysis: 'Meta-analýza (Plná šablona)',
       card_v_resizer_title: 'Tažením změnit výšku panelu',
       toggle_web_tools: 'Web Nástroje',
       toggle_web_tools_title: 'Povolit webové vyhledávání a externí nástroje',
@@ -1082,6 +1105,7 @@
     if (el.selectPreset && state.selectedPreset) {
       el.selectPreset.value = state.selectedPreset;
     }
+    updatePresetIcon();
 
     // Nativní kontrola pravopisu - dynamická aktualizace atributů lang a spellcheck
     if (el.promptInput) {
@@ -3876,7 +3900,7 @@ print(f"Active object: {act.name if act else 'None'}")
 
           catalogList.forEach(item => {
             if (!item || !item.id) return;
-            const label = (currentLang === 'cs') ? (item.name_cs || item.name_en) : (item.name_en || item.name_cs);
+            const label = cleanPresetLabel((currentLang === 'cs') ? (item.name_cs || item.name_en) : (item.name_en || item.name_cs));
             let opt = Array.from(el.selectPreset.options).find(o => o.value === item.id);
             if (opt) {
               opt.textContent = label;
@@ -3893,6 +3917,7 @@ print(f"Active object: {act.name if act else 'None'}")
         if (canonicalTarget && Array.from(el.selectPreset.options).some(o => o.value === canonicalTarget)) {
           el.selectPreset.value = canonicalTarget;
           state.selectedPreset = canonicalTarget;
+          updatePresetIcon(canonicalTarget);
         }
       }
     } catch (e) {
@@ -4119,6 +4144,7 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.selectPreset) {
       el.selectPreset.addEventListener('change', (e) => {
         state.selectedPreset = e.target.value;
+        updatePresetIcon(state.selectedPreset);
         try {
           localStorage.setItem('polygon_selected_preset', state.selectedPreset);
         } catch (err) {}

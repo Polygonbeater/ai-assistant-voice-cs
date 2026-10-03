@@ -597,6 +597,9 @@ body.is-resizing-card * {
   user-select: none;
   outline: none;
 }
+.chat-tools-btn {
+  gap: 6px;
+}
 .chat-tools-btn:hover {
   background: rgba(56, 189, 248, 0.2);
   border-color: rgba(56, 189, 248, 0.5);
@@ -607,8 +610,8 @@ body.is-resizing-card * {
   transform: translateY(0);
 }
 .tools-btn-icon {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   color: var(--cyan-primary);
   display: block;
   flex-shrink: 0;
@@ -618,6 +621,27 @@ body.is-resizing-card * {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.chat-controls-group .select-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preset-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--cyan-primary);
+}
+.preset-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .polygon-select,
@@ -637,9 +661,9 @@ body.is-resizing-card * {
 }
 
 .toggle-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
@@ -663,13 +687,14 @@ body.is-resizing-card * {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 .pill-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
   display: block;
 }
 
@@ -758,6 +783,7 @@ body.is-resizing-card * {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   padding: 12px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -774,19 +800,41 @@ body.is-resizing-card * {
   color: var(--text-primary);
   transform: translateY(-1px);
 }
+.suggestion-chip:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+}
+.suggestion-chip:active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), var(--bg-surface));
+  border-color: rgba(56, 189, 248, 0.45);
+}
 .chip-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   flex-shrink: 0;
   color: var(--cyan-primary);
+  transition: color 0.15s ease, filter 0.15s ease, transform 0.15s ease;
 }
 .chip-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: block;
+}
+.suggestion-chip:hover .chip-icon,
+.suggestion-chip:focus-visible .chip-icon,
+.suggestion-chip:active .chip-icon {
+  color: #7dd3fc;
+  filter: drop-shadow(0 0 5px var(--cyan-glow));
+  transform: scale(1.06);
+}
+.chip-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
 }
 
 /* Message Bubbles */
