@@ -5296,12 +5296,47 @@ def generate_response(
         first_turn_buffer = ""
         is_tool_candidate = None  # None = nerozhodnuto, True = bufferuji JSON, False = streamuji text
         tool_call_detected = None
+        streamed_tool_calls: dict[int, dict[str, str]] = {}
+        streamed_function_call = {"name": "", "arguments": ""}
         sentence_buffer = ""
 
         for chunk in first_stream:
             if stop_event and stop_event.is_set():
                 return
             delta = chunk["choices"][0].get("delta", {})
+
+            # OpenAI-compatible APIs mohou posílat nativní volání nástrojů
+            # po částech samostatně od textového obsahu.
+            native_calls = delta.get("tool_calls") or []
+            if native_calls:
+                is_tool_candidate = True
+                for tool_call in native_calls:
+                    index = tool_call.get("index", 0)
+                    call = streamed_tool_calls.setdefault(
+                        index, {"name": "", "arguments": ""}
+                    )
+                    function = tool_call.get("function") or {}
+                    call["name"] += function.get("name") or ""
+                    arguments = function.get("arguments")
+                    if isinstance(arguments, str):
+                        call["arguments"] += arguments
+                    elif isinstance(arguments, dict):
+                        call["arguments"] = json.dumps(arguments, ensure_ascii=False)
+                continue
+
+            legacy_call = delta.get("function_call")
+            if isinstance(legacy_call, dict):
+                is_tool_candidate = True
+                streamed_function_call["name"] += legacy_call.get("name") or ""
+                arguments = legacy_call.get("arguments")
+                if isinstance(arguments, str):
+                    streamed_function_call["arguments"] += arguments
+                elif isinstance(arguments, dict):
+                    streamed_function_call["arguments"] = json.dumps(
+                        arguments, ensure_ascii=False
+                    )
+                continue
+
             text_piece = delta.get("content") or ""
             if not text_piece:
                 continue
@@ -5321,7 +5356,10 @@ def generate_response(
                 stripped = first_turn_buffer.strip()
                 if not stripped:
                     continue
-                if stripped.startswith(("{", "<", "```", "tool_call", "function_call")):
+                tool_prefixes = ("{", "<", "```", "tool_call", "function_call")
+                if stripped.startswith(tool_prefixes) or any(
+                    prefix.startswith(stripped) for prefix in tool_prefixes
+                ):
                     is_tool_candidate = True
                 else:
                     is_tool_candidate = False
@@ -5348,6 +5386,21 @@ def generate_response(
                 if parsed:
                     tool_call_detected = parsed
                     break
+
+        if streamed_tool_calls:
+            first_call = streamed_tool_calls[min(streamed_tool_calls)]
+            tool_call_detected = parse_tool_call(json.dumps({
+                "type": "function",
+                "function": {
+                    "name": first_call["name"],
+                    "arguments": first_call["arguments"],
+                },
+            }, ensure_ascii=False))
+        elif streamed_function_call["name"]:
+            tool_call_detected = parse_tool_call(json.dumps({
+                "type": "function",
+                "function": streamed_function_call,
+            }, ensure_ascii=False))
 
         if not is_tool_candidate:
             final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
