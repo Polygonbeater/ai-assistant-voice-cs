@@ -740,8 +740,9 @@ async def chat_stream(req: ChatRequest, request: Request):
             event_queue.put({"type": "session_id", "content": session_id})
             preset_now = req_config.get("llama", {}).get("analytical_preset", "")
 
-            if preset_now in ("⚡ Auto (Doporučit)", "⚡ Auto-Select Methodology", "auto"):
-                auto_status = "● 🧠 Determining optimal analytical methodology…" if req_lang == "en" else "● 🧠 Určuji optimální analytickou metodiku…"
+            preset_key = str(preset_now).strip().casefold()
+            if preset_key == "auto" or preset_key.endswith(("auto (doporučit)", "auto-select methodology")):
+                auto_status = "● [AGENT] Determining optimal analytical methodology…" if req_lang == "en" else "● [AGENT] Určuji optimální analytickou metodiku…"
                 event_queue.put({"type": "status", "content": auto_status})
                 detected = classify_methodology(llm, user_prompt, language=req_lang)
                 req_config["llama"]["analytical_preset"] = detected

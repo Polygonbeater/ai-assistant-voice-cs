@@ -338,6 +338,10 @@
     btnResetToolsDefaults: document.getElementById('btn-reset-tools-defaults'),
     selectPreset: document.getElementById('select-preset'),
     presetIcon: document.getElementById('preset-icon'),
+    presetDropdown: document.getElementById('custom-preset-dropdown'),
+    presetDropdownTrigger: document.getElementById('preset-dropdown-trigger'),
+    presetDropdownLabel: document.getElementById('preset-current-label'),
+    presetDropdownMenu: document.getElementById('preset-dropdown-menu'),
     toggleOnline: document.getElementById('toggle-online'),
     toggleRag: document.getElementById('toggle-rag'),
     toggleTts: document.getElementById('toggle-tts'),
@@ -475,14 +479,71 @@
     meta_analysis: '<path d="M12 3 2.5 8l9.5 5 9.5-5L12 3Z"></path><path d="m2.5 12 9.5 5 9.5-5M2.5 16l9.5 5 9.5-5"></path>',
   };
 
+  const PRESET_ICON_SVG = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+
   function updatePresetIcon(preset = el.selectPreset?.value) {
-    if (!el.presetIcon) return;
     const paths = PRESET_ICON_PATHS[preset] || PRESET_ICON_PATHS.standard;
-    el.presetIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+    const selectedOption = Array.from(el.selectPreset?.options || []).find(option => option.value === preset);
+    if (el.presetIcon) el.presetIcon.innerHTML = PRESET_ICON_SVG(paths);
+    if (el.presetDropdownLabel) {
+      el.presetDropdownLabel.textContent = selectedOption?.textContent?.trim() || '';
+    }
+    renderPresetDropdownOptions(preset);
+  }
+
+  function renderPresetDropdownOptions(selectedPreset = el.selectPreset?.value) {
+    if (!el.selectPreset || !el.presetDropdownMenu) return;
+    const options = Array.from(el.selectPreset.options);
+    const currentItems = Array.from(el.presetDropdownMenu.querySelectorAll('[role="option"]'));
+    const optionsChanged = options.length !== currentItems.length || options.some((option, index) => (
+      currentItems[index]?.dataset.value !== option.value
+      || currentItems[index]?.querySelector('span:last-child')?.textContent !== option.textContent.trim()
+    ));
+    if (!optionsChanged) {
+      currentItems.forEach(item => {
+        item.setAttribute('aria-selected', String(item.dataset.value === selectedPreset));
+      });
+      return;
+    }
+    el.presetDropdownMenu.replaceChildren(...options.map(option => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'preset-dropdown-option';
+      item.dataset.value = option.value;
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(option.value === selectedPreset));
+      item.tabIndex = -1;
+
+      const icon = document.createElement('span');
+      icon.className = 'preset-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = PRESET_ICON_SVG(PRESET_ICON_PATHS[option.value] || PRESET_ICON_PATHS.standard);
+
+      const label = document.createElement('span');
+      label.textContent = option.textContent.trim();
+      item.append(icon, label);
+      item.addEventListener('click', () => {
+        el.selectPreset.value = option.value;
+        el.selectPreset.dispatchEvent(new Event('change', { bubbles: true }));
+        setPresetDropdownOpen(false);
+        el.presetDropdownTrigger?.focus();
+      });
+      return item;
+    }));
+  }
+
+  function setPresetDropdownOpen(open, focusSelected = false) {
+    if (!el.presetDropdownMenu || !el.presetDropdownTrigger) return;
+    el.presetDropdownMenu.hidden = !open;
+    el.presetDropdownTrigger.setAttribute('aria-expanded', String(open));
+    if (open && focusSelected) {
+      const selected = el.presetDropdownMenu.querySelector('[aria-selected="true"]');
+      (selected || el.presetDropdownMenu.querySelector('[role="option"]'))?.focus();
+    }
   }
 
   function cleanPresetLabel(label) {
-    return String(label || '').replace(/^(?:⚡|🎬|📐|🛡️)\s*/u, '');
+    return String(label || '').replace(/^(?:\[AUTO\]|\[VISION\]|\[GEOMETRY\]|\[SAFETY\])\s*/u, '');
   }
 
   // ===========================================================================
@@ -1570,8 +1631,8 @@
         name: isCs ? '3D & Blender' : '3D & Blender',
         icon: '<path d="m21.12 6.4-6.05-4.06a2 2 0 0 0-2.17-.05L2.95 8.41a2 2 0 0 0-.95 1.7v8.58a2 2 0 0 0 1.05 1.76l6.05 4.07a2 2 0 0 0 2.16.05l9.89-6.12a2 2 0 0 0 .95-1.7V9.17a2 2 0 0 0-1-.77ZM12 4.14l7.63 5.12L12 14.36 4.37 9.26 12 4.14Z"></path>',
         statusInfo: isCs
-          ? (state.blenderConnected ? '✓ Blender připojen' : (state.activeRightTab === '3d' ? '⚡ 3D Režim aktivní' : '⚠️ Offline (v klidu neaktivní)'))
-          : (state.blenderConnected ? '✓ Blender online' : (state.activeRightTab === '3d' ? '⚡ 3D Tab active' : '⚠️ Offline (inactive in idle)')),
+          ? (state.blenderConnected ? '[ONLINE] Blender připojen' : (state.activeRightTab === '3d' ? '[ACTIVE] 3D režim' : '[OFFLINE] Neaktivní'))
+          : (state.blenderConnected ? '[ONLINE] Blender online' : (state.activeRightTab === '3d' ? '[ACTIVE] 3D tab' : '[OFFLINE] Inactive')),
       },
       {
         id: 'web',
@@ -2806,7 +2867,7 @@
             }
           } else if (data.type === 'tool_start') {
             const toolName = data.tool || data.name || 'tool';
-            const statusMsg = `● 🛠️ ${t('tool_running')}: ${toolName}…`;
+            const statusMsg = `[TOOL] ${t('tool_running')}: ${toolName}…`;
             if (toolArea) {
               toolArea.style.display = 'block';
               const pill = document.createElement('div');
@@ -2822,7 +2883,7 @@
             scrollToBottom();
           } else if (data.type === 'tool_end') {
             const toolName = data.tool || data.name || 'tool';
-            const doneMsg = `✓ 🛠️ ${toolName} ${t('tool_finished').toLowerCase()}`;
+            const doneMsg = `[DONE] ${toolName} ${t('tool_finished').toLowerCase()}`;
             if (toolArea) {
               toolArea.style.display = 'block';
               const pill = document.createElement('div');
@@ -3057,7 +3118,7 @@
     state.attachedImages = [];
     if (file) {
       const isImg = isImageFile(file);
-      const icon = isImg ? '🖼️ ' : '📄 ';
+      const icon = isImg ? '[IMAGE] ' : '[FILE] ';
       if (el.attachedFileName) {
         el.attachedFileName.textContent = `${icon}${file.name} (${Math.round(file.size / 1024)} kB)`;
       }
@@ -3493,8 +3554,8 @@ print(f"Active object: {act.name if act else 'None'}")
         let noticeHtml = '';
         if (!cleanOld) {
           const initMsg = state.language === 'cs'
-            ? 'ℹ️ Žádný předchozí kód v historii. Zobrazuje se nově vygenerovaný skript.'
-            : 'ℹ️ No previous script in history. Displaying the new script.';
+            ? '[INFO] Žádný předchozí kód v historii. Zobrazuje se nově vygenerovaný skript.'
+            : '[INFO] No previous script in history. Displaying the new script.';
           noticeHtml = `<div class="diff-notice-banner initial">${escapeHtml(initMsg)}</div>`;
         } else if (cleanOld === cleanNew) {
           const idMsg = state.language === 'cs'
@@ -3685,7 +3746,7 @@ print(f"Active object: {act.name if act else 'None'}")
       localModelsCache.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.path;
-        const activeStar = m.is_active ? ' ★' : '';
+        const activeStar = m.is_active ? ' [ACTIVE]' : '';
         opt.textContent = `${m.filename} (${m.size_gb} GB${m.params ? `, ${m.params}` : ''})${activeStar}`;
         if (m.path === targetVal || (!targetVal && m.is_active)) {
           opt.selected = true;
@@ -4172,7 +4233,54 @@ print(f"Active object: {act.name if act else 'None'}")
     // Clear session chat
     if (el.btnClearChat) el.btnClearChat.addEventListener('click', clearCurrentSession);
 
-    // Preset selector change
+    if (el.presetDropdownTrigger) {
+      el.presetDropdownTrigger.addEventListener('click', () => {
+        setPresetDropdownOpen(el.presetDropdownMenu?.hidden ?? true, true);
+      });
+      el.presetDropdownTrigger.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setPresetDropdownOpen(true, true);
+        } else if (event.key === 'Escape') {
+          setPresetDropdownOpen(false);
+        }
+      });
+    }
+    if (el.presetDropdownMenu) {
+      el.presetDropdownMenu.addEventListener('keydown', event => {
+        const items = Array.from(el.presetDropdownMenu.querySelectorAll('[role="option"]'));
+        const currentIndex = items.indexOf(document.activeElement);
+        let nextIndex = currentIndex;
+        if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length;
+        else if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = items.length - 1;
+        else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          items[currentIndex]?.click();
+          return;
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          setPresetDropdownOpen(false);
+          el.presetDropdownTrigger?.focus();
+          return;
+        } else if (event.key === 'Tab') {
+          window.setTimeout(() => setPresetDropdownOpen(false), 0);
+          return;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        items[nextIndex]?.focus();
+      });
+    }
+    document.addEventListener('click', event => {
+      if (el.presetDropdown && !el.presetDropdown.contains(event.target)) {
+        setPresetDropdownOpen(false);
+      }
+    });
+
+    // Keep the native value as the canonical source for backend and storage sync.
     if (el.selectPreset) {
       el.selectPreset.addEventListener('change', (e) => {
         state.selectedPreset = e.target.value;

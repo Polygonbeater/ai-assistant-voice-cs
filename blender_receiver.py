@@ -232,7 +232,7 @@ class BlenderSocketServer:
             if not token:
                 raise RuntimeError("Autentizační token pro Blender Bridge nesmí být prázdný.")
         except Exception as auth_err:
-            print(f"❌ [AI-Blender] Fatální bezpečnostní chyba při startu: {auth_err}")
+            print(f"[ERROR] [AI-Blender] Fatální bezpečnostní chyba při startu: {auth_err}")
             self.stop()
             raise
 
@@ -252,11 +252,11 @@ class BlenderSocketServer:
             self.listen_thread.start()
 
             print(f"==================================================")
-            print(f"🤖 [AI-Blender] Server úspěšně spuštěn na {self.host}:{self.port}")
+            print(f"[AGENT] [AI-Blender] Server úspěšně spuštěn na {self.host}:{self.port}")
             print(f"Připraven přijímat hlasové i textové příkazy od asistenta.")
             print(f"==================================================")
         except Exception as e:
-            print(f"❌ [AI-Blender] Nelze spustit server na {self.host}:{self.port}: {e}")
+            print(f"[ERROR] [AI-Blender] Nelze spustit server na {self.host}:{self.port}: {e}")
             self.stop()
             raise
 
@@ -845,7 +845,7 @@ def _process_blender_queue_timer_impl():
                     "output": stdout_out,
                     "stderr": stderr_out,
                 }
-                print(f"✅ [AI-Blender] execute_trusted_blender_code dokončen. stdout={stdout_out[:200]!r}")
+                print(f"[OK] [AI-Blender] execute_trusted_blender_code dokončen. stdout={stdout_out[:200]!r}")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -854,7 +854,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba execute_trusted_blender_code: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba execute_trusted_blender_code: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -874,7 +874,7 @@ def _process_blender_queue_timer_impl():
                     "scene_metrics": metrics,
                     "screenshot_path": img_path,
                 }
-                print(f"✅ [AI-Blender] Inspekce scény dokončena (objektů: {metrics['total_objects']}, snapshot: {img_path})")
+                print(f"[OK] [AI-Blender] Inspekce scény dokončena (objektů: {metrics['total_objects']}, snapshot: {img_path})")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -882,7 +882,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při inspekci scény: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při inspekci scény: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -994,7 +994,7 @@ def _process_blender_queue_timer_impl():
                     "action": "mesh_doctor_audit",
                     "audit": audit_result,
                 }
-                print(f"✅ [AI-Blender] Mesh Doctor AUDIT dokončen: {audit_result}")
+                print(f"[OK] [AI-Blender] Mesh Doctor AUDIT dokončen: {audit_result}")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -1003,7 +1003,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Mesh Doctor AUDIT: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Mesh Doctor AUDIT: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -1118,7 +1118,7 @@ def _process_blender_queue_timer_impl():
                     ],
                     "post_repair_stats": post_stats,
                 }
-                print(f"✅ [AI-Blender] Mesh Doctor REPAIR dokončen: watertight={is_watertight_after}")
+                print(f"[OK] [AI-Blender] Mesh Doctor REPAIR dokončen: watertight={is_watertight_after}")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -1127,7 +1127,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Mesh Doctor REPAIR: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Mesh Doctor REPAIR: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -1385,7 +1385,7 @@ def _process_blender_queue_timer_impl():
                     "action": "create_product_studio",
                     "studio": studio_result,
                 }
-                print(f"✅ [AI-Blender] Product Viz Studio vytvořeno: styl='{style}', "
+                print(f"[OK] [AI-Blender] Product Viz Studio vytvořeno: styl='{style}', "
                       f"měřítko={scale:.2f}m, světla={len(lights_created)}")
 
             except Exception as e:
@@ -1395,7 +1395,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Product Viz Studio: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Product Viz Studio: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -1703,7 +1703,7 @@ def _process_blender_queue_timer_impl():
                     "action": "create_procedural_shader",
                     "shader": shader_result,
                 }
-                print(f"✅ [AI-Blender] Procedural Shader '{mat.name}' ({shader_type}) vytvořen s {len(created_nodes_summary)} uzly.")
+                print(f"[OK] [AI-Blender] Procedural Shader '{mat.name}' ({shader_type}) vytvořen s {len(created_nodes_summary)} uzly.")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -1712,7 +1712,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Procedural Shader: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Procedural Shader: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -1754,7 +1754,7 @@ def _process_blender_queue_timer_impl():
                     "action": "uv_texel_audit",
                     "metrics": metrics,
                 }
-                print(f"✅ [AI-Blender] UV Texel Audit dokončen pro '{active_obj.name}': TD={metrics.get('texel_density_px_cm')} px/cm, coverage={metrics.get('uv_space_coverage_pct')}%")
+                print(f"[OK] [AI-Blender] UV Texel Audit dokončen pro '{active_obj.name}': TD={metrics.get('texel_density_px_cm')} px/cm, coverage={metrics.get('uv_space_coverage_pct')}%")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -1763,7 +1763,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při UV Texel Audit: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při UV Texel Audit: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -1869,7 +1869,7 @@ def _process_blender_queue_timer_impl():
                     "scaled_to_target": scaled_applied,
                     "post_pack_metrics": final_metrics,
                 }
-                print(f"✅ [AI-Blender] Smart UV Pack dokončen: TD={final_metrics.get('texel_density_px_cm')} px/cm, islands={final_metrics.get('uv_islands_count')}, coverage={final_metrics.get('uv_space_coverage_pct')}%")
+                print(f"[OK] [AI-Blender] Smart UV Pack dokončen: TD={final_metrics.get('texel_density_px_cm')} px/cm, islands={final_metrics.get('uv_islands_count')}, coverage={final_metrics.get('uv_space_coverage_pct')}%")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -1878,7 +1878,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Smart UV Pack: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Smart UV Pack: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2123,7 +2123,7 @@ def _process_blender_queue_timer_impl():
                         "modifiers": [m.name for m in created_obj.modifiers],
                     }
                 }
-                print(f"✅ [AI-Blender] Parametric Model '{created_obj.name}' ({model_type}) úspěšně vytvořen ({v_count} verts).")
+                print(f"[OK] [AI-Blender] Parametric Model '{created_obj.name}' ({model_type}) úspěšně vytvořen ({v_count} verts).")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -2132,7 +2132,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Parametric Model: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Parametric Model: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2253,7 +2253,7 @@ def _process_blender_queue_timer_impl():
                     "modifiers_count": len(applied_modifiers),
                     "modifiers": applied_modifiers,
                 }
-                print(f"✅ [AI-Blender] Modifier Stack '{stack_type}' aplikován na '{active_obj.name}' ({len(applied_modifiers)} modifikátorů).")
+                print(f"[OK] [AI-Blender] Modifier Stack '{stack_type}' aplikován na '{active_obj.name}' ({len(applied_modifiers)} modifikátorů).")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -2262,7 +2262,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Apply Modifier Stack: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Apply Modifier Stack: {e}")
                 print(err_trace)
         # 10. Geometry Nodes Bridge – programová správa a generování uzlových stromů
         if action == "create_geometry_nodes_bridge":
@@ -2404,7 +2404,7 @@ def _process_blender_queue_timer_impl():
                     "link_count": len(links),
                     "nodes": created_nodes_summary,
                 }
-                print(f"✅ [AI-Blender] Geometry Nodes Bridge '{node_group.name}' ({setup_type}) aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
+                print(f"[OK] [AI-Blender] Geometry Nodes Bridge '{node_group.name}' ({setup_type}) aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -2413,7 +2413,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Geometry Nodes Bridge: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Geometry Nodes Bridge: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2562,7 +2562,7 @@ def _process_blender_queue_timer_impl():
                     "keyframes_count": total_keyframe_points,
                     "frame_range": [min_f, max_f],
                 }
-                print(f"✅ [AI-Blender] F-Curve animace aplikována na '{active_obj.name}' (prop: {data_path}, interp: {interp_mode}, mod: {mod_type}).")
+                print(f"[OK] [AI-Blender] F-Curve animace aplikována na '{active_obj.name}' (prop: {data_path}, interp: {interp_mode}, mod: {mod_type}).")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -2571,7 +2571,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při apply_fcurve_animation: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při apply_fcurve_animation: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2643,7 +2643,7 @@ def _process_blender_queue_timer_impl():
                         "drivers_count": len(applied_drivers),
                         "drivers": applied_drivers,
                     }
-                    print(f"✅ [AI-Blender] Driver animace aplikována na '{active_obj.name}' (expr: '{expr_clean}').")
+                    print(f"[OK] [AI-Blender] Driver animace aplikována na '{active_obj.name}' (expr: '{expr_clean}').")
 
                 # Režim Geometry Nodes
                 else:
@@ -2746,7 +2746,7 @@ def _process_blender_queue_timer_impl():
                         "link_count": len(links),
                         "nodes": created_nodes_summary,
                     }
-                    print(f"✅ [AI-Blender] Motion Nodes strom '{node_group.name}' aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
+                    print(f"[OK] [AI-Blender] Motion Nodes strom '{node_group.name}' aplikován na '{active_obj.name}' s {len(created_nodes_summary)} uzly.")
 
                 # Překreslení viewportu
                 for window in bpy.context.window_manager.windows:
@@ -2761,7 +2761,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při create_motion_node_setup: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při create_motion_node_setup: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2869,7 +2869,7 @@ def _process_blender_queue_timer_impl():
                     "rotation_euler": [round(c, 4) for c in empty_obj.rotation_euler],
                     "hide_select": True,
                 }
-                print(f"✅ [AI-Blender] Referenční blueprint '{empty_obj.name}' ({axis_clean}) vytvořen z '{img_path}'.")
+                print(f"[OK] [AI-Blender] Referenční blueprint '{empty_obj.name}' ({axis_clean}) vytvořen z '{img_path}'.")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -2878,7 +2878,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při setup_blueprint_reference: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při setup_blueprint_reference: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -2989,7 +2989,7 @@ def _process_blender_queue_timer_impl():
                                             if len(sampled) >= 3:
                                                 polygons.append(sampled)
                     except Exception as exc_pil:
-                        print(f"⚠️ [AI-Blender] PIL fallback contour tracing varování: {exc_pil}")
+                        print(f"[WARN] [AI-Blender] PIL fallback contour tracing varování: {exc_pil}")
 
                 if not polygons:
                     polygons = [[
@@ -3071,7 +3071,7 @@ def _process_blender_queue_timer_impl():
                     "bevel_depth": bevel_d,
                     "dimensions": dims,
                 }
-                print(f"✅ [AI-Blender] Vektorizace '{img_path}' na 3D MESH '{curve_obj.name}' úspěšná ({v_count} vrcholů, {p_count} polygonů).")
+                print(f"[OK] [AI-Blender] Vektorizace '{img_path}' na 3D MESH '{curve_obj.name}' úspěšná ({v_count} vrcholů, {p_count} polygonů).")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -3080,7 +3080,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při vectorize_image_to_3d: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při vectorize_image_to_3d: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -3246,7 +3246,7 @@ def _process_blender_queue_timer_impl():
                     "nodes": created_nodes_summary,
                     "use_nodes": scene.use_nodes,
                 }
-                print(f"✅ [AI-Blender] Compositor nastaven na preset '{preset}' ({len(created_nodes_summary)} uzlů, {len(links)} spojení).")
+                print(f"[OK] [AI-Blender] Compositor nastaven na preset '{preset}' ({len(created_nodes_summary)} uzlů, {len(links)} spojení).")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -3255,7 +3255,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při setup_compositor: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při setup_compositor: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -3359,7 +3359,7 @@ def _process_blender_queue_timer_impl():
                         "pbr_ready": False,
                         "retopology_method": "None (Raw Model)",
                     }
-                    print(f"✅ [AI-Blender] Surový AI mesh '{raw_obj.name}' vytvořen ({raw_vertices} vrcholů, {raw_faces} polygonů).")
+                    print(f"[OK] [AI-Blender] Surový AI mesh '{raw_obj.name}' vytvořen ({raw_vertices} vrcholů, {raw_faces} polygonů).")
                 else:
                     # 3. Auto-Retopology (Voxel Remesh + QuadriFlow)
                     # Vytvoření duplikátu pro retopologii
@@ -3516,7 +3516,7 @@ def _process_blender_queue_timer_impl():
                         "retopology_method": method_str,
                     }
                     print(
-                        f"✅ [AI-Blender] Produkční AI Mesh '{retopo_obj.name}' úspěšně vytvořen: "
+                        f"[OK] [AI-Blender] Produkční AI Mesh '{retopo_obj.name}' úspěšně vytvořen: "
                         f"{raw_faces} -> {retopo_faces} polygonů ({quad_pct}% quadů, redukce {reduction}%), "
                         f"textura {tex_w}x{tex_h} upečena do Principled BSDF."
                     )
@@ -3528,7 +3528,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při generate_local_ai_mesh: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při generate_local_ai_mesh: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -3604,7 +3604,7 @@ def _process_blender_queue_timer_impl():
                     "rig_type": rig_type,
                     "dimensions": [round(dims.x, 3), round(dims.y, 3), round(dims.z, 3)],
                 }
-                print(f"✅ [AI-Blender] Auto-Rig & Skinning dokončen pro '{mesh_name}' -> '{armature_obj.name}' ({bone_count} kostí)")
+                print(f"[OK] [AI-Blender] Auto-Rig & Skinning dokončen pro '{mesh_name}' -> '{armature_obj.name}' ({bone_count} kostí)")
 
             except Exception as e:
                 err_trace = traceback.format_exc()
@@ -3613,7 +3613,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při Auto-Rig & Skinning: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při Auto-Rig & Skinning: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()
@@ -3632,7 +3632,7 @@ def _process_blender_queue_timer_impl():
                     "file": bpy.data.filepath or "Untitled",
                     "scene_metrics": metrics,
                 }
-                print("✅ [AI-Blender] Stav Blenderu úspěšně vrácen.")
+                print("[OK] [AI-Blender] Stav Blenderu úspěšně vrácen.")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -3682,7 +3682,7 @@ def _process_blender_queue_timer_impl():
                     "render_path": actual_path,
                     "engine": getattr(bpy.context.scene.render, "engine", "UNKNOWN"),
                 }
-                print(f"✅ [AI-Blender] Render dokončen: {actual_path}")
+                print(f"[OK] [AI-Blender] Render dokončen: {actual_path}")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -3690,7 +3690,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při renderování: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při renderování: {e}")
             finally:
                 completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
@@ -3742,7 +3742,7 @@ def _process_blender_queue_timer_impl():
                     "object_name": target_obj.name,
                     "location": new_loc,
                 }
-                print(f"✅ [AI-Blender] Objekt '{target_obj.name}' posunut na {new_loc}")
+                print(f"[OK] [AI-Blender] Objekt '{target_obj.name}' posunut na {new_loc}")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -3750,7 +3750,7 @@ def _process_blender_queue_timer_impl():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba při posunu objektu: {e}")
+                print(f"[ERROR] [AI-Blender] Chyba při posunu objektu: {e}")
             finally:
                 completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
@@ -3924,7 +3924,7 @@ def _process_blender_queue_timer_impl():
             continue
 
         # Neznámá nebo nepovolená akce – libovolné spouštění kódu (exec) je zakázáno
-        print(f"❌ [AI-Blender] Zamítnuta nepovolená akce: '{action}'")
+        print(f"[ERROR] [AI-Blender] Zamítnuta nepovolená akce: '{action}'")
         result_container["response"] = {
             "status": "error",
             "error": f"Neznámá nebo zakázaná akce: '{action}'. Libovolné spouštění Python kódu (exec) bylo z bezpečnostních důvodů trvale odstraněno.",
@@ -3946,7 +3946,7 @@ def process_blender_queue_timer():
     try:
         return _process_blender_queue_timer_impl()
     except Exception as fatal_timer_err:
-        print(f"❌ [AI-Blender] Kritická neošetřená chyba v process_blender_queue_timer: {fatal_timer_err}")
+        print(f"[ERROR] [AI-Blender] Kritická neošetřená chyba v process_blender_queue_timer: {fatal_timer_err}")
         traceback.print_exc()
         return 0.05
 

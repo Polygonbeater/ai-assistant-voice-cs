@@ -270,7 +270,7 @@ class AssistantGUI(tk.Tk):
         ).pack(fill=tk.X, padx=16, pady=(0, 12))
         tk.Button(
             self.sidebar,
-            text="⚙ Nastavení",
+            text="[CONFIG] Nastavení",
             command=self.toggle_settings,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
@@ -364,7 +364,7 @@ class AssistantGUI(tk.Tk):
 
         self.header_toggle_button = tk.Button(
             header,
-            text="☰",
+            text="[MENU]",
             command=self.toggle_sidebar,
             bg=self.COLORS["background"],
             fg=self.COLORS["muted"],
@@ -455,7 +455,7 @@ class AssistantGUI(tk.Tk):
         self.mode_switch.pack(side=tk.LEFT)
         self.handsfree_switch = tk.Checkbutton(
             voice_controls,
-            text="🎙️ Hands-free (Hey Jarvis)",
+            text="[AUDIO] Hands-free (Hey Jarvis)",
             variable=self.auto_listen,
             command=self._on_handsfree_toggled,
             bg=self.COLORS["background"],
@@ -486,7 +486,7 @@ class AssistantGUI(tk.Tk):
         self.audio_device_entry.pack(side=tk.LEFT)
         self.listen_button = tk.Button(
             action_row,
-            text="🎙 Naslouchat",
+            text="[AUDIO] Naslouchat",
             command=self.start_voice_capture,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
@@ -514,7 +514,7 @@ class AssistantGUI(tk.Tk):
         ).pack(side=tk.LEFT)
         tk.Button(
             action_row,
-            text="📁 Správa RAG",
+            text="[FOLDER] Správa RAG",
             command=self.open_document_manager,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
@@ -616,12 +616,12 @@ class AssistantGUI(tk.Tk):
                             self._chat_images = []
                         self._chat_images.append(tk_img)
 
-                        self.chat_box.insert(tk.END, f"🖼️ {alt_txt or 'Náhled'}:\n", (base_tag, "chat_bold"))
+                        self.chat_box.insert(tk.END, f"[IMAGE] {alt_txt or 'Náhled'}:\n", (base_tag, "chat_bold"))
                         self.chat_box.image_create(tk.END, image=tk_img)
                         self.chat_box.insert(tk.END, "\n")
                         tag_name = f"img_open_{self.link_counter}"
                         self.link_counter += 1
-                        self.chat_box.insert(tk.END, f"🔍 Zobrazit soubor v plném rozlišení ({img_path})\n", (base_tag, "hyperlink", tag_name))
+                        self.chat_box.insert(tk.END, f"[SEARCH] Zobrazit soubor v plném rozlišení ({img_path})\n", (base_tag, "hyperlink", tag_name))
                         self.chat_box.tag_bind(tag_name, "<Button-1>", lambda _e, p=img_path: webbrowser.open(f"file://{os.path.abspath(p)}"))
                         if i < len(lines) - 1:
                             self.chat_box.insert(tk.END, "\n", (base_tag,))
@@ -665,7 +665,7 @@ class AssistantGUI(tk.Tk):
 
                     tag_name = f"link_{self.link_counter}"
                     self.link_counter += 1
-                    self.chat_box.insert(tk.END, f"🔗 {lbl}", active_tags + ("hyperlink", tag_name))
+                    self.chat_box.insert(tk.END, f"[LINK] {lbl}", active_tags + ("hyperlink", tag_name))
                     self.chat_box.tag_bind(tag_name, "<Button-1>", lambda _e, url=u: webbrowser.open(url))
                     last_idx = e
 
@@ -940,7 +940,7 @@ class AssistantGUI(tk.Tk):
         if self.sidebar_visible:
             self.sidebar.pack_forget()
             self.sidebar_visible = False
-            self.header_toggle_button.configure(text="☰")
+            self.header_toggle_button.configure(text="[MENU]")
         else:
             self.main_area.pack_forget()
             self.sidebar.pack(
@@ -950,7 +950,7 @@ class AssistantGUI(tk.Tk):
             )
             self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             self.sidebar_visible = True
-            self.header_toggle_button.configure(text="☰")
+            self.header_toggle_button.configure(text="[MENU]")
 
     def _refresh_session_list(self):
         query = self.session_search.get().strip().lower()
@@ -1204,7 +1204,7 @@ class AssistantGUI(tk.Tk):
         self.request_in_progress = True
         self.stop_event.clear()
         self.send_button.configure(
-            text="⏹ Zastavit",
+            text="[STOP] Zastavit",
             bg=self.COLORS["danger"],
             activebackground="#b91c1c",
             activeforeground="white",
@@ -1220,7 +1220,7 @@ class AssistantGUI(tk.Tk):
         try:
             from llama_module import classify_methodology, load_analytical_prompt
             preset_now = self.config.get("llama", {}).get("analytical_preset", "")
-            if preset_now == "⚡ Auto (Doporučit)":
+            if str(preset_now).strip().casefold().endswith("auto (doporučit)"):
                 self.token_queue.put(("auto_status", "● Určuji optimální metodiku…"))
                 detected = classify_methodology(self.llm, prompt)
                 self.config["llama"]["analytical_preset"] = detected
@@ -1358,7 +1358,7 @@ class AssistantGUI(tk.Tk):
             self.config["llama"]["online_mode"] = is_online
         if hasattr(self, "header_title_label") and hasattr(self, "header_subtitle_label"):
             if is_online:
-                self.header_title_label.configure(text="Polygon Beater AI  🌐")
+                self.header_title_label.configure(text="Polygon Beater AI  [WEB]")
                 self.header_subtitle_label.configure(
                     text="Online vyhledávání aktivní • data dotazu jsou ověřována na webu",
                     fg=self.COLORS["accent"],
@@ -1665,8 +1665,8 @@ class AssistantGUI(tk.Tk):
         doc_tab = tk.Frame(notebook, bg=self.COLORS["background"])
         mem_tab = tk.Frame(notebook, bg=self.COLORS["background"])
 
-        notebook.add(doc_tab, text="  📁 Dokumentový RAG  ")
-        notebook.add(mem_tab, text="  🧠 Sémantická paměť (Memory RAG)  ")
+        notebook.add(doc_tab, text="  [FOLDER] Dokumentový RAG  ")
+        notebook.add(mem_tab, text="  [AGENT] Sémantická paměť (Memory RAG)  ")
 
         # ==========================================
         # ZÁLOŽKA 1: DOKUMENTOVÝ RAG
@@ -1676,7 +1676,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Label(
             doc_header,
-            text="🗂 Lokální RAG Úložiště Dokumentů",
+            text="[FOLDER] Lokální RAG Úložiště Dokumentů",
             font=("TkDefaultFont", 11, "bold"),
             bg=self.COLORS["panel"],
             fg=self.COLORS["text"],
@@ -1835,7 +1835,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             doc_btn_frame,
-            text="➕ Indexovat soubor",
+            text="[ADD] Indexovat soubor",
             command=add_file,
             bg=self.COLORS["accent_dark"],
             fg="white",
@@ -1847,7 +1847,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             doc_btn_frame,
-            text="🗑 Smazat vybraný",
+            text="[DELETE] Smazat vybraný",
             command=delete_selected,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["danger"],
@@ -1859,7 +1859,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             doc_btn_frame,
-            text="🔄 Aktualizovat index",
+            text="[UPDATE] Aktualizovat index",
             command=reindex_all,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
@@ -1871,7 +1871,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             doc_btn_frame,
-            text="⚠️ Vymazat vše",
+            text="[WARN] Vymazat vše",
             command=clear_database,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["muted"],
@@ -1889,7 +1889,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Label(
             mem_header,
-            text="🧠 Sémantická paměť konverzací (Long-Term Vector Memory)",
+            text="[AGENT] Sémantická paměť konverzací (Long-Term Vector Memory)",
             font=("TkDefaultFont", 11, "bold"),
             bg=self.COLORS["panel"],
             fg=self.COLORS["text"],
@@ -1918,7 +1918,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Label(
             mem_search_frame,
-            text="🔍 Otestovat paměť:",
+            text="[SEARCH] Otestovat paměť:",
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
             font=("TkDefaultFont", 9, "bold"),
@@ -1979,7 +1979,7 @@ class AssistantGUI(tk.Tk):
 
         mem_preview_title = tk.Label(
             mem_preview_frame,
-            text="📋 Náhled paměťových bloků / Výsledky vyhledávání:",
+            text="[REPORT] Náhled paměťových bloků / Výsledky vyhledávání:",
             font=("TkDefaultFont", 8, "bold"),
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["muted"],
@@ -2036,7 +2036,7 @@ class AssistantGUI(tk.Tk):
             if not chunks:
                 mem_preview_text.insert(tk.END, f"Pro relaci '{sid}' nebyly nalezeny žádné vektorové bloky.")
             else:
-                mem_preview_title.configure(text=f"📋 Bloky relace '{sid}' (celkem {len(chunks)}):")
+                mem_preview_title.configure(text=f"[REPORT] Bloky relace '{sid}' (celkem {len(chunks)}):")
                 for i, ch in enumerate(chunks, 1):
                     mem_preview_text.insert(
                         tk.END,
@@ -2061,11 +2061,11 @@ class AssistantGUI(tk.Tk):
                 mem_preview_text.configure(state=tk.NORMAL)
                 mem_preview_text.delete("1.0", tk.END)
                 if not results:
-                    mem_preview_title.configure(text=f"🔍 Výsledky vyhledávání pro '{query}': (0 nalezeno)")
+                    mem_preview_title.configure(text=f"[SEARCH] Výsledky vyhledávání pro '{query}': (0 nalezeno)")
                     mem_preview_text.insert(tk.END, "V sémantické paměti nebyla nalezena žádná relevantní shoda.")
                     status_bar.configure(text=f"Žádná shoda v paměti pro '{query}'.", fg=self.COLORS["muted"])
                 else:
-                    mem_preview_title.configure(text=f"🔍 Nalezeno {len(results)} relevantních bloků pro '{query}':")
+                    mem_preview_title.configure(text=f"[SEARCH] Nalezeno {len(results)} relevantních bloků pro '{query}':")
                     for i, r in enumerate(results, 1):
                         mem_preview_text.insert(
                             tk.END,
@@ -2083,12 +2083,12 @@ class AssistantGUI(tk.Tk):
             mem_preview_text.configure(state=tk.NORMAL)
             mem_preview_text.delete("1.0", tk.END)
             mem_preview_text.configure(state=tk.DISABLED)
-            mem_preview_title.configure(text="📋 Náhled paměťových bloků / Výsledky vyhledávání:")
+            mem_preview_title.configure(text="[REPORT] Náhled paměťových bloků / Výsledky vyhledávání:")
             status_bar.configure(text="Připraveno.", fg=self.COLORS["muted"])
 
         tk.Button(
             mem_search_frame,
-            text="🔍 Hledat",
+            text="[SEARCH] Hledat",
             command=run_mem_search,
             bg=self.COLORS["accent_dark"],
             fg="white",
@@ -2167,7 +2167,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             mem_btn_frame,
-            text="🔄 Přeindexovat celou historii",
+            text="[UPDATE] Přeindexovat celou historii",
             command=reindex_history,
             bg=self.COLORS["accent_dark"],
             fg="white",
@@ -2179,7 +2179,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             mem_btn_frame,
-            text="🗑 Smazat relaci z paměti",
+            text="[DELETE] Smazat relaci z paměti",
             command=delete_selected_mem,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["danger"],
@@ -2191,7 +2191,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             mem_btn_frame,
-            text="⚠️ Vymazat celou paměť",
+            text="[WARN] Vymazat celou paměť",
             command=clear_all_mem,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["muted"],
@@ -2203,7 +2203,7 @@ class AssistantGUI(tk.Tk):
 
         tk.Button(
             mem_btn_frame,
-            text="🔄 Obnovit přehled",
+            text="[UPDATE] Obnovit přehled",
             command=refresh_mem_table,
             bg=self.COLORS["panel_alt"],
             fg=self.COLORS["text"],
