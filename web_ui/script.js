@@ -3953,6 +3953,9 @@ print(f"Active object: {act.name if act else 'None'}")
       el.promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
+          if (state.isFileLoading || (el.btnSend && el.btnSend.disabled)) {
+            return;
+          }
           sendMessage();
         }
       });
