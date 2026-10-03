@@ -53,6 +53,37 @@ BLOCKED_HOSTNAMES = {
 }
 
 
+class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+    """
+    Striktní DNS resolver pro aiohttp:
+    Zabraňuje SSRF a DNS Rebinding (TOCTOU) útokům tím, že ověřuje,
+    zda každá vyřešená IP adresa je výhradně globální/veřejná.
+    """
+    async def resolve(self, host: str, port: int = 0, family: int = socket.AF_UNSPEC) -> list[dict[str, Any]]:
+        infos = await asyncio.get_running_loop().getaddrinfo(
+            host, port, family=family, type=socket.SOCK_STREAM
+        )
+        results = []
+        for addr_family, socktype, proto, canonname, sockaddr in infos:
+            address = sockaddr[0]
+            if not ipaddress.ip_address(address).is_global:
+                raise OSError(f"SSRF Ochrana: Odmítnuta neveřejná IP {address} pro hostname {host}")
+            results.append({
+                "hostname": host,
+                "host": address,
+                "port": port,
+                "family": addr_family,
+                "proto": proto,
+                "flags": 0,
+            })
+        if not results:
+            raise OSError(f"Nenalezena veřejná IP pro {host}")
+        return results
+
+    async def close(self) -> None:
+        pass
+
+
 def is_safe_web_url(url: str) -> bool:
     """
     Ověří, že URL je bezpečné pro stahování z pohledu SSRF:
@@ -103,6 +134,7 @@ def is_safe_web_url(url: str) -> bool:
     except Exception:
         return False
 
+
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/126.0.0.0 Safari/537.36"
@@ -150,7 +182,7 @@ async def _safe_get(
 
         # Přesměrování: získej Location a validuj ho
         location = resp.headers.get("Location", "").strip()
-        await resp.release()
+        resp.release()
 
         if not location:
             logger.warning("_safe_get: redirect bez Location hlavičky z %s", current_url)
@@ -212,11 +244,18 @@ def _extract_domain(url: str) -> str:
         return "web"
 
 
+def sanitize_untrusted_text(text: str) -> str:
+    """Escapuje XML znaky, aby útočník nemohl předčasně ukončit tag <untrusted_context>."""
+    if not text:
+        return ""
+    return str(text).replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _clean_text_for_prompt(text: str) -> str:
     """Bezpečné ošetření textu proti HTML a Prompt Injection."""
     if not text:
         return ""
-    safe = text.replace("<", "&lt;").replace(">", "&gt;")
+    safe = sanitize_untrusted_text(text)
     # Redukce více než dvou po sobě jdoucích nových řádků
     safe = re.sub(r'\n{3,}', '\n\n', safe)
     return safe.strip()
@@ -402,7 +441,7 @@ async def search_multi_source_async(
     logger.info("Spouštím asynchronní Multi-Source vyhledávání pro: %s", clean_queries)
 
     ssl_context = ssl.create_default_context()
-    connector = aiohttp.TCPConnector(limit=15, ssl=ssl_context)
+    connector = aiohttp.TCPConnector(resolver=PublicOnlyResolver(), limit=15, ssl=ssl_context)
     async with aiohttp.ClientSession(headers=DEFAULT_HEADERS, connector=connector) as session:
         # 1. Paralelní sběr vyhledávacích výsledků
         search_tasks = [_fetch_ddg_query_async(q, max_results=3) for q in clean_queries]
@@ -484,10 +523,15 @@ async def search_multi_source_async(
         if len(clean_content) > per_source_max:
             trimmed_content += "… [zkráceno]"
 
+        safe_title = sanitize_untrusted_text(src.get("title", ""))
+        safe_source = sanitize_untrusted_text(src.get("source", ""))
+        safe_url = sanitize_untrusted_text(src.get("url", ""))
+        safe_content = sanitize_untrusted_text(trimmed_content)
+
         doc_block = (
-            f"### [{idx}] Zdroj: {src['title']} ({src['source']})\n"
-            f"URL: {src['url']}\n"
-            f"<untrusted_context>\n<source_content>\n{trimmed_content}\n</source_content>\n</untrusted_context>"
+            f"### [{idx}] Zdroj: {safe_title} ({safe_source})\n"
+            f"URL: {safe_url}\n"
+            f"<untrusted_context>\n<source_content>\n{safe_content}\n</source_content>\n</untrusted_context>"
         )
         formatted_docs.append(doc_block)
         src["snippet"] = trimmed_content[:350].strip()

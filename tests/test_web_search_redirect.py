@@ -10,7 +10,7 @@ class FakeResponse:
         self.headers = headers or {}
         self.released = False
 
-    async def release(self):
+    def release(self):
         self.released = True
 
     async def __aenter__(self):

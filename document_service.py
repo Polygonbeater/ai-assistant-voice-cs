@@ -43,6 +43,13 @@ class DocumentChunk:
         )
 
 
+def sanitize_untrusted_text(text: str) -> str:
+    """Escapuje XML znaky, aby útočník nemohl předčasně ukončit tag <untrusted_context>."""
+    if not text:
+        return ""
+    return str(text).replace("<", "&lt;").replace(">", "&gt;")
+
+
 def smart_chunk_text(text: str, chunk_size: int = 450, chunk_overlap: int = 50) -> list[str]:
     """
     Rozdělí text na menší logické bloky s definovaným překryvem (overlap).
@@ -555,9 +562,9 @@ class DocumentService:
             return ""
         formatted = []
         for i, c in enumerate(chunks, 1):
-            doc_name = c.get("doc_name", "Dokument")
+            doc_name = sanitize_untrusted_text(c.get("doc_name", "Dokument"))
             score = c.get("score", 0.0)
-            text = c.get("text", "").strip()
+            text = sanitize_untrusted_text(c.get("text", "").strip())
             formatted.append(
                 f"[Úsek {i} | Zdroj: {doc_name} (relevance: {score:.2f})]\n"
                 f"<untrusted_context>\n{text}\n</untrusted_context>"
@@ -952,9 +959,9 @@ class ConversationMemoryService:
             return ""
         formatted = ["RELEVANTNÍ HISTORICKÁ PAMĚŤ:"]
         for i, m in enumerate(memories, 1):
-            title = m.get("session_title", "Předchozí konverzace")
+            title = sanitize_untrusted_text(m.get("session_title", "Předchozí konverzace"))
             score = m.get("score", 0.0)
-            text = m.get("text", "").strip()
+            text = sanitize_untrusted_text(m.get("text", "").strip())
             formatted.append(
                 f"--- Záznam #{i} [Téma: „{title}“, relevance: {score:.2f}] ---\n"
                 f"<untrusted_context>\n{text}\n</untrusted_context>"

@@ -40,6 +40,9 @@ BANNED_BUILTINS: frozenset[str] = frozenset({
     "delattr",
 })
 
+# Alias pro zpětnou kompatibilitu a audit
+BLOCKED_FUNCTIONS: frozenset[str] = BANNED_BUILTINS
+
 # Zákaz přístupu k dunder atributům pro zamezení reflexe a sandbox escape
 BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__subclasses__",
@@ -71,8 +74,8 @@ class BlenderCodeValidator(ast.NodeVisitor):
         for alias in node.names:
             root_module = alias.name.split(".")[0]
             if root_module not in ALLOWED_MODULES:
-                self.errors.append(
-                    f"Importování modulu '{alias.name}' není povoleno. "
+                raise ValueError(
+                    f"Bezpečnostní pojistka: Importování modulu '{alias.name}' není povoleno. "
                     f"Povolené moduly jsou: {', '.join(sorted(ALLOWED_MODULES))}."
                 )
         self.generic_visit(node)
@@ -81,27 +84,27 @@ class BlenderCodeValidator(ast.NodeVisitor):
         mod_name = node.module or ""
         root_module = mod_name.split(".")[0] if mod_name else ""
         if root_module not in ALLOWED_MODULES:
-            self.errors.append(
-                f"Importování z modulu '{mod_name}' není povoleno. "
+            raise ValueError(
+                f"Bezpečnostní pojistka: Importování z modulu '{mod_name}' není povoleno. "
                 f"Povolené moduly jsou: {', '.join(sorted(ALLOWED_MODULES))}."
             )
         for alias in node.names:
             if alias.name in BANNED_BUILTINS or alias.name in BANNED_ATTRIBUTES or alias.name.startswith("__"):
-                self.errors.append(f"Importování prvku '{alias.name}' je z bezpečnostních důvodů zakázáno.")
+                raise ValueError(f"Bezpečnostní pojistka: Importování prvku '{alias.name}' je z bezpečnostních důvodů zakázáno.")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         # Přímé volání funkce podle jména (např. eval(), open(), exec(), getattr())
         if isinstance(node.func, ast.Name):
             func_name = node.func.id
-            if func_name in BANNED_BUILTINS:
-                self.errors.append(f"Volání vestavěné/reflexní funkce '{func_name}()' je z bezpečnostních důvodů zakázáno.")
+            if func_name in BLOCKED_FUNCTIONS:
+                raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{func_name}' je striktně zakázáno.")
 
         # Volání přes atribut (např. os.system(), builtins.eval(), obj.__subclasses__())
         elif isinstance(node.func, ast.Attribute):
             attr_name = node.func.attr
-            if attr_name in BANNED_BUILTINS:
-                self.errors.append(f"Volání zakázané funkce/metody '{attr_name}()' je zakázáno.")
+            if attr_name in BLOCKED_FUNCTIONS:
+                raise ValueError(f"Bezpečnostní pojistka: Volání zakázané funkce/metody '{attr_name}()' je zakázáno.")
             elif attr_name.startswith("__") or attr_name in BANNED_ATTRIBUTES:
                 raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{attr_name}) je striktně zakázán.")
 
@@ -111,12 +114,15 @@ class BlenderCodeValidator(ast.NodeVisitor):
         if node.attr.startswith("__"):
             raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{node.attr}) je striktně zakázán.")
         if node.attr in BANNED_ATTRIBUTES:
-            self.errors.append(f"Přístup k atributu '{node.attr}' je z bezpečnostních důvodů zakázán.")
+            raise ValueError(f"Bezpečnostní pojistka: Přístup k atributu '{node.attr}' je z bezpečnostních důvodů zakázán.")
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
-        if node.id in ("__builtins__", "__globals__") or node.id.startswith("__"):
-            self.errors.append(f"Přímý přístup k identifikátoru '{node.id}' je zakázán.")
+        """Zablokuje použití zakázaných funkcí i jako aliasů nebo proměnných."""
+        if node.id in BLOCKED_FUNCTIONS:
+            raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{node.id}' je striktně zakázáno.")
+        if node.id in ("__builtins__", "__globals__") or node.id.startswith("__") or node.id in BANNED_ATTRIBUTES:
+            raise ValueError(f"Bezpečnostní pojistka: Přímý přístup k internímu identifikátoru '{node.id}' je striktně zakázán.")
         self.generic_visit(node)
 
 
