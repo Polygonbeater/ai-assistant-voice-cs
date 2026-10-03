@@ -3557,21 +3557,31 @@ print(f"Active object: {act.name if act else 'None'}")
     const pName = valid.includes(providerName) ? providerName : 'local';
 
     // Update radio inputs
-    const radio = document.querySelector(`input[name="llm_provider_choice"][value="${pName}"]`);
-    if (radio) radio.checked = true;
+    const radios = document.querySelectorAll(
+      `input[name="ai-brain-provider"][value="${pName}"], input[name="llm_provider_choice"][value="${pName}"]`
+    );
+    radios.forEach(radio => {
+      radio.checked = true;
+    });
 
     // Update active class on provider cards
     document.querySelectorAll('.provider-radio-card').forEach(card => {
-      const cardProvider = card.dataset.provider || card.querySelector('input[name="llm_provider_choice"]')?.value;
-      card.classList.toggle('active', cardProvider === pName);
+      const cardProvider = card.dataset.provider ||
+        card.querySelector('input[name="ai-brain-provider"], input[name="llm_provider_choice"]')?.value;
+      const isActive = (cardProvider === pName);
+      card.classList.toggle('active', isActive);
+      const innerRadio = card.querySelector('input[type="radio"]');
+      if (innerRadio && isActive) {
+        innerRadio.checked = true;
+      }
     });
 
     // Update subpanels visibility
     const subpanels = {
-      local: el.subpanelLocal,
-      groq: el.subpanelGroq,
-      gemini: el.subpanelGemini,
-      custom: el.subpanelCustom,
+      local: el.subpanelLocal || document.getElementById('subpanel-local'),
+      groq: el.subpanelGroq || document.getElementById('subpanel-groq'),
+      gemini: el.subpanelGemini || document.getElementById('subpanel-gemini'),
+      custom: el.subpanelCustom || document.getElementById('subpanel-custom'),
     };
 
     Object.keys(subpanels).forEach(key => {
@@ -3765,8 +3775,13 @@ print(f"Active object: {act.name if act else 'None'}")
         setLanguage(el.cfgLanguage.value);
       }
 
-      const activeProviderRadio = document.querySelector('input[name="llm_provider_choice"]:checked');
-      const activeProvider = activeProviderRadio ? activeProviderRadio.value : 'local';
+      const activeProviderRadio = document.querySelector(
+        'input[name="ai-brain-provider"]:checked, input[name="llm_provider_choice"]:checked'
+      );
+      const activeCard = document.querySelector('.provider-radio-card.active');
+      const activeProvider = activeProviderRadio
+        ? activeProviderRadio.value
+        : (activeCard?.dataset?.provider || 'local');
 
       const payload = {
         language: el.cfgLanguage ? el.cfgLanguage.value : state.language,
@@ -4277,19 +4292,21 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.tabBtnCfgGeneral) el.tabBtnCfgGeneral.addEventListener('click', () => switchSettingsTab('general'));
 
     // Provider Radio Cards Selection
-    document.querySelectorAll('input[name="llm_provider_choice"]').forEach(radio => {
+    document.querySelectorAll('input[name="ai-brain-provider"], input[name="llm_provider_choice"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
-        selectSettingsProvider(e.target.value);
+        if (e.target.checked) {
+          selectSettingsProvider(e.target.value);
+        }
       });
     });
 
     document.querySelectorAll('.provider-radio-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-        const radio = card.querySelector('input[name="llm_provider_choice"]');
-        if (radio) {
-          radio.checked = true;
-          selectSettingsProvider(radio.value);
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        const pName = card.dataset.provider ||
+          card.querySelector('input[name="ai-brain-provider"], input[name="llm_provider_choice"], input[type="radio"]')?.value;
+        if (pName) {
+          selectSettingsProvider(pName);
         }
       });
     });
@@ -4310,10 +4327,13 @@ print(f"Active object: {act.name if act else 'None'}")
     document.querySelectorAll('.model-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const targetId = chip.dataset.target;
-        const modelVal = chip.dataset.model;
+        const modelVal = chip.dataset.val || chip.dataset.model;
         if (targetId && modelVal) {
           const input = document.getElementById(targetId);
-          if (input) input.value = modelVal;
+          if (input) {
+            input.value = modelVal;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
         }
       });
     });

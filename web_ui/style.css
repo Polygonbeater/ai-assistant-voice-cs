@@ -2823,6 +2823,11 @@ pre {
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
 }
 
+.provider-radio-card:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+}
+
 .provider-card-header {
   display: flex;
   align-items: center;
