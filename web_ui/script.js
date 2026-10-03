@@ -3747,7 +3747,7 @@ print(f"Active object: {act.name if act else 'None'}")
       // Gemini
       const geminiCfg = provCfg.gemini || {};
       if (el.cfgGeminiKey) el.cfgGeminiKey.value = geminiCfg.api_key || '';
-      if (el.cfgGeminiModel) el.cfgGeminiModel.value = geminiCfg.model || 'gemini-3.0-flash';
+      if (el.cfgGeminiModel) el.cfgGeminiModel.value = geminiCfg.model || 'gemini-2.5-flash';
 
       // Custom
       const customCfg = provCfg.custom || {};
@@ -3798,7 +3798,7 @@ print(f"Active object: {act.name if act else 'None'}")
           },
           gemini: {
             api_key: el.cfgGeminiKey ? el.cfgGeminiKey.value.trim() : '',
-            model: el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : 'gemini-3.0-flash',
+            model: el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : 'gemini-2.5-flash',
           },
           custom: {
             preset: el.cfgCustomPreset ? el.cfgCustomPreset.value : 'custom',

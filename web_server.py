@@ -119,7 +119,7 @@ def get_active_provider_info() -> dict[str, Any]:
         return {"provider": "groq", "model": m, "display_name": f"Groq: {m}", "is_cloud": True}
     elif active == "gemini":
         gm = provider_cfg.get("gemini", {})
-        m = gm.get("model") or "gemini-3.0-flash"
+        m = gm.get("model") or "gemini-2.5-flash"
         return {"provider": "gemini", "model": m, "display_name": f"Gemini: {m}", "is_cloud": True}
     elif active == "custom":
         c = provider_cfg.get("custom", {})
@@ -164,7 +164,7 @@ def get_llm():
             model = model or "openai/gpt-oss-120b"
         elif active_provider == "gemini":
             base_url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
-            model = model or "gemini-3.0-flash"
+            model = model or "gemini-2.5-flash"
         elif active_provider == "custom":
             base_url = base_url or "https://api.openai.com/v1"
             model = model or "gpt-4o"
@@ -1201,7 +1201,7 @@ def test_connection_endpoint(req: TestConnectionRequest, request: Request):
         if provider == "groq":
             model = "openai/gpt-oss-120b"
         elif provider == "gemini":
-            model = "gemini-3.0-flash"
+            model = "gemini-2.5-flash"
         else:
             model = "gpt-4o"
 
@@ -1226,7 +1226,7 @@ def get_config():
     llm_prov = safe_cfg.setdefault("llm_provider", {
         "active_provider": "local",
         "groq": {"api_key": "", "model": "openai/gpt-oss-120b", "base_url": "https://api.groq.com/openai/v1"},
-        "gemini": {"api_key": "", "model": "gemini-3.0-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
+        "gemini": {"api_key": "", "model": "gemini-2.5-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
         "custom": {"provider_name": "OpenAI", "base_url": "https://api.openai.com/v1", "api_key": "", "model": "gpt-4o", "temperature": 0.7}
     })
     for p_name in ("groq", "gemini", "custom"):

@@ -55,7 +55,7 @@
     },
     "gemini": {
       "api_key": "",
-      "model": "gemini-3.0-flash",
+      "model": "gemini-2.5-flash",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"
     },
     "custom": {

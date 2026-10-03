@@ -58,7 +58,7 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
                         "gemini": {
                             "api_key": "saved-secret",
                             "base_url": "https://generativelanguage.googleapis.com/v1beta/v1main/openai/",
-                            "model": "gemini-2.0-flash",
+                            "model": "gemini-2.5-flash",
                         }
                     }
                 },
@@ -76,7 +76,7 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
             provider_type="gemini",
             base_url="https://generativelanguage.googleapis.com/v1beta/v1beta/openai/",
             api_key="saved-secret",
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
         )
 
     def test_custom_provider_type_uses_custom_saved_credentials(self):
