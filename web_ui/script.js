@@ -690,7 +690,7 @@
       provider_groq: 'Groq Cloud',
       provider_groq_desc: 'Ultra-fast GPT OSS & Qwen 3.8',
       provider_gemini: 'Google Gemini',
-      provider_gemini_desc: 'Gemini 2.0 Flash & 1.5 Pro',
+      provider_gemini_desc: 'Gemini Flash Latest',
       provider_custom: 'Custom / Paid API',
       provider_custom_desc: 'OpenAI, DeepSeek, OpenRouter, vLLM',
       cfg_local_model_label: 'Active .gguf Model:',
@@ -941,7 +941,7 @@
       provider_groq: 'Groq Cloud',
       provider_groq_desc: 'Bleskové modely GPT OSS a Qwen 3.8',
       provider_gemini: 'Google Gemini',
-      provider_gemini_desc: 'Gemini 2.0 Flash a 1.5 Pro',
+      provider_gemini_desc: 'Gemini Flash Latest',
       provider_custom: 'Vlastní / Placené API',
       provider_custom_desc: 'OpenAI, DeepSeek, OpenRouter, vLLM',
       cfg_local_model_label: 'Aktivní .gguf model:',
@@ -3747,7 +3747,7 @@ print(f"Active object: {act.name if act else 'None'}")
       // Gemini
       const geminiCfg = provCfg.gemini || {};
       if (el.cfgGeminiKey) el.cfgGeminiKey.value = geminiCfg.api_key || '';
-      if (el.cfgGeminiModel) el.cfgGeminiModel.value = geminiCfg.model || 'gemini-2.5-flash';
+      if (el.cfgGeminiModel) el.cfgGeminiModel.value = geminiCfg.model || 'gemini-flash-latest';
 
       // Custom
       const customCfg = provCfg.custom || {};
@@ -3798,7 +3798,7 @@ print(f"Active object: {act.name if act else 'None'}")
           },
           gemini: {
             api_key: el.cfgGeminiKey ? el.cfgGeminiKey.value.trim() : '',
-            model: el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : 'gemini-2.5-flash',
+            model: el.cfgGeminiModel ? el.cfgGeminiModel.value.trim() : 'gemini-flash-latest',
           },
           custom: {
             preset: el.cfgCustomPreset ? el.cfgCustomPreset.value : 'custom',

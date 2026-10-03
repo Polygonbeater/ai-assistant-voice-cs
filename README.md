@@ -49,7 +49,7 @@ The assistant's architecture synchronizes three tightly integrated pillars: hear
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 2. HOW THE ASSISTANT THINKS (Hybrid LLM + Semantic Memory RAG)         │
 │ • llama-cpp-python: Local GGUF models (Qwen 2.5, GLM-4) on CPU+Vulkan │
-│ • Cloud LPUs & Multimodal: Groq (Llama 3.3), Gemini 2.0, DeepSeek      │
+│ • Cloud LPUs & Multimodal: Groq, Gemini Flash Latest, DeepSeek         │
 │ • Long-term Semantic Memory: FAISS vector database + all-MiniLM-L6-v2  │
 │ • Local Document RAG: PDF / DOCX parsing and contextual extraction     │
 │ • Dynamic Contextual Tool Loader (22 registered tools -> 4 in chat)    │

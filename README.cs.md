@@ -49,7 +49,7 @@ Jádro systému tvoří tři synchronizované pilíře, které určují, jak asi
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 2. JAK ASISTENT MYSLÍ (Hybridní LLM + Sémantická paměť RAG)           │
 │ • llama-cpp-python: Lokální GGUF inference (Qwen 2.5, GLM-4) na Vulkan │
-│ • Cloud LPU & Multimodalita: Groq (Llama 3.3), Gemini 2.0, DeepSeek   │
+│ • Cloud LPU & Multimodalita: Groq, Gemini Flash Latest, DeepSeek     │
 │ • Dlouhodobá sémantická paměť: FAISS vektorová databáze + MiniLM       │
 │ • Lokální dokumentový RAG: PDF / DOCX parsing a vyhledávání faktů      │
 │ • Dynamické kontextové načítání nástrojů (22 nástrojů -> 4 v chatu)   │
