@@ -30,21 +30,23 @@ class TestSecurityPatches(unittest.TestCase):
     # 1. AST Gatekeeper (RCE, Reflection & Aliases)
     # =========================================================================
     def test_ast_blocks_reflection_builtins(self):
-        """Ověří, že getattr, setattr, hasattr a delattr jsou striktně zakázány."""
-        for fn in ("getattr(bpy, 'ops')", "setattr(bpy, 'x', 1)", "hasattr(bpy, 'context')", "delattr(bpy, 'x')"):
+        """Ověří, že getattr, setattr, hasattr, delattr, vars a dir jsou striktně zakázány."""
+        for fn in ("getattr(bpy, 'ops')", "setattr(bpy, 'x', 1)", "hasattr(bpy, 'context')", "delattr(bpy, 'x')", "vars()", "dir()"):
             code = f"import bpy\n{fn}"
             is_valid, msg = validate_blender_code(code)
             self.assertFalse(is_valid, f"Funkce {fn} nebyla zablokována!")
             self.assertIn("Bezpečnostní pojistka", msg)
 
     def test_ast_blocks_function_aliasing(self):
-        """Ověří, že zakázané funkce nelze přiřadit do proměnné/aliasu (např. x = getattr)."""
+        """Ověří, že zakázané funkce nelze přiřadit do proměnné/aliasu (např. x = getattr, v = vars)."""
         alias_snippets = [
             "x = getattr\nx(bpy, 'ops')",
             "f = eval\nf('1+1')",
             "h = hasattr\nh(bpy, 'context')",
             "o = open\no('/etc/passwd')",
             "e = exec\ne('a = 1')",
+            "v = vars\nv()",
+            "d = dir\nd()",
         ]
         for snip in alias_snippets:
             code = f"import bpy\n{snip}"

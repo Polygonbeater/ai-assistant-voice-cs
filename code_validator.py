@@ -32,6 +32,8 @@ BANNED_BUILTINS: frozenset[str] = frozenset({
     "open",
     "globals",
     "locals",
+    "vars",
+    "dir",
     "exit",
     "quit",
     "getattr",
