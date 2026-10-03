@@ -704,7 +704,7 @@
       modal_diff_title: 'Code Diff Viewer',
       view_diff: 'View Diff',
       view_diff_title: 'Compare changes against previous Blender script',
-      run_in_blender: '🚀 Run in Blender',
+      run_in_blender: 'Run in Blender',
       run_in_blender_short: 'Run in Blender',
       run_in_blender_title: 'Execute script directly in Blender',
       diff_identical: 'Code is identical to the last known script.',
@@ -953,7 +953,7 @@
       modal_diff_title: 'Porovnání změn kódu',
       view_diff: 'Zobrazit změny',
       view_diff_title: 'Porovnat změny s předchozím Blender skriptem',
-      run_in_blender: '🚀 Spustit v Blenderu',
+      run_in_blender: 'Spustit v Blenderu',
       run_in_blender_short: 'Spustit v Blenderu',
       run_in_blender_title: 'Spustit skript přímo v Blenderu',
       diff_identical: 'Kód je identický s naposledy evidovaným skriptem.',
@@ -1878,8 +1878,8 @@
   window.copyCode = (btn) => {
     if (!btn) return;
     const code = btn.dataset.code || '';
-    const checkSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-    const copySvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
+    const checkSvg = `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    const copySvg = `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
     const copyLabel = escapeHtml(t('copy_code'));
     const copiedLabel = escapeHtml(t('copied_code'));
 
@@ -1940,17 +1940,17 @@
       const isBlenderCode = (cleanLang === 'python' || cleanLang === 'py' || rawCode.includes('import bpy') || rawCode.includes('bpy.'));
 
       const copyLabel = escapeHtml(t('copy_code'));
-      const copySvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
+      const copySvg = `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
 
       let extraButtons = '';
       if (isBlenderCode) {
         const diffLabel = escapeHtml(t('view_diff'));
         const diffTitle = escapeHtml(t('view_diff_title'));
-        const diffSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>`;
+        const diffSvg = `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><path d="M11 18H8a2 2 0 0 1-2-2V9"></path></svg>`;
 
         const runLabel = escapeHtml(t('run_in_blender_short'));
         const runTitle = escapeHtml(t('run_in_blender_title'));
-        const runSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+        const runSvg = `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
 
         extraButtons = `
           <button class="diff-code-btn" onclick="window.showCodeDiffFromBtn(this)" data-code="${escapeHtml(rawCode)}" title="${diffTitle}">${diffSvg} <span>${diffLabel}</span></button>

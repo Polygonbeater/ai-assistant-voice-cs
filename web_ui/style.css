@@ -958,7 +958,7 @@ body.is-resizing-card * {
   color: var(--text-muted);
 }
 .code-block-actions {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
@@ -967,15 +967,17 @@ body.is-resizing-card * {
 .run-code-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 6px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11.5px;
   font-family: var(--font-sans);
   font-weight: 500;
+  line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
@@ -1017,13 +1019,18 @@ body.is-resizing-card * {
   pointer-events: none;
   animation: pulse 1s infinite;
 }
+.copy-code-btn .btn-icon,
+.diff-code-btn .btn-icon,
+.run-code-btn .btn-icon,
 .copy-code-btn svg,
 .diff-code-btn svg,
 .run-code-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   display: block;
   flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
 }
 .code-block pre,
 .code-block-wrapper pre,
