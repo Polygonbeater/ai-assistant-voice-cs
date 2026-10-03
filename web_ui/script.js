@@ -2924,6 +2924,8 @@
     return ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].some(ext => name.endsWith(ext));
   }
 
+  let uploadToken = 0;
+
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -2937,6 +2939,7 @@
   }
 
   async function setAttachedFile(file) {
+    const currentUploadToken = ++uploadToken;
     state.attachedFile = file;
     state.attachedImages = [];
     if (file) {
@@ -2956,21 +2959,35 @@
         const readPromise = (async () => {
           try {
             const b64 = await fileToBase64(file);
+            if (currentUploadToken !== uploadToken) {
+              return;
+            }
             if (b64) {
               state.attachedImages = [b64];
             }
           } catch (err) {
+            if (currentUploadToken !== uploadToken) {
+              return;
+            }
             logConsole(`Error reading image: ${err.message}`, 'error');
           } finally {
-            state.isFileLoading = false;
-            state.pendingFileRead = null;
-            if (el.btnSend && !state.isStreaming) {
-              el.btnSend.disabled = false;
+            if (currentUploadToken === uploadToken) {
+              state.isFileLoading = false;
+              state.pendingFileRead = null;
+              if (el.btnSend && !state.isStreaming) {
+                el.btnSend.disabled = false;
+              }
             }
           }
         })();
         state.pendingFileRead = readPromise;
         await readPromise;
+      } else {
+        state.isFileLoading = false;
+        state.pendingFileRead = null;
+        if (el.btnSend && !state.isStreaming) {
+          el.btnSend.disabled = false;
+        }
       }
     } else {
       state.isFileLoading = false;
