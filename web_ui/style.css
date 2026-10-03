@@ -551,14 +551,16 @@ body.is-resizing-card * {
 }
 
 .chat-header {
-  height: 48px;
+  height: auto;
   min-height: 48px;
   background: var(--bg-canvas);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  gap: 8px;
+  padding: 6px 20px;
 }
 
 .chat-header-title-group {
@@ -619,14 +621,29 @@ body.is-resizing-card * {
 
 .chat-controls-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .chat-controls-group .select-wrapper {
   display: inline-flex;
   align-items: center;
+}
+
+.preset-select-wrapper {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  max-width: 100%;
+  padding: 4px 9px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+}
+.preset-select-wrapper:focus-within {
+  border-color: var(--cyan-primary);
 }
 
 .preset-icon {
@@ -642,6 +659,18 @@ body.is-resizing-card * {
   display: block;
   width: 16px;
   height: 16px;
+}
+
+.preset-select-wrapper .polygon-select {
+  min-width: 0;
+  max-width: 260px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+}
+.preset-select-wrapper .polygon-select:focus {
+  border-color: transparent;
 }
 
 .polygon-select,

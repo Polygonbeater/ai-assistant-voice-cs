@@ -137,18 +137,20 @@
           <div class="chat-controls-group">
             <div class="select-wrapper">
               <label for="select-preset" class="sr-only" data-i18n="select_preset_label">Methodology</label>
-              <span class="preset-icon" id="preset-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"></rect><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01M9 9l6 6M15 9l-6 6"></path><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"></path></svg></span>
-              <select id="select-preset" class="polygon-select" data-i18n-title="select_preset_title" title="Select expert analytical framework">
-                <option value="standard" data-i18n="preset_standard">Standard Assistant (Off)</option>
-                <option value="auto" data-i18n="preset_auto">Auto-Select Methodology</option>
-                <option value="auteur" data-i18n="preset_auteur">Auteur & Visual Style</option>
-                <option value="first_principles" data-i18n="preset_first_principles">First Principles (3D CAD)</option>
-                <option value="red_team" data-i18n="preset_red_team">Red Team & Counter-Analysis</option>
-                <option value="deep_analysis" data-i18n="preset_deep_analysis">In-Depth Analysis v3.1</option>
-                <option value="assumption_audit" data-i18n="preset_assumption_audit">Assumption Audit (Standard)</option>
-                <option value="assumption_audit_crisis" data-i18n="preset_assumption_audit_crisis">Assumption Audit (Crisis)</option>
-                <option value="meta_analysis" data-i18n="preset_meta_analysis">Meta-Analysis (Full Template)</option>
-              </select>
+              <div class="preset-select-wrapper">
+                <span class="preset-icon" id="preset-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"></rect><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01M9 9l6 6M15 9l-6 6"></path><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"></path></svg></span>
+                <select id="select-preset" class="polygon-select" data-i18n-title="select_preset_title" title="Select expert analytical framework">
+                  <option value="standard" data-i18n="preset_standard">Standard Assistant (Off)</option>
+                  <option value="auto" data-i18n="preset_auto">Auto-Select Methodology</option>
+                  <option value="auteur" data-i18n="preset_auteur">Auteur & Visual Style</option>
+                  <option value="first_principles" data-i18n="preset_first_principles">First Principles (3D CAD)</option>
+                  <option value="red_team" data-i18n="preset_red_team">Red Team & Counter-Analysis</option>
+                  <option value="deep_analysis" data-i18n="preset_deep_analysis">In-Depth Analysis v3.1</option>
+                  <option value="assumption_audit" data-i18n="preset_assumption_audit">Assumption Audit (Standard)</option>
+                  <option value="assumption_audit_crisis" data-i18n="preset_assumption_audit_crisis">Assumption Audit (Crisis)</option>
+                  <option value="meta_analysis" data-i18n="preset_meta_analysis">Meta-Analysis (Full Template)</option>
+                </select>
+              </div>
             </div>
 
             <button class="toggle-pill active" id="toggle-online" data-i18n-title="toggle_web_tools_title" title="Enable web search and external tools">
