@@ -1,38 +1,61 @@
-# Ignoruj AI modely
-models/
+# ==============================================================================
+# POLYGON BEATER — .gitignore
+# ==============================================================================
 
-# Ignoruj balíčky virtuálního prostředí
-venv/
+# AI Modely a váhy
+models/*
+!models/.gitkeep
+*.gguf
+*.bin
+*.pth
+*.onnx
 
-# Ignoruj sestavené soubory PyInstaller
-build/
-dist/
-main.spec
-
-# Ignoruj dočasné a cache soubory
-__pycache__/
-*.pyc
-
-# Lokální konfigurace a citlivé klíče
+# Lokální konfigurace a privátní API klíče
 config.json
+!config.example.json
 
-# Nahrávky a audio mezipaměť
-debug_recording.wav
-*.wav
+# Virtuální prostředí a balíčky
+venv/
+.venv/
+env/
 
-# Lokální RAG vektorové úložiště
+# Python cache a mezisoubory
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# RAG sémantická paměť a vektorová databáze (FAISS)
 rag_storage/
+*.faiss
+*.pkl
 
-# Python virtuální prostředí a cache
-venv/
-__pycache__/
-config.json
-*.log
+# Historie relací a konverzací
 sessions/*.json
 !sessions/.gitkeep
-models/
-venv/
-__pycache__/
-*.pyc
+
+# Zvukové nahrávky a dočasné audio soubory
+*.wav
+*.mp3
+*.ogg
+*.webm
+debug_recording.wav
+
+# Logy a dočasné soubory
+*.log
 *.bak
 *.bak_*
+.worktrees/
+
+# PyInstaller a sestavení
+build/
+dist/
+*.spec
+
+# Systémové a editorové soubory
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -4,10 +4,12 @@
     "language": "cs"
   },
   "llama": {
-    "model": "models/glm-4-9b-chat.Q4_K_M.gguf",
+    "model": "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     "n_ctx": 16384,
-    "n_gpu_layers": 0,
-    "max_tokens": 1024
+    "n_gpu_layers": 12,
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "system_prompt": "Jsi užitečná a zdvořilá AI asistentka s expertními schopnostmi v 3D grafice a CAD modelování. Odpovídej stručně a k věci v češtině."
   },
   "tts": {
     "model_name": "tts_models/cs/cv/vits",
@@ -38,6 +40,30 @@
     "chunk_size": 450,
     "chunk_overlap": 50,
     "top_k": 3,
-    "storage_dir": "rag_storage"
+    "storage_dir": "rag_storage",
+    "memory_storage_dir": "rag_storage/memory",
+    "memory_top_k": 2,
+    "memory_score_threshold": 0.35
+  },
+  "llm_provider": {
+    "active_provider": "local",
+    "groq": {
+      "api_key": "",
+      "model": "llama-3.3-70b-versatile",
+      "base_url": "https://api.groq.com/openai/v1"
+    },
+    "gemini": {
+      "api_key": "",
+      "model": "gemini-2.0-flash",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "custom": {
+      "provider_name": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "",
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "max_tokens": 2048
+    }
   }
 }
