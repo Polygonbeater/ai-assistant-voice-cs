@@ -40,7 +40,7 @@ class TestLlmResponseLimits(unittest.TestCase):
 
     def test_openai_compatible_client_forwards_large_token_limit(self):
         response = MagicMock(ok=True)
-        response.json.return_value = {"choices": []}
+        response.content = b'{"choices": []}'
 
         with patch("llama_module.requests.post", return_value=response) as post:
             client = OpenAICompatibleClient("https://api.example/v1", model="test-model")

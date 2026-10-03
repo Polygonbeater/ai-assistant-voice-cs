@@ -436,7 +436,7 @@ class TestDemo(unittest.TestCase):
         self.assertEqual(client.api_key, "sk-test-secret-key-123")
         with patch("requests.post") as mock_post:
             mock_post.return_value.__enter__.return_value.status_code = 200
-            mock_post.return_value.__enter__.return_value.iter_lines.return_value = []
+            mock_post.return_value.__enter__.return_value.iter_content.return_value = []
             list(client.create_chat_completion(messages=[{"role": "user", "content": "hi"}], stream=True))
             call_headers = mock_post.call_args[1]["headers"]
             self.assertEqual(call_headers.get("Authorization"), "Bearer sk-test-secret-key-123")

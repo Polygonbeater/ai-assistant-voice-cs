@@ -660,7 +660,7 @@ async def chat_stream(req: ChatRequest, request: Request):
 
     # Fronta pro přenos událostí z worker vlákna do SSE streamu
     event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-    collected_tokens: list[str] = []
+    collected_answer_tokens: list[str] = []
     collected_sentences: list[str] = []
 
     def worker():
@@ -677,8 +677,10 @@ async def chat_stream(req: ChatRequest, request: Request):
                 event_queue.put({"type": "methodology", "content": detected})
 
             def _on_token(token: str):
-                collected_tokens.append(token)
                 event_queue.put({"type": "token", "content": token, "chunk": token})
+
+            def _on_answer_token(token: str):
+                collected_answer_tokens.append(token)
 
             def _on_status(status: str):
                 event_queue.put({"type": "status", "content": status})
@@ -728,6 +730,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                 req_config,
                 chat_history=chat_history,
                 callback_on_token=_on_token,
+                callback_on_answer_token=_on_answer_token,
                 status_callback=_on_status,
                 stop_event=session_stop,
                 document_service=document_service,
@@ -738,22 +741,13 @@ async def chat_stream(req: ChatRequest, request: Request):
             ):
                 collected_sentences.append(chunk)
 
-            yielded_reply = " ".join(collected_sentences).strip()
-            callback_reply = "".join(collected_tokens).strip()
-            normalized_yielded = re.sub(r"\s+", " ", yielded_reply).strip()
-            normalized_callback = re.sub(r"\s+", " ", callback_reply).strip()
-            yielded_reply_was_streamed = bool(normalized_yielded) and (
-                normalized_yielded in normalized_callback
-            )
-            if yielded_reply and not yielded_reply_was_streamed:
+            yielded_reply = "".join(collected_sentences).strip()
+            streamed_answer = "".join(collected_answer_tokens).strip()
+            if yielded_reply and not streamed_answer:
                 for chunk in collected_sentences:
                     event_queue.put({"type": "token", "content": chunk, "chunk": chunk})
 
-            full_reply = (
-                callback_reply
-                if yielded_reply_was_streamed
-                else yielded_reply or callback_reply
-            )
+            full_reply = streamed_answer or yielded_reply
             if full_reply:
                 history_repository.append(session_id, "assistant", full_reply)
 

@@ -8,6 +8,49 @@ from web_server import app
 
 
 class ChatWorkerErrorTests(unittest.TestCase):
+    def test_answer_tokens_are_not_duplicated_or_mixed_with_tool_notifications(self):
+        client = TestClient(app, headers={"X-Polygon-Client": "true"})
+
+        def generate_with_answer_callback(*args, **kwargs):
+            callback_on_token = kwargs["callback_on_token"]
+            callback_on_answer_token = kwargs["callback_on_answer_token"]
+            callback_on_token("Tool call notification")
+            for token in ("Final ", "answer."):
+                callback_on_token(token)
+                callback_on_answer_token(token)
+            yield "Final answer."
+
+        with (
+            patch("web_server.get_llm", return_value=MagicMock()),
+            patch(
+                "web_server.generate_response",
+                side_effect=generate_with_answer_callback,
+            ),
+        ):
+            response = client.post(
+                "/api/chat",
+                json={
+                    "session_id": "worker-answer-callback-test",
+                    "prompt": "Test streamed answer",
+                    "language": "en",
+                    "rag_enabled": False,
+                },
+            )
+
+        events = [
+            json.loads(line[6:])
+            for line in response.iter_lines()
+            if line.startswith("data: {")
+        ]
+        token_events = [
+            event["content"] for event in events if event.get("type") == "token"
+        ]
+        self.assertEqual(token_events, ["Tool call notification", "Final ", "answer."])
+        self.assertEqual(
+            next(event["content"] for event in events if event.get("type") == "done"),
+            "Final answer.",
+        )
+
     def test_yielded_chunks_reach_sse_when_callback_omits_final_response(self):
         client = TestClient(app, headers={"X-Polygon-Client": "true"})
 

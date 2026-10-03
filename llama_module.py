@@ -499,25 +499,65 @@ class OpenAICompatibleClient:
                 err_text = resp.content.decode("utf-8", errors="replace")[:400]
                 raise RuntimeError(f"API Provider Error (HTTP {resp.status_code}): {err_text}")
 
-            for raw_line in resp.iter_lines():
-                if not raw_line:
+            pending = b""
+            data_lines: list[bytes] = []
+
+            for raw_chunk in resp.iter_content(chunk_size=1024):
+                if not raw_chunk:
                     continue
-                line_text = (
-                    raw_line.decode("utf-8", errors="replace")
-                    if isinstance(raw_line, bytes)
-                    else raw_line
-                )
-                line = line_text.strip()
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                    yield chunk
-                except Exception:
-                    continue
+                if isinstance(raw_chunk, str):
+                    raw_chunk = raw_chunk.encode("utf-8")
+                pending += raw_chunk
+
+                while b"\n" in pending:
+                    raw_line, pending = pending.split(b"\n", 1)
+                    data_str = self._consume_sse_line(raw_line, data_lines)
+                    if data_str is not None:
+                        if data_str == "[DONE]":
+                            return
+                        yield self._decode_sse_json(data_str)
+
+            if pending:
+                data_str = self._consume_sse_line(pending, data_lines)
+                if data_str is not None:
+                    if data_str == "[DONE]":
+                        return
+                    yield self._decode_sse_json(data_str)
+
+            data_str = self._consume_sse_line(b"", data_lines)
+            if data_str is not None and data_str != "[DONE]":
+                yield self._decode_sse_json(data_str)
+
+    @staticmethod
+    def _decode_sse_json(data: str) -> Any:
+        try:
+            return json.loads(data)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("API stream contained invalid SSE JSON data") from exc
+
+    @staticmethod
+    def _consume_sse_line(line: bytes, data_lines: list[bytes]) -> str | None:
+        line = line.removesuffix(b"\r")
+        if not line:
+            if not data_lines:
+                return None
+            event_data = b"\n".join(data_lines)
+            data_lines.clear()
+            try:
+                return event_data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise RuntimeError("API stream contained invalid UTF-8 data") from exc
+
+        if line.startswith(b":"):
+            return None
+
+        field, separator, value = line.partition(b":")
+        if field != b"data" or not separator:
+            return None
+        if value.startswith(b" "):
+            value = value[1:]
+        data_lines.append(value)
+        return None
 
 
 def test_provider_connection(
@@ -5088,6 +5128,7 @@ def generate_response(
     enable_tools: bool = True,
     tool_callback=None,
     images: list[str] | None = None,
+    callback_on_answer_token=None,
     **kwargs
 ):
     """
@@ -5099,10 +5140,15 @@ def generate_response(
     - execute_blender_code(code)
     - inspect_blender_scene()
     """
+    def emit_answer_token(text: str) -> None:
+        if callback_on_token:
+            callback_on_token(text)
+        if callback_on_answer_token:
+            callback_on_answer_token(text)
+
     math_result = _try_evaluate_math(prompt)
     if math_result:
-        if callback_on_token:
-            callback_on_token(math_result)
+        emit_answer_token(math_result)
         yield math_result
         return
 
@@ -5303,20 +5349,33 @@ def generate_response(
         for chunk in first_stream:
             if stop_event and stop_event.is_set():
                 return
-            delta = chunk["choices"][0].get("delta", {})
+            choices = chunk.get("choices") if isinstance(chunk, dict) else None
+            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                continue
+            delta = choices[0].get("delta")
+            if not isinstance(delta, dict):
+                continue
 
             # OpenAI-compatible APIs mohou posílat nativní volání nástrojů
             # po částech samostatně od textového obsahu.
             native_calls = delta.get("tool_calls") or []
-            if native_calls:
+            if isinstance(native_calls, list) and native_calls:
                 is_tool_candidate = True
                 for tool_call in native_calls:
+                    if not isinstance(tool_call, dict):
+                        continue
                     index = tool_call.get("index", 0)
+                    if not isinstance(index, int):
+                        index = 0
                     call = streamed_tool_calls.setdefault(
                         index, {"name": "", "arguments": ""}
                     )
                     function = tool_call.get("function") or {}
-                    call["name"] += function.get("name") or ""
+                    if not isinstance(function, dict):
+                        continue
+                    name = function.get("name")
+                    if isinstance(name, str):
+                        call["name"] += name
                     arguments = function.get("arguments")
                     if isinstance(arguments, str):
                         call["arguments"] += arguments
@@ -5327,7 +5386,9 @@ def generate_response(
             legacy_call = delta.get("function_call")
             if isinstance(legacy_call, dict):
                 is_tool_candidate = True
-                streamed_function_call["name"] += legacy_call.get("name") or ""
+                name = legacy_call.get("name")
+                if isinstance(name, str):
+                    streamed_function_call["name"] += name
                 arguments = legacy_call.get("arguments")
                 if isinstance(arguments, str):
                     streamed_function_call["arguments"] += arguments
@@ -5337,13 +5398,12 @@ def generate_response(
                     )
                 continue
 
-            text_piece = delta.get("content") or ""
-            if not text_piece:
+            text_piece = delta.get("content")
+            if not isinstance(text_piece, str) or not text_piece:
                 continue
 
             if not tools_enabled:
-                if callback_on_token:
-                    callback_on_token(text_piece)
+                emit_answer_token(text_piece)
                 sentence_buffer += text_piece
                 ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
                 for rc in ready_chunks:
@@ -5363,8 +5423,7 @@ def generate_response(
                     is_tool_candidate = True
                 else:
                     is_tool_candidate = False
-                    if callback_on_token:
-                        callback_on_token(first_turn_buffer)
+                    emit_answer_token(first_turn_buffer)
                     sentence_buffer += first_turn_buffer
                     ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
                     for rc in ready_chunks:
@@ -5372,8 +5431,32 @@ def generate_response(
                 continue
 
             if not is_tool_candidate:
-                if callback_on_token:
-                    callback_on_token(text_piece)
+                marker_positions = [
+                    text_piece.find(marker) for marker in ("{", "<", "`")
+                ]
+                marker_position = min(
+                    (position for position in marker_positions if position >= 0),
+                    default=-1,
+                )
+                if marker_position >= 0:
+                    plain_text = text_piece[:marker_position]
+                    if plain_text:
+                        emit_answer_token(plain_text)
+                        sentence_buffer += plain_text
+                        ready_chunks, sentence_buffer = extract_sentence_chunks(
+                            sentence_buffer, is_final=False
+                        )
+                        for rc in ready_chunks:
+                            yield rc
+                    is_tool_candidate = True
+                    first_turn_buffer = text_piece[marker_position:]
+                    parsed = parse_tool_call(first_turn_buffer)
+                    if parsed:
+                        tool_call_detected = parsed
+                        break
+                    continue
+
+                emit_answer_token(text_piece)
                 sentence_buffer += text_piece
                 ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
                 for rc in ready_chunks:
@@ -5421,8 +5504,7 @@ def generate_response(
 
         if not tool_call_detected:
             # Buffer neobsahoval validní volání nástroje -> uvolníme ho jako běžný text
-            if callback_on_token:
-                callback_on_token(first_turn_buffer)
+            emit_answer_token(first_turn_buffer)
             sentence_buffer += first_turn_buffer
             final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
             for rc in final_chunks:
@@ -5507,8 +5589,7 @@ def generate_response(
             if not isinstance(text_piece, str) or not text_piece:
                 continue
 
-            if callback_on_token:
-                callback_on_token(text_piece)
+            emit_answer_token(text_piece)
             sentence_buffer += text_piece
             ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
             for rc in ready_chunks:
@@ -5539,15 +5620,13 @@ def generate_response(
                 "I see you uploaded an image, but my currently active model does not support image processing (Vision). "
                 "Please switch to a multimodal model or use a Cloud API."
             )
-            if callback_on_token:
-                callback_on_token(fallback_msg)
+            emit_answer_token(fallback_msg)
             yield fallback_msg
             return
 
         logging.error("Chyba při generování: %s", exc)
         err_msg = f"Omlouvám se, došlo k chybě: {exc}"
-        if callback_on_token:
-            callback_on_token(err_msg)
+        emit_answer_token(err_msg)
         yield err_msg
 
 
