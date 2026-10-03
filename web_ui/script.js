@@ -68,6 +68,9 @@
     toolsRegistry: [],
   };
 
+  let lastKnownBlenderCode = "";
+  let currentDiffPendingCode = "";
+
   // ===========================================================================
   // TOOLS REGISTRY (22 Registered Tools)
   // ===========================================================================
@@ -445,6 +448,13 @@
     imageLightbox: document.getElementById('image-lightbox'),
     lightboxImg: document.getElementById('lightbox-img'),
     btnCloseLightbox: document.getElementById('btn-close-lightbox'),
+
+    // Code Diff Viewer Modal
+    modalDiff: document.getElementById('diff-modal'),
+    diffContent: document.getElementById('diff-content'),
+    btnCloseDiffModal: document.getElementById('btn-close-diff-modal'),
+    diffCloseBtn: document.getElementById('diff-close-btn'),
+    diffRunBtn: document.getElementById('diff-run-btn'),
   };
 
   // ===========================================================================
@@ -691,6 +701,14 @@
       test_connection_err: 'Connection Error: {error}',
       model_switched_success: 'Model "{model}" successfully loaded into memory.',
       error_switch_model: 'Failed to switch model: ',
+      modal_diff_title: 'Code Diff Viewer',
+      view_diff: 'View Diff',
+      view_diff_title: 'Compare changes against previous Blender script',
+      run_in_blender: '🚀 Run in Blender',
+      run_in_blender_short: 'Run in Blender',
+      run_in_blender_title: 'Execute script directly in Blender',
+      diff_identical: 'Code is identical to the last known script.',
+      btn_close: 'Close',
     },
     cs: {
       status_llm: 'Qwen2.5-7B GGUF',
@@ -932,6 +950,14 @@
       test_connection_err: 'Chyba spojení: {error}',
       model_switched_success: 'Model "{model}" byl úspěšně zaveden do paměti.',
       error_switch_model: 'Chyba při zavádění modelu: ',
+      modal_diff_title: 'Porovnání změn kódu',
+      view_diff: 'Zobrazit změny',
+      view_diff_title: 'Porovnat změny s předchozím Blender skriptem',
+      run_in_blender: '🚀 Spustit v Blenderu',
+      run_in_blender_short: 'Spustit v Blenderu',
+      run_in_blender_title: 'Spustit skript přímo v Blenderu',
+      diff_identical: 'Kód je identický s naposledy evidovaným skriptem.',
+      btn_close: 'Zavřít',
     }
   };
 
@@ -1867,6 +1893,23 @@
     }).catch(() => {});
   };
 
+  // Global handler for diff viewer from button
+  window.showCodeDiffFromBtn = (btn) => {
+    if (!btn) return;
+    const code = btn.dataset.code || '';
+    showCodeDiff(code);
+  };
+
+  // Global handler for running blender code directly from code block button
+  window.runCodeFromBtn = async (btn) => {
+    if (!btn) return;
+    const code = btn.dataset.code || '';
+    await runBlenderCodeDirect(code, btn);
+  };
+
+  // Export showCodeDiff globally
+  window.showCodeDiff = (code) => showCodeDiff(code);
+
   function renderMarkdown(rawText) {
     if (!rawText) return '';
 
@@ -1894,14 +1937,35 @@
       }
 
       const displayLang = cleanLang || 'code';
+      const isBlenderCode = (cleanLang === 'python' || cleanLang === 'py' || rawCode.includes('import bpy') || rawCode.includes('bpy.'));
+
       const copyLabel = escapeHtml(t('copy_code'));
       const copySvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`;
+
+      let extraButtons = '';
+      if (isBlenderCode) {
+        const diffLabel = escapeHtml(t('view_diff'));
+        const diffTitle = escapeHtml(t('view_diff_title'));
+        const diffSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>`;
+
+        const runLabel = escapeHtml(t('run_in_blender_short'));
+        const runTitle = escapeHtml(t('run_in_blender_title'));
+        const runSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+
+        extraButtons = `
+          <button class="diff-code-btn" onclick="window.showCodeDiffFromBtn(this)" data-code="${escapeHtml(rawCode)}" title="${diffTitle}">${diffSvg} <span>${diffLabel}</span></button>
+          <button class="run-code-btn" onclick="window.runCodeFromBtn(this)" data-code="${escapeHtml(rawCode)}" title="${runTitle}">${runSvg} <span>${runLabel}</span></button>
+        `;
+      }
 
       codeBlocks.push(
         `<div class="code-block">` +
           `<div class="code-block-header">` +
             `<span class="code-block-lang">${escapeHtml(displayLang)}</span>` +
-            `<button class="copy-code-btn" onclick="window.copyCode(this)" data-code="${escapeHtml(rawCode)}">${copySvg} <span>${copyLabel}</span></button>` +
+            `<div class="code-block-actions">` +
+              extraButtons +
+              `<button class="copy-code-btn" onclick="window.copyCode(this)" data-code="${escapeHtml(rawCode)}">${copySvg} <span>${copyLabel}</span></button>` +
+            `</div>` +
           `</div>` +
           `<pre><code class="hljs ${cleanLang ? `language-${escapeHtml(cleanLang)}` : ''}">${highlightedCode}</code></pre>` +
         `</div>`
@@ -3083,6 +3147,48 @@ print(f"Active object: {act.name if act else 'None'}")
     el.modalBlenderCode.style.display = 'none';
   }
 
+  async function runBlenderCodeDirect(code, btn = null) {
+    if (!code || !code.trim()) {
+      showToast(t('blender_code_empty'), 'warn');
+      return;
+    }
+    const cleanCode = code.trim();
+    lastKnownBlenderCode = cleanCode;
+    logConsole('Executing Python script in Blender...', 'info');
+
+    if (btn) {
+      btn.classList.add('running');
+    }
+
+    try {
+      const res = await fetch('/api/blender/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: cleanCode })
+      });
+      const data = await res.json();
+      if (!res.ok || data.status === 'error') {
+        const errorText = data.detail || data.error || data.message || `HTTP ${res.status}`;
+        logConsole(`Blender execution error: ${errorText}`, 'error');
+        showToast(`${t('blender_code_error')}${errorText}`, 'error');
+        return data;
+      }
+
+      const outputResult = data.result || data.output || JSON.stringify(data, null, 2);
+      logConsole(`Blender execution success: ${typeof outputResult === 'string' ? outputResult.slice(0, 120) : 'Done'}`, 'info');
+      showToast(t('blender_code_success'), 'info');
+      setTimeout(takeBlenderInspection, 600);
+      return data;
+    } catch (err) {
+      logConsole(`Blender execution network error: ${err.message}`, 'error');
+      showToast(`${t('blender_code_error')}${err.message}`, 'error');
+    } finally {
+      if (btn) {
+        btn.classList.remove('running');
+      }
+    }
+  }
+
   async function executeBlenderCode() {
     if (!el.blenderCodeInput) return;
     const code = el.blenderCodeInput.value.trim();
@@ -3095,6 +3201,8 @@ print(f"Active object: {act.name if act else 'None'}")
       logConsole(t('blender_code_empty'), 'warn');
       return;
     }
+
+    lastKnownBlenderCode = code;
 
     if (el.blenderCodeOutput && el.blenderCodeOutputText) {
       el.blenderCodeOutput.style.display = 'block';
@@ -3149,6 +3257,76 @@ print(f"Active object: {act.name if act else 'None'}")
       ? `Zkontroluj a vysvětli následující Python bpy skript pro Blender:\n\`\`\`python\n${code}\n\`\`\``
       : `Review and explain the following Python bpy script for Blender:\n\`\`\`python\n${code}\n\`\`\``;
     setPromptInputAndFocus(prompt);
+  }
+
+  // ===========================================================================
+  // CODE DIFF VIEWER LOGIC (DIFF2HTML & JSDIFF)
+  // ===========================================================================
+  function openDiffModal() {
+    if (el.modalDiff) {
+      el.modalDiff.style.display = 'flex';
+    }
+  }
+
+  function closeDiffModal() {
+    if (el.modalDiff) {
+      el.modalDiff.style.display = 'none';
+    }
+  }
+
+  function showCodeDiff(newCode) {
+    if (typeof newCode !== 'string') newCode = '';
+    const cleanNew = newCode.trim();
+    currentDiffPendingCode = cleanNew;
+    const cleanOld = (typeof lastKnownBlenderCode === 'string' ? lastKnownBlenderCode : '').trim();
+
+    const diffContentEl = el.diffContent || document.getElementById('diff-content');
+    if (!diffContentEl) return;
+
+    const oldLabel = (state.language === 'cs') ? 'Předchozí kód' : 'Previous Code';
+    const newLabel = (state.language === 'cs') ? 'Nový kód' : 'New Code';
+
+    if (typeof Diff !== 'undefined' && typeof Diff2Html !== 'undefined') {
+      try {
+        const patch = Diff.createTwoFilesPatch(oldLabel, newLabel, cleanOld, cleanNew, '', '', { context: 3 });
+        const html = Diff2Html.html(patch, {
+          drawFileList: false,
+          matching: 'lines',
+          outputFormat: 'line-by-line',
+        });
+
+        let noticeHtml = '';
+        if (!cleanOld) {
+          const initMsg = state.language === 'cs'
+            ? 'ℹ️ Žádný předchozí kód v historii. Zobrazuje se nově vygenerovaný skript.'
+            : 'ℹ️ No previous script in history. Displaying the new script.';
+          noticeHtml = `<div class="diff-notice-banner initial">${escapeHtml(initMsg)}</div>`;
+        } else if (cleanOld === cleanNew) {
+          const idMsg = state.language === 'cs'
+            ? '✓ Kód je identický s naposledy evidovaným skriptem (žádné změny).'
+            : '✓ Code is identical to the last known script (no changes).';
+          noticeHtml = `<div class="diff-notice-banner identical">${escapeHtml(idMsg)}</div>`;
+        }
+
+        diffContentEl.innerHTML = noticeHtml + html;
+      } catch (err) {
+        diffContentEl.innerHTML = `<div class="diff-error">Error generating diff: ${escapeHtml(err.message)}</div><pre class="hljs"><code>${escapeHtml(cleanNew)}</code></pre>`;
+      }
+    } else {
+      diffContentEl.innerHTML = `<pre class="hljs"><code>${escapeHtml(cleanNew)}</code></pre>`;
+    }
+
+    openDiffModal();
+  }
+
+  async function runDiffCodeInBlender() {
+    if (!currentDiffPendingCode) {
+      closeDiffModal();
+      return;
+    }
+    const codeToRun = currentDiffPendingCode;
+    closeDiffModal();
+    await runBlenderCodeDirect(codeToRun);
   }
 
   // ===========================================================================
@@ -4039,6 +4217,11 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.btnTestGemini) el.btnTestGemini.addEventListener('click', () => testProviderPing('gemini'));
     if (el.btnTestCustom) el.btnTestCustom.addEventListener('click', () => testProviderPing('custom'));
 
+    // Code Diff Viewer Modal Controls
+    if (el.btnCloseDiffModal) el.btnCloseDiffModal.addEventListener('click', closeDiffModal);
+    if (el.diffCloseBtn) el.diffCloseBtn.addEventListener('click', closeDiffModal);
+    if (el.diffRunBtn) el.diffRunBtn.addEventListener('click', runDiffCodeInBlender);
+
     // Language switcher in settings
     if (el.cfgLanguage) {
       el.cfgLanguage.addEventListener('change', (e) => {
@@ -4052,6 +4235,7 @@ print(f"Active object: {act.name if act else 'None'}")
       if (e.target === el.modalRag) closeRagModal();
       if (e.target === el.modalSettings) closeSettingsModal();
       if (e.target === el.modalBlenderCode) closeBlenderCodeModal();
+      if (e.target === el.modalDiff) closeDiffModal();
       if (e.target === el.imageLightbox) el.imageLightbox.style.display = 'none';
     });
 
@@ -4112,6 +4296,7 @@ print(f"Active object: {act.name if act else 'None'}")
         closeSettingsModal();
         closeToolsModal();
         closeBlenderCodeModal();
+        closeDiffModal();
         if (el.imageLightbox) el.imageLightbox.style.display = 'none';
       }
     });

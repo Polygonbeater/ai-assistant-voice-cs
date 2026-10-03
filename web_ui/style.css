@@ -957,7 +957,14 @@ body.is-resizing-card * {
   letter-spacing: 0.05em;
   color: var(--text-muted);
 }
-.copy-code-btn {
+.code-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.copy-code-btn,
+.diff-code-btn,
+.run-code-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -968,8 +975,10 @@ body.is-resizing-card * {
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--font-sans);
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+  user-select: none;
 }
 .copy-code-btn:hover {
   color: var(--cyan-primary);
@@ -981,10 +990,40 @@ body.is-resizing-card * {
   border-color: rgba(16, 185, 129, 0.4);
   background: rgba(16, 185, 129, 0.08);
 }
-.copy-code-btn svg {
+.diff-code-btn {
+  color: #a78bfa;
+  border-color: rgba(167, 139, 250, 0.3);
+  background: rgba(167, 139, 250, 0.06);
+}
+.diff-code-btn:hover {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(167, 139, 250, 0.15);
+  transform: translateY(-1px);
+}
+.run-code-btn {
+  color: var(--emerald-accent);
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.06);
+}
+.run-code-btn:hover {
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.15);
+  transform: translateY(-1px);
+}
+.run-code-btn.running {
+  opacity: 0.6;
+  pointer-events: none;
+  animation: pulse 1s infinite;
+}
+.copy-code-btn svg,
+.diff-code-btn svg,
+.run-code-btn svg {
   width: 12px;
   height: 12px;
   display: block;
+  flex-shrink: 0;
 }
 .code-block pre,
 .code-block-wrapper pre,
@@ -2970,4 +3009,180 @@ pre {
   background: #c084fc;
   box-shadow: 0 0 8px rgba(192, 132, 252, 0.8);
 }
+
+/* ------------------------------------------------------------------------------
+   CODE DIFF VIEWER & DIFF2HTML DARK THEME
+   ------------------------------------------------------------------------------ */
+
+.modal-dialog-diff {
+  width: 900px;
+  max-width: 96vw;
+  max-height: 90vh;
+}
+
+.modal-body-diff {
+  padding: 14px 18px;
+  max-height: calc(90vh - 130px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.diff-content-wrapper {
+  background: #0d1117;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.diff-notice-banner {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.diff-notice-banner.initial {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: var(--cyan-primary);
+}
+
+.diff-notice-banner.identical {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--emerald-accent);
+}
+
+.diff-error {
+  padding: 12px;
+  color: var(--rose-accent);
+  background: rgba(244, 63, 94, 0.1);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* Diff2Html Dark Theme Overrides */
+.diff-content-wrapper .d2h-wrapper {
+  color: #c9d1d9;
+  background: transparent;
+}
+
+.diff-content-wrapper .d2h-file-wrapper {
+  border: none;
+  background: #0d1117;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+
+.diff-content-wrapper .d2h-file-header {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.diff-content-wrapper .d2h-file-name {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.diff-content-wrapper .d2h-code-wrapper {
+  background: #0d1117;
+}
+
+.diff-content-wrapper .d2h-diff-table {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  border-collapse: collapse;
+}
+
+.diff-content-wrapper .d2h-code-line,
+.diff-content-wrapper .d2h-code-side-line {
+  padding: 1px 8px;
+}
+
+.diff-content-wrapper .d2h-code-line-ctn {
+  color: #c9d1d9;
+}
+
+.diff-content-wrapper .d2h-code-linenumber,
+.diff-content-wrapper .d2h-code-side-linenumber {
+  color: #6e7681;
+  background: #0d1117;
+  border-color: #30363d;
+  user-select: none;
+  font-size: 11px;
+}
+
+/* Inserted / Added lines (Green) */
+.diff-content-wrapper .d2h-ins {
+  background-color: rgba(46, 160, 67, 0.15) !important;
+  border-color: rgba(46, 160, 67, 0.4) !important;
+}
+
+.diff-content-wrapper .d2h-ins .d2h-code-line-ctn {
+  color: #7ee787 !important;
+}
+
+.diff-content-wrapper .d2h-ins .d2h-code-line-prefix {
+  color: #3fb950;
+  font-weight: bold;
+}
+
+.diff-content-wrapper ins.d2h-change {
+  background-color: rgba(46, 160, 67, 0.4) !important;
+  color: #aff5b4 !important;
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+/* Deleted / Removed lines (Red) */
+.diff-content-wrapper .d2h-del {
+  background-color: rgba(248, 81, 73, 0.15) !important;
+  border-color: rgba(248, 81, 73, 0.4) !important;
+}
+
+.diff-content-wrapper .d2h-del .d2h-code-line-ctn {
+  color: #ff7b72 !important;
+}
+
+.diff-content-wrapper .d2h-del .d2h-code-line-prefix {
+  color: #f85149;
+  font-weight: bold;
+}
+
+.diff-content-wrapper del.d2h-change {
+  background-color: rgba(248, 81, 73, 0.4) !important;
+  color: #ffdcd7 !important;
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+/* Context lines / unchanged */
+.diff-content-wrapper .d2h-cntx {
+  background-color: #0d1117 !important;
+}
+
+.diff-content-wrapper .d2h-info {
+  background-color: rgba(56, 189, 248, 0.08) !important;
+  color: var(--cyan-primary) !important;
+  border-color: #30363d !important;
+}
+
+.diff-content-wrapper .d2h-emptyplaceholder {
+  background-color: #090c10 !important;
+  border-color: #30363d !important;
+}
+
 
