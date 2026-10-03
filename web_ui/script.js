@@ -4343,12 +4343,12 @@ print(f"Active object: {act.name if act else 'None'}")
       el.cfgCustomPreset.addEventListener('change', (e) => {
         const val = e.target.value;
         const PRESET_ENDPOINTS = {
-          openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+          openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o' },
           deepseek: { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-          openrouter: { url: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat' },
-          mistral: { url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
-          ollama: { url: 'http://localhost:11434/v1', model: 'llama3.2:latest' },
-          vllm: { url: 'http://localhost:8000/v1', model: 'default' },
+          openrouter: { url: 'https://openrouter.ai/api/v1', model: 'meta-llama/llama-3.3-70b-instruct:free' },
+          mistral: { url: 'https://api.mistral.ai/v1', model: 'mistral-large-latest' },
+          ollama: { url: 'http://localhost:11434/v1', model: 'llama3.2' },
+          vllm: { url: 'http://localhost:8000/v1', model: '' },
         };
         if (PRESET_ENDPOINTS[val]) {
           if (el.cfgCustomUrl) el.cfgCustomUrl.value = PRESET_ENDPOINTS[val].url;
