@@ -36,6 +36,16 @@
   --font-mono: "Fira Code", Cascadia Code, Consolas, Menlo, monospace;
 }
 
+svg {
+  max-width: 100%;
+  flex-shrink: 0;
+}
+
+:where(svg:not([width]):not([height])) {
+  width: 1em;
+  height: 1em;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -1504,12 +1514,6 @@ pre {
   text-align: center;
   flex: 1;
 }
-.tab-empty-state svg {
-  width: 20px;
-  height: 20px;
-  opacity: 0.6;
-}
-
 /* Research Tab Feeds */
 .research-sources-feed,
 .rag-snippets-feed,
@@ -1523,6 +1527,22 @@ pre {
   overflow-y: auto;
 }
 
+.research-sources-feed svg,
+.rag-snippets-feed svg,
+.agent-steps-feed svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tab-empty-state svg {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
 .research-source-item {
   background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
@@ -1532,6 +1552,26 @@ pre {
   flex-direction: column;
   gap: 4px;
   font-size: 11.5px;
+  flex-shrink: 0;
+}
+
+.research-source-item svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.source-query {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.source-query svg {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
   flex-shrink: 0;
 }
 
@@ -1552,6 +1592,7 @@ pre {
 .research-source-link svg {
   width: 12px;
   height: 12px;
+  min-width: 12px;
   flex-shrink: 0;
 }
 
@@ -1606,6 +1647,8 @@ pre {
 .rag-snippet-doc svg {
   width: 12px;
   height: 12px;
+  min-width: 12px;
+  flex-shrink: 0;
   color: var(--cyan-primary);
 }
 
@@ -1835,6 +1878,7 @@ pre {
   position: relative;
   width: 100%;
   flex: 1;
+  min-width: 0;
   min-height: 90px;
   aspect-ratio: 16 / 10;
   background: var(--bg-canvas);
@@ -1847,6 +1891,41 @@ pre {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.viewport-image-box.blender-offline img {
+  visibility: hidden;
+}
+
+.viewport-offline-state {
+  display: none;
+}
+
+.viewport-image-box.blender-offline .viewport-offline-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.viewport-image-box.blender-offline .viewport-overlay-btn-wrap {
+  display: none;
+}
+
+.viewport-offline-state svg {
+  width: 40px;
+  height: 40px;
+  max-width: 48px;
+  max-height: 48px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 .viewport-overlay-btn-wrap {
@@ -3196,4 +3275,3 @@ pre {
   background-color: #090c10 !important;
   border-color: #30363d !important;
 }
-

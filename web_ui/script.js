@@ -360,6 +360,7 @@
 
     // 3D Inspector
     btnRefreshTelemetry: document.getElementById('btn-refresh-telemetry'),
+    viewportImageBox: document.getElementById('viewport-image-box'),
     viewportSnapshotImg: document.getElementById('viewport-snapshot-img'),
     viewportBadge: document.getElementById('viewport-badge'),
     btnTakeSnapshot: document.getElementById('btn-take-snapshot'),
@@ -3136,6 +3137,9 @@
       if (!res.ok) return;
       const data = await res.json();
       state.blenderConnected = Boolean(data.connected);
+      if (el.viewportImageBox) {
+        el.viewportImageBox.classList.toggle('blender-offline', !data.connected);
+      }
 
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = `status-indicator ${data.connected ? 'online' : 'offline'}`;
@@ -3160,6 +3164,9 @@
       }
     } catch (e) {
       state.blenderConnected = false;
+      if (el.viewportImageBox) {
+        el.viewportImageBox.classList.add('blender-offline');
+      }
       if (el.blenderIndicator && el.blenderStatusText) {
         el.blenderIndicator.className = 'status-indicator offline';
         el.blenderStatusText.textContent = `Blender: ${t('blender_offline')}`;
