@@ -816,7 +816,8 @@ def get_tools_list():
 # ------------------------------------------------------------------------------
 
 @app.get("/api/blender/status")
-def blender_status():
+def blender_status(request: Request):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
@@ -824,7 +825,8 @@ def blender_status():
     return {"connected": online, "host": host, "port": port}
 
 @app.post("/api/blender/inspect")
-def blender_inspect():
+def blender_inspect(request: Request):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
@@ -833,7 +835,8 @@ def blender_inspect():
     return res
 
 @app.post("/api/blender/auto-rig")
-def blender_auto_rig(rig_type: str = "basic"):
+def blender_auto_rig(request: Request, rig_type: str = "basic"):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
@@ -841,7 +844,8 @@ def blender_auto_rig(rig_type: str = "basic"):
     return res
 
 @app.post("/api/blender/mesh-doctor")
-def blender_mesh_doctor(action: str = "audit", merge_distance: float = 0.0001):
+def blender_mesh_doctor(request: Request, action: str = "audit", merge_distance: float = 0.0001):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
@@ -850,21 +854,24 @@ def blender_mesh_doctor(action: str = "audit", merge_distance: float = 0.0001):
     return request_mesh_audit(host=host, port=port)
 
 @app.post("/api/blender/product-studio")
-def blender_product_studio(style: str = "standard"):
+def blender_product_studio(request: Request, style: str = "standard"):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
     return request_product_studio(host=host, port=port, style=style)
 
 @app.post("/api/blender/procedural-shader")
-def blender_procedural_shader(shader_type: str = "brushed_metal", material_name: Optional[str] = None):
+def blender_procedural_shader(request: Request, shader_type: str = "brushed_metal", material_name: Optional[str] = None):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
     return request_procedural_shader(material_name=material_name, shader_type=shader_type, host=host, port=port)
 
 @app.post("/api/blender/uv-audit")
-def blender_uv_audit(texture_res: int = 2048):
+def blender_uv_audit(request: Request, texture_res: int = 2048):
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
@@ -875,16 +882,18 @@ class BlenderExecuteRequest(BaseModel):
     code: str
 
 @app.post("/api/blender/execute")
-def blender_execute_code(req: BlenderExecuteRequest):
+def blender_execute_code(req: BlenderExecuteRequest, request: Request):
     """Spustí libovolný Python (bpy) skript přímo v běžící instanci Blenderu."""
+    require_loopback_client(request)
     b_cfg = config.get("blender", {})
     host = b_cfg.get("host", "127.0.0.1")
     port = int(b_cfg.get("port", 9876))
     return send_code_to_blender(code=req.code, host=host, port=port)
 
 @app.get("/api/blender/viewport-image")
-def get_viewport_image():
+def get_viewport_image(request: Request):
     """Vrátí aktuální pořízený snímek viewportu z Blenderu."""
+    require_loopback_client(request)
     candidates = [
         Path("/tmp/ai_assistant_viewport.png"),
         Path("/tmp/blender_viewport.png"),

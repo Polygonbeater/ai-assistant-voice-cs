@@ -121,6 +121,34 @@ class TestSecurityPatches(unittest.TestCase):
         resp_post = remote_client.post("/api/chat", json={"prompt": "test"})
         self.assertEqual(resp_post.status_code, 403)
 
+    def test_remote_ip_blocked_from_all_blender_endpoints(self):
+        """Ověří, že vzdálená IP (192.168.1.100) dostane 403 na všech Blender endpointech."""
+        remote_client = TestClient(
+            web_server.app,
+            client=("192.168.1.100", 54321),
+            headers={"X-Polygon-Client": "true"},
+        )
+        # GET endpointy
+        for path in ("/api/blender/status", "/api/blender/viewport-image"):
+            resp = remote_client.get(path)
+            self.assertEqual(resp.status_code, 403, f"Endpoint GET {path} nepovolil 403 pro vzdálenou IP!")
+            self.assertEqual(resp.json().get("detail"), "Tato operace je povolena pouze z lokálního zařízení.")
+
+        # POST endpointy
+        post_endpoints = [
+            ("/api/blender/inspect", {}),
+            ("/api/blender/auto-rig", {}),
+            ("/api/blender/mesh-doctor", {}),
+            ("/api/blender/product-studio", {}),
+            ("/api/blender/procedural-shader", {}),
+            ("/api/blender/uv-audit", {}),
+            ("/api/blender/execute", {"code": "print('test')"}),
+        ]
+        for path, payload in post_endpoints:
+            resp = remote_client.post(path, json=payload)
+            self.assertEqual(resp.status_code, 403, f"Endpoint POST {path} nepovolil 403 pro vzdálenou IP!")
+            self.assertEqual(resp.json().get("detail"), "Tato operace je povolena pouze z lokálního zařízení.")
+
     def test_loopback_ip_allowed_on_api_endpoints(self):
         """Ověří, že loopback klient má přístup k /api/."""
         resp = self.client.get("/api/sessions")

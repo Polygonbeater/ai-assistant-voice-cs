@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 
 from blender_connector import (
     DEFAULT_TIMEOUT,
-    DEFAULT_AUTH_TOKEN,
     get_blender_auth_token,
     send_code_to_blender,
     ping_blender,
@@ -76,6 +75,23 @@ class BlenderBridgeContractTests(unittest.TestCase):
 
         self.assertIn("run_bpy_script", actions)
         self.assertGreaterEqual(DEFAULT_TIMEOUT, 65.0)
+
+    def test_receiver_fails_secure_when_no_token_configured(self):
+        """Ověří, že receiver odmítne nabootovat a vyhodí chybu, pokud chybí token."""
+        mock_bpy = MagicMock()
+        mock_bpy.app.version = (4, 2, 0)
+        mock_bpy.data.filepath = "test.blend"
+        with patch.dict("sys.modules", {"bpy": mock_bpy}):
+            import blender_receiver
+
+            with patch.dict("os.environ", {}, clear=True), patch("pathlib.Path.is_file", return_value=False):
+                with self.assertRaises(RuntimeError) as ctx:
+                    blender_receiver.get_blender_auth_token(fail_closed=True)
+                self.assertIn("Fail-Secure", str(ctx.exception))
+
+                server = blender_receiver.BlenderSocketServer()
+                with self.assertRaises(RuntimeError):
+                    server.start()
 
     def test_receiver_rejects_missing_or_invalid_auth_token(self):
         mock_bpy = MagicMock()

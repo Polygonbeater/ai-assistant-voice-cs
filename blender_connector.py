@@ -17,15 +17,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_BLENDER_HOST = "127.0.0.1"
 DEFAULT_BLENDER_PORT = 9876
 DEFAULT_TIMEOUT = 65.0
-DEFAULT_AUTH_TOKEN = "polygon-blender-bridge-secret"
 
 
-def get_blender_auth_token() -> str:
+def get_blender_auth_token(fail_closed: bool = False) -> str:
     """
     Získá autentizační token pro komunikaci s Blender Bridge:
     1. Z proměnné prostředí POLYGON_BLENDER_AUTH_TOKEN nebo BLENDER_BRIDGE_TOKEN
     2. Z config.json (klíč blender.auth_token)
-    3. Výchozí fallback hodnota DEFAULT_AUTH_TOKEN
     """
     env_token = os.environ.get("POLYGON_BLENDER_AUTH_TOKEN") or os.environ.get("BLENDER_BRIDGE_TOKEN")
     if env_token and env_token.strip():
@@ -46,7 +44,12 @@ def get_blender_auth_token() -> str:
     except Exception:
         pass
 
-    return DEFAULT_AUTH_TOKEN
+    if fail_closed:
+        raise RuntimeError(
+            "Bezpečnostní pojistka (Fail-Secure): Autentizační token pro Blender Bridge není nastaven! "
+            "Nastavte POLYGON_BLENDER_AUTH_TOKEN nebo 'blender.auth_token' v config.json."
+        )
+    return ""
 
 
 def is_blender_available(host: str = DEFAULT_BLENDER_HOST, port: int = DEFAULT_BLENDER_PORT) -> bool:

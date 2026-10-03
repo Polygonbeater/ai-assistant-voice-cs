@@ -29,15 +29,17 @@ import bpy
 
 HOST = "127.0.0.1"
 PORT = 9876
-DEFAULT_AUTH_TOKEN = "polygon-blender-bridge-secret"
 
 
-def get_blender_auth_token() -> str:
+def get_blender_auth_token(fail_closed: bool = True) -> str:
     """
     Získá autentizační token pro Blender Bridge:
     1. Z proměnné prostředí POLYGON_BLENDER_AUTH_TOKEN nebo BLENDER_BRIDGE_TOKEN
     2. Z config.json (klíč blender.auth_token)
-    3. Výchozí fallback hodnota DEFAULT_AUTH_TOKEN
+
+    Bezpečnostní pravidlo (Fail-Secure):
+    Žádný výchozí hardcoded token není povolen. Pokud token chybí a fail_closed=True,
+    vyvolá výjimku RuntimeError a zabrání spuštění serveru.
     """
     env_token = os.environ.get("POLYGON_BLENDER_AUTH_TOKEN") or os.environ.get("BLENDER_BRIDGE_TOKEN")
     if env_token and env_token.strip():
@@ -58,7 +60,13 @@ def get_blender_auth_token() -> str:
     except Exception:
         pass
 
-    return DEFAULT_AUTH_TOKEN
+    if fail_closed:
+        raise RuntimeError(
+            "Bezpečnostní pojistka (Fail-Secure): Autentizační token pro Blender Bridge není nastaven! "
+            "Nastavte proměnnou prostředí POLYGON_BLENDER_AUTH_TOKEN (nebo BLENDER_BRIDGE_TOKEN), "
+            "případně klíč 'blender.auth_token' v config.json."
+        )
+    return ""
 
 # Globální instance pro správu běhu serveru
 _RECEIVER_INSTANCE = None
@@ -160,6 +168,16 @@ class BlenderSocketServer:
             print("[AI-Blender] Server již běží.")
             return
 
+        # Fail-secure kontrola: ověření přítomnosti platného tokenu před otevřením socketu
+        try:
+            token = get_blender_auth_token(fail_closed=True)
+            if not token:
+                raise RuntimeError("Autentizační token pro Blender Bridge nesmí být prázdný.")
+        except Exception as auth_err:
+            print(f"❌ [AI-Blender] Fatální bezpečnostní chyba při startu: {auth_err}")
+            self.stop()
+            raise
+
         try:
             self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -182,6 +200,7 @@ class BlenderSocketServer:
         except Exception as e:
             print(f"❌ [AI-Blender] Nelze spustit server na {self.host}:{self.port}: {e}")
             self.stop()
+            raise
 
     def _accept_loop(self):
         while self.is_running and self.server_sock:
@@ -227,9 +246,9 @@ class BlenderSocketServer:
                 return
 
             # Bezpečnostní ověření autentizačního tokenu
-            expected_token = get_blender_auth_token()
+            expected_token = get_blender_auth_token(fail_closed=False)
             incoming_token = message.get("auth_token") or message.get("token")
-            if not incoming_token or incoming_token != expected_token:
+            if not expected_token or not incoming_token or incoming_token != expected_token:
                 resp = {
                     "status": "error",
                     "error_type": "Unauthorized",
