@@ -48,6 +48,8 @@
     selectSessionAbortController: null,
     attachedFile: null,
     attachedImages: [],
+    isFileLoading: false,
+    pendingFileRead: null,
     isRecording: false,
     mediaRecorder: null,
     audioChunks: [],
@@ -2512,6 +2514,15 @@
   async function sendMessage(overridePrompt = null, options = {}) {
     if (state.isStreaming) return;
 
+    // Await pending asynchronous file read if still in progress
+    if (state.isFileLoading && state.pendingFileRead) {
+      try {
+        await state.pendingFileRead;
+      } catch (e) {
+        // ignore
+      }
+    }
+
     const isProofread = Boolean(options && options.isProofread);
 
     const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
@@ -2918,12 +2929,7 @@
       const reader = new FileReader();
       reader.onload = () => {
         const res = reader.result;
-        if (typeof res === 'string') {
-          const match = res.match(/^data:image\/[^;]+;base64,(.+)$/);
-          resolve(match ? match[1] : res);
-        } else {
-          resolve('');
-        }
+        resolve(typeof res === 'string' ? res : '');
       };
       reader.onerror = err => reject(err);
       reader.readAsDataURL(file);
@@ -2936,22 +2942,47 @@
     if (file) {
       const isImg = isImageFile(file);
       const icon = isImg ? '🖼️ ' : '📄 ';
-      el.attachedFileName.textContent = `${icon}${file.name} (${Math.round(file.size / 1024)} kB)`;
-      el.attachedFileBanner.style.display = 'inline-flex';
+      if (el.attachedFileName) {
+        el.attachedFileName.textContent = `${icon}${file.name} (${Math.round(file.size / 1024)} kB)`;
+      }
+      if (el.attachedFileBanner) {
+        el.attachedFileBanner.style.display = 'inline-flex';
+      }
       if (isImg) {
-        try {
-          const b64 = await fileToBase64(file);
-          if (b64) {
-            state.attachedImages = [b64];
-          }
-        } catch (err) {
-          logConsole(`Error reading image: ${err.message}`, 'error');
+        state.isFileLoading = true;
+        if (el.btnSend) {
+          el.btnSend.disabled = true;
         }
+        const readPromise = (async () => {
+          try {
+            const b64 = await fileToBase64(file);
+            if (b64) {
+              state.attachedImages = [b64];
+            }
+          } catch (err) {
+            logConsole(`Error reading image: ${err.message}`, 'error');
+          } finally {
+            state.isFileLoading = false;
+            state.pendingFileRead = null;
+            if (el.btnSend && !state.isStreaming) {
+              el.btnSend.disabled = false;
+            }
+          }
+        })();
+        state.pendingFileRead = readPromise;
+        await readPromise;
       }
     } else {
-      el.attachedFileBanner.style.display = 'none';
+      state.isFileLoading = false;
+      state.pendingFileRead = null;
+      if (el.attachedFileBanner) {
+        el.attachedFileBanner.style.display = 'none';
+      }
       if (el.fileInput) el.fileInput.value = '';
       state.attachedImages = [];
+      if (el.btnSend && !state.isStreaming) {
+        el.btnSend.disabled = false;
+      }
     }
   }
 
@@ -3153,7 +3184,6 @@ print(f"Active object: {act.name if act else 'None'}")
       return;
     }
     const cleanCode = code.trim();
-    lastKnownBlenderCode = cleanCode;
     logConsole('Executing Python script in Blender...', 'info');
 
     if (btn) {
@@ -3174,6 +3204,7 @@ print(f"Active object: {act.name if act else 'None'}")
         return data;
       }
 
+      lastKnownBlenderCode = cleanCode;
       const outputResult = data.result || data.output || JSON.stringify(data, null, 2);
       logConsole(`Blender execution success: ${typeof outputResult === 'string' ? outputResult.slice(0, 120) : 'Done'}`, 'info');
       showToast(t('blender_code_success'), 'info');
@@ -3202,8 +3233,6 @@ print(f"Active object: {act.name if act else 'None'}")
       return;
     }
 
-    lastKnownBlenderCode = code;
-
     if (el.blenderCodeOutput && el.blenderCodeOutputText) {
       el.blenderCodeOutput.style.display = 'block';
       el.blenderCodeOutput.className = 'blender-code-output';
@@ -3228,6 +3257,7 @@ print(f"Active object: {act.name if act else 'None'}")
         return;
       }
 
+      lastKnownBlenderCode = code;
       const outputResult = data.result || data.output || JSON.stringify(data, null, 2);
       if (el.blenderCodeOutput && el.blenderCodeOutputText) {
         el.blenderCodeOutput.className = 'blender-code-output success';

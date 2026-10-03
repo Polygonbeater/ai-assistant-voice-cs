@@ -78,6 +78,42 @@ class TestVisionBridge(unittest.TestCase):
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{raw_b64}"}}
         )
 
+    def test_generate_response_preserves_explicit_data_uri(self):
+        """generate_response should preserve provided data:image/ prefix instead of defaulting to jpeg."""
+        mock_llm = MagicMock()
+        mock_llm.create_chat_completion.return_value = iter([
+            {"choices": [{"delta": {"content": "PNG image received."}}]}
+        ])
+
+        config = {
+            "llama": {
+                "system_prompt": "You are a 3D assistant.",
+                "max_tokens": 512,
+                "temperature": 0.7,
+            },
+            "language": "en",
+        }
+
+        data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY44YAAAAASUVORK5CYII="
+        list(
+            generate_response(
+                llm=mock_llm,
+                prompt="Analyze this PNG",
+                config=config,
+                images=[data_uri],
+                tools_enabled=False,
+            )
+        )
+
+        self.assertTrue(mock_llm.create_chat_completion.called)
+        call_kwargs = mock_llm.create_chat_completion.call_args[1]
+        messages = call_kwargs.get("messages", [])
+        user_msg = messages[-1]
+        self.assertEqual(
+            user_msg["content"][1],
+            {"type": "image_url", "image_url": {"url": data_uri}}
+        )
+
     def test_generate_response_vision_graceful_fallback_cs(self):
         """generate_response should yield localized fallback when model does not support Vision in CS."""
         mock_llm = MagicMock()
