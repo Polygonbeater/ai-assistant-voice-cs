@@ -49,6 +49,36 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
             model="test-model",
         )
 
+    def test_gemini_ping_uses_supported_v1beta_url(self):
+        with (
+            patch.dict(
+                web_server.config,
+                {
+                    "llm_provider": {
+                        "gemini": {
+                            "api_key": "saved-secret",
+                            "base_url": "https://generativelanguage.googleapis.com/v1main/openai/",
+                            "model": "gemini-2.0-flash",
+                        }
+                    }
+                },
+                clear=True,
+            ),
+            patch("web_server.test_provider_connection", return_value={"status": "ok"}) as test_connection,
+        ):
+            response = self.client.post(
+                "/api/llm/test-connection",
+                json={"provider_type": "gemini"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        test_connection.assert_called_once_with(
+            provider_type="gemini",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key="saved-secret",
+            model="gemini-2.0-flash",
+        )
+
     def test_custom_provider_type_uses_custom_saved_credentials(self):
         config = {
             "llm_provider": {
