@@ -40,6 +40,14 @@ class FakeSocket:
 
 
 class BlenderBridgeContractTests(unittest.TestCase):
+    def setUp(self):
+        self.test_token = "test-bridge-token-secure-123"
+        self.env_patcher = patch.dict("os.environ", {"POLYGON_BLENDER_AUTH_TOKEN": self.test_token})
+        self.env_patcher.start()
+
+    def tearDown(self):
+        self.env_patcher.stop()
+
     def test_connector_uses_whitelisted_run_script_action_and_auth_token(self):
         fake_socket = FakeSocket()
         with patch("blender_connector.socket.socket", return_value=fake_socket):
@@ -50,7 +58,7 @@ class BlenderBridgeContractTests(unittest.TestCase):
         self.assertEqual(request["action"], "run_bpy_script")
         self.assertEqual(request["code"], "print('ok')")
         self.assertIn("auth_token", request)
-        self.assertEqual(request["auth_token"], get_blender_auth_token())
+        self.assertEqual(request["auth_token"], self.test_token)
 
     def test_ping_blender_includes_auth_token(self):
         fake_socket = FakeSocket()
@@ -61,7 +69,7 @@ class BlenderBridgeContractTests(unittest.TestCase):
         self.assertEqual(res["status"], "pong")
         request = json.loads(fake_socket.sent)
         self.assertEqual(request["action"], "ping")
-        self.assertEqual(request["auth_token"], get_blender_auth_token())
+        self.assertEqual(request["auth_token"], self.test_token)
 
     def test_receiver_whitelist_contains_connector_action(self):
         source = Path("blender_receiver.py").read_text(encoding="utf-8")

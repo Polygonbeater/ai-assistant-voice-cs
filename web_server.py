@@ -15,6 +15,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import tempfile
 import threading
 import time
@@ -23,9 +24,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 import anyio
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
@@ -1218,7 +1219,9 @@ def update_config(req: SettingsUpdateRequest, request: Request):
         except Exception as e:
             logger.warning("Nepodařilo se přepnout lokální model: %s", e)
     else:
-        save_config_file()
+        saved = save_config_file()
+        if not saved:
+            raise HTTPException(status_code=500, detail="Nepodařilo se uložit konfiguraci do souboru config.json.")
 
     return {
         "status": "success",
@@ -1227,8 +1230,9 @@ def update_config(req: SettingsUpdateRequest, request: Request):
     }
 
 @app.post("/api/app/shutdown")
-def shutdown_app():
+def shutdown_app(request: Request):
     """Ukončí běžící desktopový server a aplikaci na vyžádání z UI."""
+    require_loopback_client(request)
     logger.info("Přijat požadavek na ukončení aplikace skrze API (/api/app/shutdown)")
     def _delayed_exit():
         time.sleep(0.2)

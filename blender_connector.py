@@ -10,7 +10,7 @@ import pathlib
 import socket
 from typing import Any
 
-from code_validator import BlenderCodeValidator, CodeValidationError as AstCodeValidationError, validate_blender_code
+from code_validator import validate_blender_code
 
 logger = logging.getLogger(__name__)
 

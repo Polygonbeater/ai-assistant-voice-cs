@@ -166,6 +166,29 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
         self.assertIn("Bezpečnostní pojistka", str(ctx.exception))
         mock_socket.assert_not_called()
 
+    def test_bpy_file_io_operations_are_blocked(self):
+        """Ověří, že veškeré pokusy o souborové I/O a správu souborů přes bpy jsou zablokovány."""
+        dangerous_bpy_snippets = [
+            "import bpy\nbpy.data.texts.load('/tmp/evil.py')",
+            "import bpy\nt = bpy.data.texts",
+            "import bpy\nbpy.ops.wm.save_as_mainfile(filepath='/tmp/hacked.blend')",
+            "import bpy\nbpy.ops.wm.save_mainfile()",
+            "import bpy\nbpy.ops.wm.open_mainfile(filepath='/tmp/test.blend')",
+            "import bpy\nbpy.ops.wm.read_homefile()",
+            "import bpy\nbpy.ops.wm.link(filepath='/tmp/lib.blend')",
+            "import bpy\nbpy.ops.wm.append(filepath='/tmp/lib.blend')",
+            "import bpy\nbpy.ops.wm.url_open(url='https://evil.com')",
+            "import bpy\nbpy.ops.wm.quit_blender()",
+            "import bpy\nbpy.ops.export_scene.obj(filepath='/tmp/out.obj')",
+            "import bpy\nbpy.ops.import_mesh.stl(filepath='/tmp/in.stl')",
+            "import bpy\nbpy.ops.wm.obj_export(filepath='/tmp/out.obj')",
+            "from bpy import data\ndata.texts.load('/tmp/x')",
+        ]
+        for snippet in dangerous_bpy_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Nebezpečný bpy snippet '{snippet}' nebyl zablokován!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

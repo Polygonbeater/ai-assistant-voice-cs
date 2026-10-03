@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 import logging
-from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +56,101 @@ BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__import__",
 })
 
+# Zákaz nebezpečných atributů a souborových I/O operací na objektu bpy
+BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
+    "bpy.data.texts",
+    "data.texts",
+    "texts",
+    "bpy.data.images.load",
+    "data.images.load",
+    "bpy.data.libraries.load",
+    "data.libraries.load",
+    "bpy.data.sounds.load",
+    "data.sounds.load",
+    "bpy.data.movieclips.load",
+    "data.movieclips.load",
+    "bpy.ops.wm.save_as_mainfile",
+    "ops.wm.save_as_mainfile",
+    "bpy.ops.wm.save_mainfile",
+    "ops.wm.save_mainfile",
+    "bpy.ops.wm.open_mainfile",
+    "ops.wm.open_mainfile",
+    "bpy.ops.wm.read_homefile",
+    "ops.wm.read_homefile",
+    "bpy.ops.wm.read_factory_settings",
+    "ops.wm.read_factory_settings",
+    "bpy.ops.wm.read_history",
+    "ops.wm.read_history",
+    "bpy.ops.wm.recover_auto_save",
+    "ops.wm.recover_auto_save",
+    "bpy.ops.wm.recover_last_session",
+    "ops.wm.recover_last_session",
+    "bpy.ops.wm.link",
+    "ops.wm.link",
+    "bpy.ops.wm.append",
+    "ops.wm.append",
+    "bpy.ops.wm.url_open",
+    "ops.wm.url_open",
+    "bpy.ops.wm.quit_blender",
+    "ops.wm.quit_blender",
+    "bpy.ops.wm.sysinfo_file_write",
+    "ops.wm.sysinfo_file_write",
+})
+
+BANNED_BPY_PREFIXES: tuple[str, ...] = (
+    "bpy.data.texts.",
+    "data.texts.",
+    "bpy.ops.export_",
+    "ops.export_",
+    "bpy.ops.import_",
+    "ops.import_",
+    "bpy.ops.wm.save_",
+    "ops.wm.save_",
+    "bpy.ops.wm.open_",
+    "ops.wm.open_",
+    "bpy.ops.wm.read_",
+    "ops.wm.read_",
+    "bpy.ops.wm.recover_",
+    "ops.wm.recover_",
+    "bpy.ops.wm.obj_export",
+    "ops.wm.obj_export",
+    "bpy.ops.wm.obj_import",
+    "ops.wm.obj_import",
+    "bpy.ops.wm.ply_export",
+    "ops.wm.ply_export",
+    "bpy.ops.wm.ply_import",
+    "ops.wm.ply_import",
+    "bpy.ops.wm.gltf_export",
+    "ops.wm.gltf_export",
+    "bpy.ops.wm.gltf_import",
+    "ops.wm.gltf_import",
+    "bpy.ops.wm.usd_export",
+    "ops.wm.usd_export",
+    "bpy.ops.wm.usd_import",
+    "ops.wm.usd_import",
+    "bpy.ops.wm.alembic_export",
+    "ops.wm.alembic_export",
+    "bpy.ops.wm.alembic_import",
+    "ops.wm.alembic_import",
+    "bpy.ops.wm.fbx_export",
+    "ops.wm.fbx_export",
+    "bpy.ops.wm.fbx_import",
+    "ops.wm.fbx_import",
+)
+
+
+def get_attribute_chain(node: ast.AST) -> str:
+    """Rekurzivně sestaví tečkový řetězec atributů, např. 'bpy.data.texts.load'."""
+    parts: list[str] = []
+    curr = node
+    while isinstance(curr, ast.Attribute):
+        parts.append(curr.attr)
+        curr = curr.value
+    if isinstance(curr, ast.Name):
+        parts.append(curr.id)
+        return ".".join(reversed(parts))
+    return ""
+
 
 class CodeValidationError(Exception):
     """Výjimka vyvolaná při porušení bezpečnostních pravidel AST validátoru."""
@@ -71,6 +165,15 @@ class BlenderCodeValidator(ast.NodeVisitor):
     def __init__(self) -> None:
         super().__init__()
         self.errors: list[str] = []
+
+    def _check_attribute_chain_safety(self, node: ast.AST) -> None:
+        chain = get_attribute_chain(node)
+        if not chain:
+            return
+        if chain in BANNED_BPY_PATTERNS or any(chain.startswith(p) for p in BANNED_BPY_PREFIXES):
+            raise ValueError(
+                f"Bezpečnostní pojistka: Přístup k nebezpečnému atributu nebo souborové I/O operaci '{chain}' je zakázán."
+            )
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -93,6 +196,8 @@ class BlenderCodeValidator(ast.NodeVisitor):
         for alias in node.names:
             if alias.name in BANNED_BUILTINS or alias.name in BANNED_ATTRIBUTES or alias.name.startswith("__"):
                 raise ValueError(f"Bezpečnostní pojistka: Importování prvku '{alias.name}' je z bezpečnostních důvodů zakázáno.")
+            if alias.name in BANNED_BPY_PATTERNS or any(alias.name.startswith(p) for p in BANNED_BPY_PREFIXES):
+                raise ValueError(f"Bezpečnostní pojistka: Importování nebezpečného prvku '{alias.name}' je zakázáno.")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -102,13 +207,14 @@ class BlenderCodeValidator(ast.NodeVisitor):
             if func_name in BLOCKED_FUNCTIONS:
                 raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{func_name}' je striktně zakázáno.")
 
-        # Volání přes atribut (např. os.system(), builtins.eval(), obj.__subclasses__())
+        # Volání přes atribut (např. os.system(), builtins.eval(), obj.__subclasses__(), bpy.ops.wm.save_as_mainfile())
         elif isinstance(node.func, ast.Attribute):
             attr_name = node.func.attr
             if attr_name in BLOCKED_FUNCTIONS:
                 raise ValueError(f"Bezpečnostní pojistka: Volání zakázané funkce/metody '{attr_name}()' je zakázáno.")
             elif attr_name.startswith("__") or attr_name in BANNED_ATTRIBUTES:
                 raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{attr_name}) je striktně zakázán.")
+            self._check_attribute_chain_safety(node.func)
 
         self.generic_visit(node)
 
@@ -117,6 +223,7 @@ class BlenderCodeValidator(ast.NodeVisitor):
             raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{node.attr}) je striktně zakázán.")
         if node.attr in BANNED_ATTRIBUTES:
             raise ValueError(f"Bezpečnostní pojistka: Přístup k atributu '{node.attr}' je z bezpečnostních důvodů zakázán.")
+        self._check_attribute_chain_safety(node)
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
