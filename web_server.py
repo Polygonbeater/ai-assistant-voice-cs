@@ -20,9 +20,12 @@ import tempfile
 import threading
 import time
 import uuid
+import webbrowser
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
+import aiohttp
 import anyio
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +61,7 @@ from llama_module import (
     test_provider_connection,
     unload_llama_model,
 )
+from web_search import PublicOnlyResolver, _safe_get, is_safe_web_url
 
 logger = logging.getLogger("web_server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
@@ -371,6 +375,9 @@ class ChatRequest(BaseModel):
     mode3d: Optional[bool] = None
     images: Optional[list[str]] = None
 
+class ExternalUrlRequest(BaseModel):
+    url: str
+
 class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     title: Optional[str] = "Přejmenovaný chat"
@@ -440,6 +447,70 @@ def get_system_status():
 # ------------------------------------------------------------------------------
 # Endpoints: Konverzace & Relace (Sessions)
 # ------------------------------------------------------------------------------
+
+def _is_valid_external_url_syntax(url: str) -> bool:
+    if not url or url != url.strip() or any(ord(char) < 32 or char.isspace() for char in url):
+        return False
+    try:
+        parsed = urlparse(url)
+        return (
+            parsed.scheme.lower() in {"http", "https"}
+            and bool(parsed.hostname)
+            and bool(parsed.netloc)
+            and parsed.username is None
+            and parsed.password is None
+            and (parsed.port is None or 1 <= parsed.port <= 65535)
+        )
+    except ValueError:
+        return False
+
+
+@app.post("/api/open-external-url")
+async def open_external_url(req: ExternalUrlRequest, request: Request):
+    require_loopback_client(request)
+    if not _is_valid_external_url_syntax(req.url) or not is_safe_web_url(req.url):
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Odkaz je neplatný nebo není bezpečný."},
+        )
+
+    timeout = aiohttp.ClientTimeout(total=2.5, connect=2.5)
+    connector = aiohttp.TCPConnector(resolver=PublicOnlyResolver(), limit=1)
+    try:
+        async with aiohttp.ClientSession(connector=connector) as session:
+            response = await _safe_get(session, req.url, timeout=timeout)
+            if response is None:
+                return JSONResponse(
+                    status_code=502,
+                    content={"status": "error", "message": "Odkaz není dostupný nebo neexistuje."},
+                )
+            status_code = response.status
+            response.release()
+    except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+        logger.info("Ověření externího odkazu selhalo: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"status": "error", "message": "Odkaz není dostupný nebo neexistuje."},
+        )
+
+    if not 200 <= status_code < 400:
+        return JSONResponse(
+            status_code=502,
+            content={"status": "error", "message": "Odkaz není dostupný nebo neexistuje."},
+        )
+
+    try:
+        opened = await asyncio.to_thread(webbrowser.open_new_tab, req.url)
+    except (webbrowser.Error, OSError) as exc:
+        logger.warning("Nepodařilo se otevřít externí odkaz v prohlížeči: %s", exc)
+        opened = False
+    if not opened:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Odkaz se nepodařilo otevřít v prohlížeči."},
+        )
+    return {"status": "ok"}
+
 
 def _normalize_session_summary(s: dict) -> dict:
     sid = s.get("session_id") or s.get("id") or ""

@@ -50,6 +50,17 @@ class SafeRedirectTests(unittest.IsolatedAsyncioTestCase):
             ["https://example.com/news/page1", "https://example.com/news/page2"],
         )
 
+    @patch("web_search.is_safe_web_url", side_effect=lambda url: url.startswith("https://"))
+    async def test_rejects_redirect_to_private_http_host(self, _is_safe_url):
+        redirect = FakeResponse(302, {"Location": "http://127.0.0.1/admin"})
+        session = FakeSession([redirect])
+
+        result = await _safe_get(session, "https://example.com/start", timeout=None)
+
+        self.assertIsNone(result)
+        self.assertTrue(redirect.released)
+        self.assertEqual(session.requested_urls, ["https://example.com/start"])
+
 
 if __name__ == "__main__":
     unittest.main()

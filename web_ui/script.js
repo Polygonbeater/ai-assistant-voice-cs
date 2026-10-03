@@ -705,6 +705,8 @@
       log_session_deleted: 'Session {id} deleted.',
       sources_count: '{count} sources',
       chunks_count: '{count} chunks',
+      external_link_opened: 'Opening link in your default browser.',
+      external_link_unavailable: 'The link is unavailable or invalid.',
       settings_tab_brain: 'AI Brain & Providers',
       settings_tab_general: 'General Preferences',
       cfg_brain_desc: 'Choose whether to run completely private on local hardware (.gguf) or connect ultra-fast cloud/custom AI providers.',
@@ -956,6 +958,8 @@
       log_session_deleted: 'Relace {id} smazána.',
       sources_count: '{count} zdrojů',
       chunks_count: '{count} úseků',
+      external_link_opened: 'Odkaz se otevírá ve výchozím prohlížeči.',
+      external_link_unavailable: 'Odkaz není dostupný nebo je neplatný.',
       settings_tab_brain: 'AI Brain & Poskytovatelé',
       settings_tab_general: 'Obecná konfigurace',
       cfg_brain_desc: 'Zvolte, zda poběžíte privátně na lokálním hardwaru (.gguf), nebo připojíte bleskové cloudové a vlastní AI poskytovatele.',
@@ -2392,6 +2396,34 @@
       toast.classList.remove('show');
     }, 3800);
   }
+
+  async function openExternalUrl(url) {
+    try {
+      const response = await fetch('/api/open-external-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!response.ok) {
+        showToast(t('external_link_unavailable'), 'warn');
+        return;
+      }
+      showToast(t('external_link_opened'), 'info');
+    } catch (error) {
+      showToast(t('external_link_unavailable'), 'warn');
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const link = event.target.closest('a.research-source-link, .message-content a[href]');
+    if (!link) return;
+
+    const url = link.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(url)) return;
+    event.preventDefault();
+    void openExternalUrl(url);
+  });
 
   function extractCorrectedText(text) {
     if (!text || typeof text !== 'string') return null;
