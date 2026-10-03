@@ -16,15 +16,29 @@ ALLOWED_OUTPUT_DIRS = {"tests", "scratch"}
 def validate_python_code_safety(code: str) -> Tuple[bool, str]:
     """
     Statická AST kontrola vygenerovaného kódu před jeho uložením a spuštěním.
-    Blokuje nebezpečné moduly (síťové sockety, surový shell mimo test fixtures, eval/exec reflexi).
+    Blokuje nebezpečné moduly (os, subprocess, sys, shutil, socket...), reflexi (eval/exec) a dunder metody.
     """
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
         return False, f"Chyba syntaxe: {e}"
 
-    banned_calls = {"eval", "exec", "compile", "__import__"}
-    banned_modules = {"socket", "urllib", "paramiko", "telnetlib", "ftplib"}
+    banned_calls = {"eval", "exec", "compile", "__import__", "globals", "locals", "getattr", "setattr", "delattr", "system", "popen", "spawn"}
+    banned_modules = {
+        "os",
+        "subprocess",
+        "sys",
+        "shutil",
+        "socket",
+        "urllib",
+        "requests",
+        "http",
+        "paramiko",
+        "telnetlib",
+        "ftplib",
+        "pty",
+        "posix",
+    }
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
@@ -37,9 +51,16 @@ def validate_python_code_safety(code: str) -> Tuple[bool, str]:
             for alias in node.names:
                 full_mod = f"{mod}.{alias.name}" if mod else alias.name
                 root_mod = full_mod.split(".")[0]
-                if root_mod in banned_modules:
-                    return False, f"Zakázaný import nebezpečného modulu: {root_mod}"
+                if root_mod in banned_modules or (mod and mod.split(".")[0] in banned_modules):
+                    return False, f"Zakázaný import nebezpečného modulu: {root_mod or mod}"
+        elif isinstance(node, ast.Attribute):
+            if node.attr.startswith("__") or node.attr in ("__subclasses__", "__globals__", "__builtins__", "__code__"):
+                return False, f"Zakázaný přístup k dunder atributu: {node.attr}"
+        elif isinstance(node, ast.Name):
+            if node.id in banned_calls:
+                return False, f"Zakázané použití funkce/proměnné: {node.id}"
     return True, ""
+
 
 
 def is_execution_authorized() -> bool:

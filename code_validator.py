@@ -55,7 +55,7 @@ BANNED_SAVE_METHODS: frozenset[str] = frozenset({
     "save_sequence",
 })
 
-# Zákaz přístupu k dunder atributům pro zamezení reflexe a sandbox escape
+# Zákaz přístupu k dunder atributům a nebezpečným vlastnostem souborového API (filepath, filepath_raw)
 BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__subclasses__",
     "__builtins__",
@@ -65,6 +65,9 @@ BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__reduce__",
     "__reduce_ex__",
     "__import__",
+    "filepath",
+    "filepath_raw",
+    "filepath_from_user",
 })
 
 # Zákaz nebezpečných atributů a souborových I/O operací na objektu bpy
@@ -344,6 +347,26 @@ class BlenderCodeValidator(ast.NodeVisitor):
             raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{node.id}' je striktně zakázáno.")
         if node.id in ("__builtins__", "__globals__") or node.id.startswith("__") or node.id in BANNED_ATTRIBUTES:
             raise ValueError(f"Bezpečnostní pojistka: Přímý přístup k internímu identifikátoru '{node.id}' je striktně zakázán.")
+        self.generic_visit(node)
+
+    def visit_While(self, node: ast.While) -> None:
+        """Detekuje a blokuje nekonečné smyčky (while True, while 1, while not False atd.)."""
+        is_infinite = False
+        if isinstance(node.test, ast.Constant) and bool(node.test.value):
+            is_infinite = True
+        elif isinstance(node.test, ast.Name) and node.test.id == "True":
+            is_infinite = True
+        elif isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not):
+            if isinstance(node.test.operand, ast.Constant) and not bool(node.test.operand.value):
+                is_infinite = True
+            elif isinstance(node.test.operand, ast.Name) and node.test.operand.id == "False":
+                is_infinite = True
+
+        if is_infinite:
+            raise ValueError(
+                "Bezpečnostní pojistka: Nekonečné smyčky ('while True', 'while 1') jsou v Blender skriptech "
+                "zakázány pro ochranu hlavního vlákna před zamrznutím."
+            )
         self.generic_visit(node)
 
 

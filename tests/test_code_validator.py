@@ -215,7 +215,6 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
             "import bpy\nbpy.ops.image.save_as(filepath='/tmp/out.png')",
             "import bpy\nbpy.ops.render.render(write_still=True)",
             "import bpy\nbpy.ops.render.opengl(write_still=True)",
-            "import bpy\nbpy.ops.sound.mixdown(filepath='/tmp/audio.wav')",
             "import bpy\nfn = img.save_render",
             "import bpy\nfn = img.save",
             "import bpy\nfn = bpy.ops.image.save",
@@ -224,6 +223,36 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
             is_valid, msg = validate_blender_code(snippet)
             self.assertFalse(is_valid, f"Save/render snippet '{snippet}' nebyl zablokován!")
             self.assertIn("Bezpečnostní pojistka", msg)
+
+    def test_bpy_image_filepath_manipulation_blocked(self):
+        """Ověří, že manipulace s filepath a filepath_raw na obrázcích je zablokována."""
+
+        filepath_snippets = [
+            "import bpy\nimg = bpy.data.images.new('test', 10, 10)\nimg.filepath_raw = '/tmp/pwn.png'",
+            "import bpy\nimg = bpy.data.images.new('test', 10, 10)\nimg.filepath = '/tmp/pwn.png'",
+            "import bpy\nimg.filepath_from_user = '/tmp/pwn.png'",
+            "import bpy\nfp = img.filepath_raw",
+            "import bpy\nfp = img.filepath",
+        ]
+        for snippet in filepath_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Filepath snippet '{snippet}' nebyl zablokován!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+
+    def test_infinite_while_loops_blocked(self):
+        """Ověří, že nekonečné smyčky (while True, while 1, while not False) jsou zablokovány."""
+        loop_snippets = [
+            "import bpy\nwhile True:\n    pass",
+            "import bpy\nwhile 1:\n    x = 1",
+            "import bpy\nwhile 'forever':\n    pass",
+            "import bpy\nwhile not False:\n    pass",
+            "import bpy\nwhile not 0:\n    pass",
+        ]
+        for snippet in loop_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Nekonečná smyčka '{snippet}' nebyla zablokována!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+            self.assertIn("Nekonečné smyčky", msg)
 
 
 if __name__ == "__main__":

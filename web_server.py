@@ -88,12 +88,20 @@ def require_loopback_client(request: Request) -> None:
 
 def save_config_file(path: str = "config.json") -> bool:
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        mode = 0o600
+        fd = os.open(path, flags, mode)
+        with open(fd, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
         return True
     except Exception as exc:
         logger.warning("Nepodařilo se uložit config.json: %s", exc)
         return False
+
 
 def mask_api_key(key: str) -> str:
     if not key:
@@ -182,20 +190,35 @@ def get_llm():
 def reload_local_llm(new_model_path: Optional[str] = None):
     global _llm_instance
     with _llm_lock:
+        target_path = new_model_path.strip() if new_model_path else config.get("llama", {}).get("model")
+        if not target_path or not Path(target_path).exists():
+            raise FileNotFoundError(f"Modelový soubor nebyl nalezen na cestě: {target_path}")
+
+        # Vytvoříme testovací konfiguraci a zavedeme nový model před uvolněním starého
+        test_config = json.loads(json.dumps(config))
+        test_config.setdefault("llama", {})["model"] = target_path
+
+        logger.info("Zavádím nový model do paměti: %s", target_path)
+        new_instance = initialize_llama(test_config)
+        if new_instance is None:
+            raise RuntimeError(f"Inicializace modelu '{target_path}' selhala.")
+
+        # Nový model byl úspěšně vytvořen, bezpečně uvolníme starý
         if _llm_instance is not None:
             logger.info("Uvolňuji stávající model z paměti RAM/VRAM...")
-            unload_llama_model(_llm_instance)
-            _llm_instance = None
+            try:
+                unload_llama_model(_llm_instance)
+            except Exception as e:
+                logger.warning("Upozornění při uvolňování starého modelu: %s", e)
 
+        _llm_instance = new_instance
         if new_model_path:
-            config.setdefault("llama", {})["model"] = new_model_path
-
+            config.setdefault("llama", {})["model"] = target_path
         save_config_file()
 
-        logger.info("Zavádím nový model do paměti: %s", config.get("llama", {}).get("model"))
-        _llm_instance = initialize_llama(config)
         logger.info("Nový lokální model úspěšně zaveden.")
         return _llm_instance
+
 
 def get_whisper():
     global _whisper_instance
@@ -414,7 +437,8 @@ def _normalize_session_summary(s: dict) -> dict:
     }
 
 @app.get("/api/sessions")
-def list_sessions():
+def list_sessions(request: Request):
+    require_loopback_client(request)
     sessions = history_repository.list_sessions()
     if not sessions:
         new_sess = history_repository.create_session("Nový chat")
@@ -422,13 +446,15 @@ def list_sessions():
     return {"sessions": [_normalize_session_summary(s) for s in sessions]}
 
 @app.post("/api/sessions")
-def create_session(title: str = "New chat"):
+def create_session(request: Request, title: str = "New chat"):
+    require_loopback_client(request)
     clean_title = (title or "New chat").strip()
     sess = history_repository.create_session(clean_title)
     return _normalize_session_summary(sess)
 
 @app.get("/api/sessions/{session_id}")
-def get_session(session_id: str):
+def get_session(session_id: str, request: Request):
+    require_loopback_client(request)
     if not is_safe_session_id(session_id):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
@@ -438,7 +464,8 @@ def get_session(session_id: str):
         raise HTTPException(status_code=404, detail=f"Relace nenalezena: {e}")
 
 @app.patch("/api/sessions/{session_id}")
-def rename_session(session_id: str, req: SessionRenameRequest):
+def rename_session(session_id: str, req: SessionRenameRequest, request: Request):
+    require_loopback_client(request)
     if not is_safe_session_id(session_id):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
@@ -452,7 +479,8 @@ def rename_session(session_id: str, req: SessionRenameRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.delete("/api/sessions/{session_id}")
-def delete_session(session_id: str):
+def delete_session(session_id: str, request: Request):
+    require_loopback_client(request)
     if not is_safe_session_id(session_id):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     # Zastavit probíhající worker/stream pro danou relaci
@@ -463,7 +491,8 @@ def delete_session(session_id: str):
     return {"status": "success", "session_id": session_id, "deleted": success}
 
 @app.delete("/api/sessions/{session_id}/messages")
-def clear_session_messages(session_id: str):
+def clear_session_messages(session_id: str, request: Request):
+    require_loopback_client(request)
     if not is_safe_session_id(session_id):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
@@ -471,6 +500,7 @@ def clear_session_messages(session_id: str):
         return {"status": "success", "session_id": session_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 # ------------------------------------------------------------------------------
 # Endpoints: Chat & Streaming (SSE)
@@ -1048,14 +1078,16 @@ async def transcribe_audio(file: UploadFile = File(...)):
             logger.warning("Nepodařilo se odstranit dočasnou nahrávku %s: %s", temp_path, cleanup_err)
 
 @app.delete("/api/rag/documents/{doc_name}")
-def delete_rag_document(doc_name: str):
+def delete_rag_document(doc_name: str, request: Request):
+    require_loopback_client(request)
     if not document_service:
         raise HTTPException(status_code=400, detail="RAG služba není dostupná.")
     success = document_service.delete_document(doc_name)
     return {"status": "success" if success else "not_found", "document": doc_name}
 
 @app.post("/api/rag/memory/reindex")
-def reindex_all_memory():
+def reindex_all_memory(request: Request):
+    require_loopback_client(request)
     res = history_repository.reindex_all_to_memory()
     return {"status": "success", "result": res}
 
@@ -1064,7 +1096,8 @@ def reindex_all_memory():
 # ------------------------------------------------------------------------------
 
 @app.get("/api/llm/local-models")
-def get_local_models():
+def get_local_models(request: Request):
+    require_loopback_client(request)
     """Vrací seznam všech nalezených lokálních .gguf modelů s metadaty."""
     models_dir = config.get("llama", {}).get("models_dir", "models")
     active_model = config.get("llama", {}).get("model", "")
@@ -1078,7 +1111,8 @@ def get_local_models():
     }
 
 @app.post("/api/llm/switch-model")
-def switch_local_model(req: SwitchLocalModelRequest):
+def switch_local_model(req: SwitchLocalModelRequest, request: Request):
+    require_loopback_client(request)
     """Bezpečně uvolní stávající model z RAM/VRAM a zavede nově vybraný .gguf soubor."""
     path_str = req.model_path.strip()
     if not path_str:
@@ -1119,7 +1153,8 @@ def test_connection_endpoint(req: TestConnectionRequest, request: Request):
 
     provider_cfg = config.get("llm_provider", {}).get(provider, {})
     requested_api_key = (req.api_key or "").strip()
-    uses_saved_api_key = not requested_api_key or "••••" in requested_api_key
+    uses_saved_api_key = not requested_api_key or "••••" in requested_api_key or "*" in requested_api_key
+
     base_url = (
         (provider_cfg.get("base_url", "") if uses_saved_api_key else (req.base_url or "").strip())
         or provider_cfg.get("base_url", "")
@@ -1217,7 +1252,7 @@ def update_config(req: SettingsUpdateRequest, request: Request):
                 for k, v in incoming.items():
                     if k == "api_key":
                         # Aktualizujeme klíč pouze pokud není prázdný a není zamaskovaný
-                        if v and "••••" not in v and "..." not in v:
+                        if v and "••••" not in v and "..." not in v and "*" not in v:
                             current["api_key"] = v.strip()
                     elif k != "has_api_key":
                         current[k] = v
@@ -1226,7 +1261,7 @@ def update_config(req: SettingsUpdateRequest, request: Request):
         blender_cfg = config.setdefault("blender", {})
         for k, v in req.blender.items():
             if k == "auth_token":
-                if v and "••••" not in v and "..." not in v:
+                if v and "••••" not in v and "..." not in v and "*" not in v:
                     blender_cfg["auth_token"] = v.strip()
             elif k != "has_auth_token":
                 blender_cfg[k] = v
@@ -1238,6 +1273,7 @@ def update_config(req: SettingsUpdateRequest, request: Request):
             reload_local_llm(new_model_path=new_m)
         except Exception as e:
             logger.warning("Nepodařilo se přepnout lokální model: %s", e)
+            raise HTTPException(status_code=400, detail=f"Nepodařilo se přepnout lokální model: {e}")
     else:
         saved = save_config_file()
         if not saved:
@@ -1248,6 +1284,7 @@ def update_config(req: SettingsUpdateRequest, request: Request):
         "config": get_config()["config"],
         "active_brain": get_active_provider_info(),
     }
+
 
 
 @app.post("/api/app/shutdown")

@@ -279,6 +279,10 @@ class TestSecurityPatches(unittest.TestCase):
             "eval('__import__(\"os\").system(\"rm -rf /\")')",
             "exec('import os')",
             "compile('1+1', '', 'eval')",
+            "import os\nos.system('ls')",
+            "import subprocess\nsubprocess.run(['echo'])",
+            "import sys\nsys.exit(0)",
+            "import shutil\nshutil.rmtree('/tmp')",
         ]
         for c in dangerous_codes:
             is_safe, err = validate_python_code_safety(c)
@@ -398,5 +402,45 @@ class TestDemo(unittest.TestCase):
                 web_server.config["blender"] = original_blender
             else:
                 web_server.config.pop("blender", None)
+
+    def test_save_config_file_permissions(self):
+        """Ověří, že save_config_file ukládá soubor s restriktivními právy 0o600."""
+        import os
+        import stat
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            success = web_server.save_config_file(tmp_path)
+            self.assertTrue(success)
+            file_stat = os.stat(tmp_path)
+            mode = stat.S_IMODE(file_stat.st_mode)
+            self.assertEqual(mode, 0o600)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_model_reload_failure_handling(self):
+        """Ověří, že neexistující model vyvolá výjimku a nezničí stávající stav."""
+        with self.assertRaises(FileNotFoundError):
+            web_server.reload_local_llm("nonexistent_model_12345.gguf")
+
+        # Přepnutí přes API
+        resp = self.client.post("/api/llm/switch-model", json={"model_path": "nonexistent_model_12345.gguf"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_llm_authorization_bearer_header(self):
+        """Ověří, že OpenAICompatibleClient správně odesílá Authorization: Bearer <klíč>."""
+        from llama_module import OpenAICompatibleClient
+        client = OpenAICompatibleClient(base_url="https://api.openai.com/v1", api_key="sk-test-secret-key-123")
+        self.assertEqual(client.api_key, "sk-test-secret-key-123")
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.__enter__.return_value.status_code = 200
+            mock_post.return_value.__enter__.return_value.iter_lines.return_value = []
+            list(client.create_chat_completion(messages=[{"role": "user", "content": "hi"}], stream=True))
+            call_headers = mock_post.call_args[1]["headers"]
+            self.assertEqual(call_headers.get("Authorization"), "Bearer sk-test-secret-key-123")
+
+
 if __name__ == "__main__":
     unittest.main()
