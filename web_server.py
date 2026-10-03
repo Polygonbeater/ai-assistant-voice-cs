@@ -260,6 +260,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def security_shield_middleware(request: Request, call_next):
+    """
+    Bezpečnostní middleware štít:
+    1. Network Loopback Shield: Všechny /api/ endpointy jsou přístupné výhradně z lokálního zařízení (loopback).
+    2. Anti-CSRF Guard: Všechny mutační metody (POST, PUT, PATCH, DELETE) vyžadují hlavičku X-Polygon-Client: true.
+    """
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    # 1. Loopback ochrana pro všechny /api/ endpointy
+    if request.url.path.startswith("/api/"):
+        client_host = request.client.host if request.client else ""
+        if client_host not in ("testclient", "localhost", "127.0.0.1", "::1"):
+            try:
+                if not ipaddress.ip_address(client_host).is_loopback:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Tato operace je povolena pouze z lokálního zařízení."},
+                    )
+            except ValueError:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Tato operace je povolena pouze z lokálního zařízení."},
+                )
+
+    # 2. Anti-CSRF ochrana pro mutační HTTP požadavky
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        csrf_header = (request.headers.get("x-polygon-client") or "").strip().lower()
+        if csrf_header != "true":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Chybí nebo je neplatná bezpečnostní hlavička X-Polygon-Client: true."},
+            )
+
+    return await call_next(request)
+
+
 SESSION_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 

@@ -558,7 +558,10 @@ class DocumentService:
             doc_name = c.get("doc_name", "Dokument")
             score = c.get("score", 0.0)
             text = c.get("text", "").strip()
-            formatted.append(f"[Úsek {i} | Zdroj: {doc_name} (relevance: {score:.2f})]\n{text}")
+            formatted.append(
+                f"[Úsek {i} | Zdroj: {doc_name} (relevance: {score:.2f})]\n"
+                f"<untrusted_context>\n{text}\n</untrusted_context>"
+            )
         return "\n\n".join(formatted)
 
     @staticmethod
@@ -952,7 +955,10 @@ class ConversationMemoryService:
             title = m.get("session_title", "Předchozí konverzace")
             score = m.get("score", 0.0)
             text = m.get("text", "").strip()
-            formatted.append(f"--- Záznam #{i} [Téma: „{title}“, relevance: {score:.2f}] ---\n{text}")
+            formatted.append(
+                f"--- Záznam #{i} [Téma: „{title}“, relevance: {score:.2f}] ---\n"
+                f"<untrusted_context>\n{text}\n</untrusted_context>"
+            )
         return "\n\n".join(formatted)
 
     def delete_session(self, session_id: str) -> bool:

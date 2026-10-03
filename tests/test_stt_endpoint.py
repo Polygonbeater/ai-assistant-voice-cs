@@ -10,7 +10,7 @@ from web_server import app
 
 class SpeechToTextEndpointTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"X-Polygon-Client": "true"})
 
     def test_transcribes_uploaded_audio_with_local_whisper(self):
         model = MagicMock()

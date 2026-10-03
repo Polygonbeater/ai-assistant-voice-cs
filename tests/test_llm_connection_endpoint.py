@@ -8,7 +8,16 @@ import web_server
 
 class TestLlmConnectionEndpoint(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(web_server.app)
+        self.client = TestClient(web_server.app, headers={"X-Polygon-Client": "true"})
+
+    def test_missing_csrf_header_is_rejected_with_403(self):
+        raw_client = TestClient(web_server.app)
+        response = raw_client.post(
+            "/api/llm/test-connection",
+            json={"provider_type": "groq"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("X-Polygon-Client", response.json().get("detail", ""))
 
     def test_saved_key_uses_configured_provider_url_not_request_url(self):
         config = {

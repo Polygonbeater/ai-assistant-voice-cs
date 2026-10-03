@@ -8,6 +8,30 @@
   'use strict';
 
   // ===========================================================================
+  // ANTI-CSRF FETCH INTERCEPTOR
+  // ===========================================================================
+  // Automaticky připojuje bezpečnostní hlavičku X-Polygon-Client: true ke všem
+  // HTTP požadavkům odesílaným z webového rozhraní na lokální backend.
+  if (typeof window !== 'undefined' && window.fetch) {
+    const _originalFetch = window.fetch;
+    window.fetch = function(resource, init) {
+      init = init || {};
+      let headers = init.headers;
+      if (!headers) {
+        headers = { 'X-Polygon-Client': 'true' };
+      } else if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+        headers.set('X-Polygon-Client', 'true');
+      } else if (Array.isArray(headers)) {
+        headers.push(['X-Polygon-Client', 'true']);
+      } else if (typeof headers === 'object') {
+        headers['X-Polygon-Client'] = 'true';
+      }
+      init.headers = headers;
+      return _originalFetch.call(this, resource, init);
+    };
+  }
+
+  // ===========================================================================
   // CLIENT STATE
   // ===========================================================================
   const state = {

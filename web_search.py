@@ -487,7 +487,7 @@ async def search_multi_source_async(
         doc_block = (
             f"### [{idx}] Zdroj: {src['title']} ({src['source']})\n"
             f"URL: {src['url']}\n"
-            f"<source_content>\n{trimmed_content}\n</source_content>"
+            f"<untrusted_context>\n<source_content>\n{trimmed_content}\n</source_content>\n</untrusted_context>"
         )
         formatted_docs.append(doc_block)
         src["snippet"] = trimmed_content[:350].strip()

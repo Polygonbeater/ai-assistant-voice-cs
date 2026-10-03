@@ -8,7 +8,7 @@ from web_server import app
 
 class ChatWorkerErrorTests(unittest.TestCase):
     def test_methodology_classifier_failure_is_sent_as_sse_error(self):
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Polygon-Client": "true"})
 
         with (
             patch("web_server.get_llm", return_value=MagicMock()),
