@@ -57,7 +57,7 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
                     "llm_provider": {
                         "gemini": {
                             "api_key": "saved-secret",
-                            "base_url": "https://generativelanguage.googleapis.com/v1main/openai/",
+                            "base_url": "https://generativelanguage.googleapis.com/v1beta/v1main/openai/",
                             "model": "gemini-2.0-flash",
                         }
                     }
@@ -74,7 +74,7 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         test_connection.assert_called_once_with(
             provider_type="gemini",
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            base_url="https://generativelanguage.googleapis.com/v1beta/v1beta/openai/",
             api_key="saved-secret",
             model="gemini-2.0-flash",
         )

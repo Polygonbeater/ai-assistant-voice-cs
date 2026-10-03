@@ -22,7 +22,6 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urlsplit, urlunsplit
 
 import anyio
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -1195,17 +1194,6 @@ def test_connection_endpoint(req: TestConnectionRequest, request: Request):
         else:
             base_url = "https://api.openai.com/v1"
 
-    if provider == "gemini":
-        parsed_base_url = urlsplit(base_url)
-        path_parts = parsed_base_url.path.split("/")
-        if (
-            parsed_base_url.hostname == "generativelanguage.googleapis.com"
-            and len(path_parts) > 1
-            and path_parts[1] == "v1main"
-        ):
-            path_parts[1] = "v1beta"
-            base_url = urlunsplit(parsed_base_url._replace(path="/".join(path_parts)))
-
     api_key = provider_cfg.get("api_key", "") if uses_saved_api_key else requested_api_key
 
     model = (req.model or "").strip() or provider_cfg.get("model", "")
@@ -1216,6 +1204,9 @@ def test_connection_endpoint(req: TestConnectionRequest, request: Request):
             model = "gemini-2.0-flash"
         else:
             model = "gpt-4o"
+
+    if provider == "gemini":
+        base_url = base_url.replace("v1main", "v1beta")
 
     res = test_provider_connection(
         provider_type=provider,
