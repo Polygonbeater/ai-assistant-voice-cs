@@ -248,7 +248,8 @@ def sanitize_untrusted_text(text: str) -> str:
     """Escapuje XML znaky, aby útočník nemohl předčasně ukončit tag <untrusted_context>."""
     if not text:
         return ""
-    return str(text).replace("<", "&lt;").replace(">", "&gt;")
+    # Ampersand musí být první, abychom neescapovali ampersandy ze zrovna nahrazených &lt; a &gt;
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _clean_text_for_prompt(text: str) -> str:
