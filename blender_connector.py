@@ -8,6 +8,8 @@ import logging
 import socket
 from typing import Any
 
+from code_validator import BlenderCodeValidator, CodeValidationError as AstCodeValidationError, validate_blender_code
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLENDER_HOST = "127.0.0.1"
@@ -95,6 +97,21 @@ def send_code_to_blender(
         }
         if raise_on_error:
             raise BlenderExecutionError("Kód k odeslání je prázdný.", response=err_dict)
+        return err_dict
+
+    # Bezpečnostní validace syntaxe a sandboxu pomocí AST
+    is_valid, validation_err = validate_blender_code(code)
+    if not is_valid:
+        err_dict = {
+            "status": "error",
+            "error": "CodeValidationError",
+            "traceback": "",
+            "message": validation_err,
+            "detail": validation_err,
+        }
+        logger.warning("Zablokováno spuštění nevalidního/nebezpečného kódu v Blenderu: %s", validation_err)
+        if raise_on_error:
+            raise BlenderExecutionError(validation_err, error="CodeValidationError", response=err_dict)
         return err_dict
 
     sock = None
