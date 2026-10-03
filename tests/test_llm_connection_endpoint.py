@@ -125,9 +125,8 @@ class TestLlmConnectionEndpoint(unittest.TestCase):
                     }
                 },
             )
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(web_server.config, original_config)
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(web_server.config, original_config)
 
 
 if __name__ == "__main__":
