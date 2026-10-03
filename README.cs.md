@@ -1,129 +1,158 @@
-# 🎙️ AI Assistant Voice CS: Lokální hlasový parťák & 3D Technical Director
+# 🎙️ Polygon Beater — AI Assistant Voice CS
+### *Lokální hlasový AI asistent a 3D technický ředitel pro Blender 4.x*
 
 🌍 **[🇬🇧 Read the English Version (Anglická verze)](README.md)**
 
-> **100% lokální, soukromý hlasový AI asistent pro český jazyk s přímou automatizací 3D modelování, procedurální geometrie a postprodukce v Blenderu 4.2.1 LTS.**  
-> *Vytváříme explicitní geometrii — čisté Quad sítě, rozbalené UV a přepečené PBR materiály připravené pro herní enginy a VFX.*
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python)](https://www.python.org/)
+[![Blender 4.x+](https://img.shields.io/badge/Blender-4.x%20LTS-orange.svg?logo=blender)](https://www.blender.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Vulkan Accelerated](https://img.shields.io/badge/Vulkan-Hardware%20Offload-red.svg?logo=vulkan)](https://www.khronos.org/vulkan/)
+[![AST Protected](https://img.shields.io/badge/Security-AST%20Gatekeeper-success.svg)]()
+[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-27%2F27%20Passed%20(100%25)-brightgreen.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg?logo=python)](https://www.python.org/)
-[![Blender 4.2.1 LTS](https://img.shields.io/badge/Blender-4.2.1%20LTS-orange.svg?logo=blender)](https://www.blender.org/)
-[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-176%20Passed%20%28100%25%29-brightgreen.svg)]()
-[![Tools](https://img.shields.io/badge/Registered%20Tools-20%20Production%20Tools-purple.svg)]()
-[![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-green.svg)]()
+> **Polygon Beater** je pokročilý, 100% suverénní lokální hlasový asistent s integrovaným 3D kognitivním jádrem pro přímou procedurální tvorbu, parametrické CAD modelování, inspekci topologie a automatizaci renderovací pipeline v **Blenderu 4.x LTS**.  
+> *Vytváříme explicitní geometrii — čisté Quad sítě, rozbalené UV a přepečené PBR materiály připravené pro herní enginy, 3D tisk a VFX.*
+
+---
 
 **Hlavní architekt & autor:** Vítězslav Koneval (*Polygon Beater*)  
 **Projektový repozitář:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
 
 ---
 
-## 🔒 Hlavní myšlenka: Plně lokální, hlasem ovládaný asistent
+## 🔒 Hlavní myšlenka: Suverenita dat & Hybridní AI mozek
 
-**AI Assistant Voice CS** je postaven na nekompromisním principu **suverenity dat a nulové závislosti na cloudu**:
-* **Žádné API klíče, žádné předplatné, žádné odesílání hlasu na servery třetích stran.** Vaše konverzace ani soukromé 3D modely nikdy neopustí vaši pracovní stanici.
-* **Maximální offline výpočetní síla:** Architektura je optimalizována pro moderní vícejádrové procesory (automatická detekce fyzických jader přes `psutil`) i dedikované grafické karty NVIDIA (CUDA / PyTorch).
-* **Přirozený dialog v českém jazyce:** Bezchybná česká fonetika, okamžitá hlasová syntéza a schopnost řídit profesionální 3D software.
+**Polygon Beater** je postaven na nekompromisním principu **ochrany soukromí a nulové závislosti na cloudu**:
+* **100% offline jako výchozí stav:** Vaše hlasové nahrávky, historie konverzací, soukromé CAD náčrty ani 3D scény nikdy neopustí vaši pracovní stanici.
+* **Hybridní kognitivní flexibilita:** Běží zcela offline na lokálních GGUF modelech (s akcelerací přes fyzická jádra CPU a Vulkan GPU offload), nebo umožňuje bleskově připojit cloudové LPU (Groq Llama 3.3 / Qwen 2.5), multimodální Google Gemini (2.0 Flash / Vision) i libovolné vlastní OpenAI-kompatibilní API (DeepSeek, OpenRouter, Mistral, Ollama, vLLM).
+* **Přirozený dialog v češtině i angličtině:** Bezchybná česká fonetika, okamžitá hlasová syntéza se streamingem, inteligentní přerušení při vstupu řeči (barge-in) a schopnost řídit profesionální 3D software.
 
 ---
 
 ## 🧠 Sekce 1: Jádro asistenta (Kognitivní a Hlasový modul)
 
-Jádro systému tvoří tři dokonale synchronizované pilíře, které určují, jak asistent vnímá svět, jak uvažuje a jak komunikuje:
+Jádro systému tvoří tři synchronizované pilíře, které určují, jak asistent vnímá svět, jak uvažuje a jak komunikuje:
 
 ```
-    [ UŽIVATEL MLUVÍ ]
-           │
-           ▼
-┌────────────────────────────────────────────────────────┐
-│ 1. JAK ASISTENT SLYŠÍ (Whisper + VAD + Wake Word)     │
-│ • openWakeWord: Kontinuální hands-free "Hey Jarvis"    │
-│ • Silero VAD: Detekce hlasové aktivity a ořez ticha   │
-│ • Faster-Whisper (int8 CTranslate2): Bleskový přepis  │
-└──────────────────────────┬─────────────────────────────┘
-                           │ textový prompt
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│ 2. JAK ASISTENT MYSLÍ (Llama + Vektorový RAG)         │
-│ • llama-cpp-python: Qwen 2.5 / GLM-4 GGUF inference    │
-│ • Dlouhodobá sémantická paměť: FAISS + all-MiniLM-L6-v2│
-│ • Lokální dokumentový RAG: PDF / DOCX parsing          │
-│ • Online rešerše: DuckDuckGo vyhledávání + trafilatura │
-│ • JSON Tool-Use Dispatcher (20 registrovaných nástrojů)│
-└──────────────────────────┬─────────────────────────────┘
-                           │ tokeny / větný stream
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│ 3. JAK ASISTENT MLUVÍ (Gruut & Coqui Streaming TTS)    │
-│ • Gruut: Přesná česká fonetika a normalizace čísel     │
-│ • Coqui TTS: Přirozený český hlasový model             │
-│ • Pipelined Streaming: Přehrávání první věty začíná    │
-│   ihned během inference zbytku odpovědi                │
-│ • Instant Barge-in: Okamžité přerušení při vstupu řeči │
-└────────────────────────────────────────────────────────┘
+                          [ UŽIVATEL MLUVÍ / PÍŠE ]
+                                     │
+                                     ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. JAK ASISTENT SLYŠÍ (Whisper + Silero VAD + openWakeWord)            │
+│ • openWakeWord: Kontinuální hands-free aktivace "Hey Jarvis"           │
+│ • Silero VAD: Neuronová detekce hlasové aktivity a ořez ticha          │
+│ • Faster-Whisper (int8 CTranslate2): Bleskový lokální přepis řeči      │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ textový prompt
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. JAK ASISTENT MYSLÍ (Hybridní LLM + Sémantická paměť RAG)           │
+│ • llama-cpp-python: Lokální GGUF inference (Qwen 2.5, GLM-4) na Vulkan │
+│ • Cloud LPU & Multimodalita: Groq (Llama 3.3), Gemini 2.0, DeepSeek   │
+│ • Dlouhodobá sémantická paměť: FAISS vektorová databáze + MiniLM       │
+│ • Lokální dokumentový RAG: PDF / DOCX parsing a vyhledávání faktů      │
+│ • Dynamické kontextové načítání nástrojů (22 nástrojů -> 4 v chatu)   │
+│ • Online rešerše: DuckDuckGo vyhledávání + optimalizovaný kontext      │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ tokenový stream / větné události
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. JAK ASISTENT MLUVÍ (Gruut & Coqui Streaming TTS)                   │
+│ • Gruut: Přesná česká fonetika, spodoba znělosti a normalizace čísel   │
+│ • Coqui TTS: Přirozené české a anglické hlasové modely                 │
+│ • Pipelined Streaming: Přehrávání první věty začíná ihned během        │
+│   probíhající inference zbytku odpovědi model em                       │
+│ • Instant Barge-in: Okamžité přerušení přehrávání při novém vstupu     │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 👂 Jak asistent slyší (Whisper)
-* **Faster-Whisper (CTranslate2 int8):** Místo standardního pomalého Whisperu využíváme 8bitovou kvantizaci a optimalizovaný C++ engine. Přepis češtiny probíhá až 4× rychleji při zachování maximální přesnosti bez halucinací.
-* **Soukromý hlasový vstup ve Web UI:** Nahrávka z mikrofonu se odesílá pouze na lokální endpoint FastAPI `/api/stt/transcribe` a zpracovává ji Whisper; cloudové rozhraní SpeechRecognition v prohlížeči se nepoužívá. Model Whisper se načte až při prvním použití.
-* **Hands-Free aktivace (`openWakeWord`):** Asistent běží neustále na pozadí s minimální zátěží CPU. Po vyslovení aktivačního hesla (*"Hey Jarvis"*) zazní jemný tón a asistent okamžitě naslouchá.
-* **Detekce hlasu (`Silero VAD`):** Pokročilá neuronová detekce hlasu přesně odfiltruje klikání klávesnice a hluk okolí, a ukončí záznam přesně ve chvíli, kdy domluvíte.
+### 👂 Jak asistent slyší (Whisper & Neuronový VAD)
+* **Faster-Whisper (CTranslate2 int8):** Využívá 8bitovou kvantizaci a optimalizovaný C++ engine. Přepis probíhá až 4× rychleji než u standardního Whisperu při zachování maximální gramatické přesnosti a interpunkce.
+* **Soukromý hlasový vstup ve Web UI:** Záznam z mikrofonu se odesílá výhradně na lokální FastAPI endpoint `/api/stt/transcribe`. Cloudové rozhraní SpeechRecognition v prohlížeči se nepoužívá.
+* **Hands-Free aktivace (`openWakeWord`):** Běží na pozadí s minimální zátěží CPU. Po vyslovení hesla (*"Hey Jarvis"*) zazní jemný tón a asistent okamžitě naslouchá.
+* **Detekce hlasu (`Silero VAD`):** Pokročilá neuronová detekce hlasu odfiltruje klikání klávesnice a ruchy okolí a ukončí záznam přesně ve chvíli, kdy domluvíte.
 
 ### 🗣️ Jak asistent mluví (Gruut & Coqui TTS)
 * **Gruut fonetická pipeline:** Český jazyk má specifickou výslovnost, spodobu znělosti a skloňování číslovek. Modul `gruut` zajišťuje bezchybnou fonetickou transkripci a převod čísel na česká slova přes `num2words`.
 * **Pipelined Sentence Streaming:** Uživatel nečeká sekundy na vygenerování celého odstavce. Jakmile LLM dokončí první větu, dedikované audio vlákno (`pyaudio`) ji okamžitě syntetizuje a přehrává, zatímco model generuje další věty.
+* **Instant Barge-in:** Pokud začnete mluvit v průběhu odpovědi asistenta, přehrávání se okamžitě zastaví a mikrofon zpracuje nový dotaz.
 
-### 🧠 Jak asistent myslí (Llama & RAG Paměť)
-* **Lokální inference (Llama):** Běží na kvantizovaných modelech formátu GGUF (např. *Qwen 2.5 7B/14B Instruct* nebo *GLM-4 9B*). Disponuje striktním JSON Tool-Use dispečerem schopným volat nástroje nebo odpovídat přímo.
-* **Dlouhodobá sémantická paměť relací (Memory RAG):** Každá konverzace je na pozadí rozsekána na sémantické bloky a zaindexována do lokální vektorové databáze **FAISS** pomocí modelu `all-MiniLM-L6-v2`. Pokud v budoucnu řeknete *"Jakou barvu jsme minule vybrali pro auto?"*, asistent si preferenci okamžitě vybaví.
-* **Dokumentový RAG a Web:** Umí prohledávat nahraná PDF skripta, technické manuály a provádět reálné rešerše na webu přes DuckDuckGo s extrakcí textu přes `trafilatura`.
+### 🧠 Jak asistent myslí (Hybridní LLM, RAG & Dynamické načítání nástrojů)
+* **Lokální inference (Llama GGUF):** Běží na kvantizovaných modelech formátu GGUF (např. *Qwen 2.5 7B/14B Instruct* nebo *GLM-4 9B*). Automaticky detekuje fyzická jádra CPU přes `psutil` a rozděluje vrstvy do VRAM grafické karty přes Vulkan.
+* **Univerzální API klient (`OpenAICompatibleClient`):** Integrovaný streaming klient pro Groq, Google Gemini (přes OpenAI endpoint), DeepSeek, OpenRouter, Mistral, Ollama a vLLM včetně měření latence v reálném čase.
+* **Dlouhodobá sémantická paměť relací (Memory RAG):** Konverzace jsou na pozadí ukládány jako sémantické vektory přes `all-MiniLM-L6-v2` do lokální vektorové databáze **FAISS**. Asistent si spolehlivě vybaví technická rozhodnutí (*"Jaké rozměry jsme minule zvolili pro krabičku na elektroniku?"*).
+* **Dynamické kontextové načítání nástrojů:** Pokud je aktivní profil Standardní chat nebo je Blender offline, asistent nepředává do systémového promptu 18 náročných 3D nástrojů, což **ušetří přes 3 000 tokenů na dotaz** a zásadně zrychlí generování na CPU i GPU.
 
 ---
 
-## 🎨 Sekce 2: The Blender Pro Toolkit (20 Produkčních Nástrojů)
+## 🎨 Sekce 2: The Blender Pro Toolkit (18 Produkčních Nástrojů & AST Bezpečnost)
 
-Asistent není jen pasivní chatbot – je to váš **virtuální 3D Technical Director**. Přes lokální neblokující TCP socket (`127.0.0.1:9876`) se napojuje přímo do běžící instance **Blenderu 4.2.1 LTS**. Skript `blender_receiver.py` využívá nativní časovač `bpy.app.timers`, takže veškeré operace probíhají bezpečně v hlavním grafickém vlákně bez pádů GPU či kolizí paměti.
+Asistent se napojuje přes lokální neblokující TCP socket (`127.0.0.1:9876`) přímo do běžící instance **Blenderu 4.x LTS**. Skript [`blender_receiver.py`](file:///home/polygon/ai-assistant-voice-cs/blender_receiver.py) využívá časovač `bpy.app.timers`, takže veškeré operace probíhají bezpečně v hlavním grafickém vlákně bez pádů GPU či kolizí paměti.
 
-### Přehled 20 integrovaných nástrojů:
+### 🛡️ AST Bezpečnostní validátor (`code_validator.py`)
+Veškerý Python/bpy kód vygenerovaný asistentem nebo zadaný v editoru prochází před odesláním do socketu statickou **AST (Abstract Syntax Tree) analýzou**:
+* **Whitelist povolených knihoven:** Pouze `{"bpy", "bmesh", "mathutils", "math", "random", "colorsys", "json"}`.
+* **Zákaz nebezpečných modulů a příkazů:** Okamžitě blokuje `os`, `sys`, `subprocess`, `shutil`, `socket`, `requests`, `pathlib`, `eval()`, `exec()`, `open()`, `compile()`, `globals()`, `locals()`.
+* **Ochrana před reflexí a sandbox escape:** Blokuje přístup k dunder atributům (`__subclasses__`, `__builtins__`, `__globals__`, `__code__`) i dynamické triky přes `getattr()`.
 
-| Modul | Nástroje | Co asistent reálně udělá v Blenderu |
+```
+                  ┌──────────────────────────────────────────────┐
+                  │    Kód vygenerovaný LLM / zadaný ve Web UI   │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │   AST BEZPEČNOSTNÍ VALIDÁTOR                 │
+                  │   • Kontrola whitelistu (bpy, bmesh, math)   │
+                  │   • Zákaz nebezpečných importů (os, subproc) │
+                  │   • Zákaz dunder reflexe (__subclasses__)    │
+                  └──────────────┬────────────────┬──────────────┘
+                                 │                │
+                        [Čistý a validní]   [Bezpečnostní porušení / Chyba syntaxe]
+                                 │                │
+                                 ▼                ▼
+┌─────────────────────────────────────────────┐ ┌────────────────────────────────┐
+│ Odeslání do Blenderu přes TCP socket (9876) │ │ Okamžité odmítnutí a hlášení   │
+│ • Bezpečný běh v hlavním vlákně Blenderu    │ │ předané uživateli / asistentovi│
+│ • Autonomní Self-Healing smyčka při chybách │ │ (Socket se vůbec neotevře)     │
+└─────────────────────────────────────────────┘ └────────────────────────────────┘
+```
+
+### Kompletní přehled 18 integrovaných 3D nástrojů:
+
+| Kategorie | Nástroje | Co asistent reálně vykoná v Blenderu 4.x |
 |---|---|---|
-| **CAD & Parametrické modelování** | `generate_parametric_model`<br>`apply_modifier_stack` | Vymodeluje krabičku na elektroniku (enclosure) s montážními sloupky, ozubené kolo (gear) s přesným modulem a zuby, nebo montážní L-profil (bracket). Aplikuje hard-surface řetěz (Solidify, Bevel s limitem úhlu, Weighted Normal). |
-| **Procedurální shadery** | `create_procedural_shader` | Založí v Shader Editoru kompletní nodový strom propojený do Principled BSDF (kartáčovaný kov, matný technický plast, rezavé železo, optické sklo s IOR). |
-| **Smart UV Pipeline** | `uv_texel_audit`<br>`smart_uv_pack` | Změří texel density (px/m), detekuje UV překryvy a rozbalí model s automatickým sjednocením texturové hustoty a definovaným odstupem ostrovů. |
-| **Mesh Doctor** | `mesh_doctor_audit`<br>`mesh_doctor_repair` | Pomocí modulu `bmesh` prozkoumá síť, odhalí non-manifold hrany, díry a volné vrcholy, provede merge by distance a sjednotí normály směrem ven. |
-| **Geometry Nodes Bridge** | `create_geometry_nodes_bridge` | Aplikuje modifikátor Geometry Nodes a vygeneruje nodovou skupinu pro procedurální scatter instancí po ploše nebo sci-fi panelizaci (extrude panels). |
-| **Animace & Motion Nodes** | `apply_fcurve_animation`<br>`create_motion_node_setup` | Nastaví klíčové snímky s interpolacemi (BEZIER, BOUNCE) a modifikátory (NOISE pro roztřesení kamery), nebo vytvoří nekonečný procedurální pohyb přes Python Drivery a Scene Time. |
-| **Product Studio Automator** | `create_product_studio` | Sestaví zakřivené beveled studio pozadí (cyclorama), rozmístí 3-bodové osvětlení (Key, Fill, Rim) a ustaví 85mm portrétní kameru zaměřenou na objekt. |
-| **Compositing & Post-Processing** | `setup_compositor` | Zapne nodový kompozitor a sestaví postprodukční pipeline (preset `product_pop` s Fog Glow odlesky a kontrastem, `cinematic` s chromatickou aberací a vinětací, nebo `denoise_only`). |
-| **Self-Healing Kód & Telemetrie** | `execute_blender_code`<br>`inspect_blender_scene` | Umožňuje spustit libovolný Python kód se **samoopravnou smyčkou** (při chybě zachytí traceback a nechá LLM kód opravit) a pořídit telemetrický snímek scény z viewportu. |
-| **Image-to-3D Blueprint** | `setup_blueprint_reference`<br>`vectorize_image_to_3d` | Umístí výkres do ortografického pohledu (FRONT/TOP/RIGHT) s 50% průhledností, nebo vektorizuje 2D logo na křivku a polygonální 3D mesh. |
-| **Generativní AI 3D Mesh** | `generate_local_ai_mesh` | Provede neuronovou rekonstrukci 3D meshe z 2D obrázku, QuadriFlow retopologii, UV unwrap a upečení barev do PBR textury. |
-| **Kognitivní & Znalosti** | `query_local_rag`<br>`query_memory_rag`<br>`search_web` | Vyhledávání v lokálních PDF skriptech, sémantické paměti a na webu. |
+| **1. Geometrie a parametrické CAD modelování** | `generate_parametric_model`<br>`apply_modifier_stack`<br>`create_geometry_nodes_bridge`<br>`vectorize_image_to_3d`<br>`generate_local_ai_mesh` | Procedurálně vymodeluje krabičku na elektroniku (enclosure), ozubené kolo s přesným modulem a zuby, nebo montážní L-profil. Aplikuje hard-surface řetěz (Solidify, Bevel, Weighted Normal). Převede 2D křivky na 3D geometrii a rekonstruuje 3D koncept z obrázku. |
+| **2. Audit topologie & 3D tisk (Mesh Doctor)** | `mesh_doctor_audit`<br>`mesh_doctor_repair`<br>`inspect_blender_scene` | Pomocí modulu `bmesh` odhalí non-manifold hrany, díry, n-gony a převrácené normály. Provede automatickou opravu: merge by distance, zacelení děr a sjednocení normál pro slicer. Pořídí telemetrii a snímek scény z viewportu. |
+| **3. Materiály, UV mapování a textury** | `create_procedural_shader`<br>`uv_texel_audit`<br>`smart_uv_pack` | Založí v Shader Editoru nodový strom propojený do Principled BSDF (kartáčovaný kov, matný plast, rez, optické sklo s IOR). Změří texel density (px/m) a provede UV rozbalení s definovaným odstupem ostrovů. |
+| **4. Scéna, produktové studio a kompozitor** | `create_product_studio`<br>`setup_blueprint_reference`<br>`setup_compositor` | Sestaví zakřivené studio pozadí (cyclorama), rozmístí 3bodové AREA osvětlení (Key, Fill, Rim) a ustaví 85mm portrétní kameru. Umístí referenční výkresy do ortografických pohledů a zapne kompozitor (glare bloom, denoiser). |
+| **5. Rigging a animace** | `auto_rig_and_skin`<br>`apply_fcurve_animation`<br>`create_motion_node_setup` | Vygeneruje kostru (`ARMATURE_AUTO`) a provede automatický skinning s vahami. Nastaví klíčové snímky s vyhlazením F-křivek (BEZIER, BOUNCE) nebo vytvoří procedurální kinetický pohyb přes Python drivery (`#frame * speed`). |
+| **6. Spuštění kódu & Telemetrie** | `execute_blender_code`<br>`analyze_viewport_image` | Spouští ověřený Python kód se **samoopravnou Self-Healing smyčkou** (při chybě zachytí traceback a nechá LLM kód opravit). Pořídí snímek viewportu pro multimodální analýzu. |
 
 ---
 
 ## ⚡ Sekce 3: Generativní AI (Image-to-3D Bridge s Auto-Retopologií)
 
 ### Naše filosofie: Explicitní 3D geometrie vs. Implicitní pixelová halucinace
+Generativní video modely pouze hádají barvy pixelů na 2D obrazovce. Výsledkem je video, které nelze vložit do herního enginu, nelze u něj změnit úhel kamery v reálném čase, ani upravit jeho rozměry.
 
-Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obrazovce. Výsledkem je video, které nelze vložit do herního enginu, nelze u něj změnit úhel kamery v reálném čase, ani upravit jeho rozměry.
-
-**Náš 20. nástroj — `generate_local_ai_mesh` — převádí 2D vjem na skutečná výrobní 3D data:**
+**Náš nástroj `generate_local_ai_mesh` převádí 2D obrázek na skutečná výrobní 3D data:**
 
 ```
   2D OBRÁZEK / FOTKA
           │
           ▼
 ┌────────────────────────────────────────────────────────┐
-│ 1. LOKÁLNÍ AI INFERENCE (TripoSR / Real Model Wrapper) │
+│ 1. LOKÁLNÍ AI INFERENCE (TripoSR / Rembg)              │
 │ • Odstranění pozadí (rembg)                            │
 │ • Rekonstrukce objemu neuronovou sítí (TripoSR)        │
 │ • Export surového meshe s vertexovými barvami (.obj)   │
 └──────────────────────────┬─────────────────────────────┘
-                           │ import do Blenderu 4.2.1
+                           │ import do Blenderu 4.x
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 2. AUTO-RETOPOLOGY PIPELINE                            │
+│ 2. PRODUKČNÍ AUTO-RETOPOLOGY PIPELINE                  │
 │ • Voxel Remesh: Sjednocení objemu a zacelení děr       │
 │ • QuadriFlow Remesh: Převod chaotického "triangle      │
 │   soup" na čistou 98%+ Quad topologii na cílový       │
@@ -139,7 +168,7 @@ Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obraz
 │   ze surového AI skenu do nové 2048×2048 px textury    │
 │ • Principled BSDF: Vytvoření PBR materiálu             │
 │ • Vymazání surového modelu: Ve scéně zůstává čistý     │
-│   game-ready / VFX-ready 3D asset!                     │
+│   game-ready / 3D print asset!                         │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -148,46 +177,33 @@ Generativní video modely (Sora, Runway) pouze "hádají" barvy pixelů na obraz
 | Fáze pipeline | Surový AI Scan (TripoSR) | Produkční model (Retopo) | Změna / Standard |
 |---|---|---|---|
 | **Počet polygonů (Faces)** | 56,890 tris | **10,000 polygonů** | 📉 **-82.4%** redukce |
-| **Počet vrcholů (Vertices)** | 28,450 | **10,042** | Optimalizovaná paměť |
+| **Počet vrcholů (Vertices)** | 28,450 | **10,042** | ⚡ Optimalizovaná paměť |
 | **Topologie & Geometrie** | Triangulated Soup (100% tris) | **98.4% Quady** (1.6% tris) | ✅ Čisté QuadriFlow smyčky |
-| **UV Unwrapping** | ❌ Chybí | ✅ **Smart UV Project** | Připraveno pro texturování |
+| **UV Unwrapping** | ❌ Chybí | ✅ **Smart UV Project** | 🗺️ UV s definovaným odstupem |
 | **PBR Textura & Baking** | Jen hrubé Vertex Colors | **2048×2048 px** (`AI_Baked_Diffuse`) | 🎨 Upečeno do Albedo mapy |
-| **Materiál** | Žádný | **Principled BSDF** (`AI_PBR_Material`) | 💎 Plný PBR Standard |
+| **Materiál** | Žádný | **Principled BSDF** (`AI_PBR_Material`) | 💎 Plný PBR standard |
 
 ---
 
-## 🧭 Sekce 4: Intelektuální moduly & Strategické frameworky (Expert Prompts V3.1 & Metodiky)
+## 🧭 Sekce 4: Intelektuální moduly & Strategické frameworky (Expert Prompts V3.1)
 
-Asistent neslouží pouze jako technický operátor pro 3D grafiku a hlasový dialog – disponuje integrovanou kognitivní výbavou čítající **11 expertních metodik** pro hloubkovou strategickou analýzu, řízení rizik a rozhodování v podmínkách nejistoty.
+Asistent neslouží pouze jako technický operátor pro 3D grafiku a hlasový dialog – disponuje integrovanou kognitivní výbavou čítající **11 expertních metodik** (`prompts/`) pro hloubkovou strategickou analýzu, řízení rizik a rozhodování v podmínkách nejistoty:
 
-### 📚 Přehled metodik v repozitáři (`prompts/Advanced-Analytical-Prompts-main/`)
-
-V repozitáři je integrována ucelená sada expertních analytických rámců:
-* **Talebova metodika (Incerto):** Analýza systémů z pohledu Antifragility, zranitelnosti vůči černým labutím (Black Swan), Via Negativa (odstraňování slabin), konvexity/konkavity dopadů, principu Skin in the Game a Pre-mortem analýzy selhání.
-* **Cynefin rámec & OODA Loop:** Kategorizace problémů do domén (prostá, komplikovaná, komplexní, chaotická) a rychlé cykly rozhodování (Observe-Orient-Decide-Act) pro hyperdynamická prostředí.
+* **Talebova metodika (Incerto):** Analýza systémů z pohledu Antifragility, zranitelnosti vůči černým labutím (Black Swan), *Via Negativa* (odstraňování slabin), konvexity/konkavity dopadů, principu Skin in the Game a Pre-mortem analýzy selhání.
+* **Cynefin rámec & OODA Loop:** Kategorizace problémů do domén (prostá, komplikovaná, komplexní, chaotická) a rychlé cykly rozhodování (*Observe-Orient-Decide-Act*) pro hyperdynamická prostředí.
 * **Systémové myšlení (Peter Senge) & Porterových pět sil:** Mapování kauzálních smyček a zpětných vazeb (včetně generování Mermaid diagramů), hledání pákových bodů a analýza konkurenčních tlaků v odvětví.
 * **Design Thinking & Plánování scénářů:** Uživatelsky orientovaná inovace s behaviorálními ukazateli (KBIs), práce s kritickými nejistotami a sledování varovných indikátorů (trigger points).
 * **Meta-prompt pro komplexní strategickou analýzu:** Ucelený exekutivní protokol propojující makroanalýzu PESTLE, oborového Portera, matici SWOT, multikriteriální rozhodovací matice a metodu ACH (Analysis of Competing Hypotheses).
-
-### 🔍 Metodické protokoly pro hloubkovou oponenturu (`prompts/frameworks/`)
-
-Pro nekompromisní prověřování návrhů a kódu asistent využívá specializované protokoly:
-* **[`advanced_assumption_audit.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/advanced_assumption_audit.md):** Red Team zátěžové testy a forenzní audit skrytých premis (striktní třídění výroků na Fakta, Hypotézy a Dogmata), Popperovská falsifikační kritéria a steelmanning protinávrhů.
-* **[`auteur_visual_analysis.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/auteur_visual_analysis.md):** Sémiotická a ikonografická dekonstrukce audiovizuálních děl (geometrie mizanscény, světelná dramaturgie šerosvitu, montážní syntax a odkazy na mistry od Caravaggia po Fritze Langa).
-* **[`first_principles_technical.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/first_principles_technical.md):** Myšlení v prvních principech pro kód a 3D geometrii ($4\times 4$ transformační matice, kvaterniony bez rizika Gimbal Locku, neměnné stavy a přímá práce s BMesh strukturami v Blenderu).
-
-### 🧠 Propojení s umělou inteligencí
-
-Tyto metodické rámce slouží jako strukturovaný kognitivní toolkit pro lokální LLM model uvnitř asistenta. Tím:
-1. **Eliminují běžná kognitivní zkreslení** (konfirmační zkreslení, iluzi kontroly, plánovací optimismus či utopené náklady).
-2. **Vynucují rigorózní analytický postup** s explicitním testováním konkurenčních hypotéz (ACH).
-3. **Povyšují výstupy asistenta** z pouhých odpovědí na úroveň nekompromisního strategického a technického poradce.
+* **Metodické protokoly pro hloubkovou oponenturu (`prompts/frameworks/`):**
+  * [`advanced_assumption_audit.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/advanced_assumption_audit.md): Red Team zátěžové testy a forenzní audit skrytých premis (striktní třídění výroků na Fakta, Hypotézy a Dogmata), Popperovská falsifikační kritéria a steelmanning protinávrhů.
+  * [`auteur_visual_analysis.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/auteur_visual_analysis.md): Sémiotická a ikonografická dekonstrukce audiovizuálních děl (geometrie mizanscény, světelná dramaturgie šerosvitu, montážní syntax a odkazy na mistry od Caravaggia po Fritze Langa).
+  * [`first_principles_technical.md`](file:///home/polygon/ai-assistant-voice-cs/prompts/frameworks/first_principles_technical.md): Myšlení v prvních principech pro kód a 3D geometrii ($4\times 4$ transformační matice, kvaterniony bez rizika Gimbal Locku, neměnné stavy a přímá práce s BMesh strukturami v Blenderu).
 
 ---
 
-## 🖥️ Sekce 5: Moderní vývojářské IDE & Kontextový Workspace
+## 🖥️ Sekce 5: Moderní vývojářské IDE & Zabezpečení
 
-Webové uživatelské rozhraní bylo přepracováno do podoby moderního vývojářského prostředí (ve stylu Cursoru a VS Code), navrženého pro maximální přehlednost, technickou přesnost a 100% offline spolehlivost.
+Webové uživatelské rozhraní bylo přepracováno do podoby moderního vývojářského prostředí (ve stylu Cursoru a VS Code), navrženého pro maximální přehlednost, technickou přesnost a 100% offline spolehlivost:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -199,185 +215,133 @@ Webové uživatelské rozhraní bylo přepracováno do podoby moderního vývoj�
 │ • Hard Delete   │ • Zvýraznění kódu a kopírování       │ │ [3D]    [Rešerše]   [Log] │ │
 │ • Hledání chatu │ • Výběr expertní analytické metodiky │ ├───────────────────────────┤ │
 │ • Změna šířky   │ • Prompt bar (Whisper STT + RAG doc) │ │ Karta aktivní záložky     │ │
-│                 │ • Stav streamu & okamžité zastavení  │ │ (Interní scroll & resizer)│ │
+│                 │ • AI Korektura + SSE Live Stream     │ │ (Interní scroll & resize) │ │
 └─────────────────┴──────────────────────────────────────┴───────────────────────────────┘
 ```
 
 ### 1. Ergonomie a vizuální styl moderního IDE
-* **Barevné zvýraznění kódu Atom One Dark:** Kódové bloky v chatu využívají knihovnu Highlight.js s tématem Atom One Dark. Bloky obsahují tlačítko pro kopírování na jedno kliknutí s okamžitou vizuální odezvou.
-* **100% offline Lucide ikony:** Veškeré ovládací prvky, indikátory stavu a tlačítka používají čisté inline SVG ikony v designu Lucide (`viewBox="0 0 24 24"`). Aplikace nestahuje žádná externí webová písma, nepoužívá CDN a funguje zcela bez připojení k internetu.
-* **Vícesměrné resizery pro změnu velikosti:**
-  * **Horizontální posuvníky:** Uživatel může plynule tažením myši měnit šířku levého i pravého postranního panelu s bezpečným omezením a ukládáním do `localStorage`.
-  * **Vertikální resizery jednotlivých boxů:** Každá karta v pravém panelu má vlastní posuvník pro změnu výšky. Resizery respektují minimální výšku prvků (`min-height`), zatímco vnitřní obsah plynule scrolluje (`overflow-y: auto`).
-* **Bilingvní lokalizace (EN / CS):** Kompletní lokalizační slovník (výchozí angličtina, plná čeština) s dynamickým přepínáním v nastavení a trvalým ukládáním předvoleb.
-* **Kompletní mazání relací (Hard Delete):** Kliknutím na ikonu koše v levém panelu se bezpečně a rekurzivně smaže celá složka relace z disku včetně indexovaných kontextů.
+* **Barevné zvýraznění kódu Atom One Dark:** Kódové bloky v chatu využívají knihovnu Highlight.js s tématem Atom One Dark a tlačítkem pro kopírování na jedno kliknutí.
+* **100% offline Lucide ikony:** Veškeré ovládací prvky, indikátory stavu a tlačítka používají čisté inline SVG ikony v designu Lucide (`viewBox="0 0 24 24"`). Aplikace nestahuje žádná externí webová písma a funguje zcela bez připojení k internetu.
+* **Vícesměrné resizery pro změnu velikosti:** Horizontální posuvníky pro plynulou změnu šířky panelů a vertikální resizery jednotlivých boxů s trvalým ukládáním rozměrů do `localStorage`.
+* **Bilingvní lokalizace (CZ / EN):** Kompletní lokalizační slovník s dynamickým přepínáním v nastavení a trvalým ukládáním předvoleb.
+* **AI Korektura jedním kliknutím:** Tlačítko se symbolem korektury analyzuje vstupní text, provede gramatickou, stylistickou a interpunkční úpravu a nabídne tlačítko pro okamžité vložení opravené verze zpět do vstupního pole.
 
-### 2. Kontextově závislý pravý panel (Context-Aware Workspace)
-Pravý panel nabízí tabulátorové přepínání mezi 3 specializovanými režimy:
-* 🧊 **3D Workspace (`tab-btn-3d`, ikona Box / Cube):**
-  * **Živý náhled Viewportu:** Snímek aktuálního 3D pohledu z Blenderu (`/api/blender/viewport-image`) s možností zvětšení do lightboxu.
-  * **Panel metrik 3D scény:** Živá telemetrie (počet objektů, aktivní MESH, polygony, vrcholy, test vodotěsnosti sítě a kosti kostry).
-  * **Rychlé 3D akce:** Tlačítka pro inspekci viewportu, Auto-Rig & Skinning, Mesh Doctor audit pro 3D tisk, generování produktového studia a procedurální shader kartáčovaného kovu.
-* 🌐 **Rešerše (`tab-btn-research`, ikona Globe):**
-  * **Živé webové zdroje a citace:** Přehled výsledků webového vyhledávání přes DuckDuckGo s klikatelnými odkazy a úryvky textu.
-  * **Sémantická paměť (RAG úryvky):** Přehled nalezených bloků z FAISS vektorové báze s procentuální shodou relevance (`% match`) a názvem dokumentu.
-  * **Správa znalostní báze:** Přímé tlačítko pro otevření modálního okna pro indexaci PDF a DOCX dokumentů.
-* ⚡ **Agent Log (`tab-btn-agent`, ikona Terminal):**
-  * **Průběh agenta & volání nástrojů:** Časová osa kroků agenta s barevnými odznaky jednotlivých akcí (nástroje, RAG, rešerše, přepnutí metodiky).
-  * **Telemetrická konzole:** Záznam TCP paketů, časovačů Blenderu a systémových událostí v reálném čase.
-* **Trvalé ukládání stavu:** Poslední aktivní záložka se automaticky ukládá do `localStorage` (`polygon_active_right_tab`) a obnovuje se při startu.
+### 2. Kontextově závislý pravý panel (Context Workspace)
+* 🧊 **3D Workspace:** Živý náhled viewportu z Blenderu s lightboxem, panel metrik scény (objekty, MESH, polygony, vrcholy, test vodotěsnosti, kosti) a matice 18 rychlých 3D příkazů.
+* 🌐 **Rešerše:** Výsledky webového vyhledávání přes DuckDuckGo s citacemi a úryvky textu a nalezené bloky z FAISS s procentuální shodou relevance.
+* ⚡ **Agent Log:** Časová osa kroků agenta s barevnými odznaky jednotlivých akcí (nástroje, RAG, rešerše) a telemetrická konzole v reálném čase.
 
-### 3. Bezpečnostní a architektonická vylepšení
-* **Výhradní loopback bind (127.0.0.1):** Webový server FastAPI (`127.0.0.1:8000`) i Blender socket server (`127.0.0.1:9876`) naslouchají striktně na loopback rozhraní, čímž je zamezeno přístupu ze sítě LAN.
-* **Garantovaný životní cyklus SSE streamů & správa nástrojů:** Server-Sent Events (SSE) streamování přenáší strukturované události `tool_start` a `tool_end`, garantovaný koncový signál `data: [DONE]\n\n` i po cyklech s voláním nástrojů (např. `search_web`), deterministické uvolňování zámků a rušení čtečky (`reader.cancel()`, `reader.releaseLock()`) a klientský watchdog timeout. Indikátor "Přemýšlím..." / "Načítám..." i vstupní pole se tak bezpečně vrací do klidového stavu za všech okolností.
-* **Časové limity a ochrana mikrofonu:** Záznam zvuku s neuronovou detekcí Silero VAD disponuje bezpečnostními watchdogy a abort signály, které zabraňují nechtěnému visení mikrofonu.
-* **Vláknová bezpečnost (Thread-Safety):** Generování řeči přes Coqui TTS i inference Llama.cpp probíhají v oddělených, vláknově bezpečných workerech.
-
-### 4. Spuštění jako samostatná desktopová aplikace (Click-and-Run)
-* **Režim aplikace bez rámů:** Spuštěním `python main.py` nebo `python start_app.py` se ticho na pozadí nastartuje FastAPI a otevře se nativní desktopové okno (přes Chromium `--app` nebo `pywebview`) bez adresního řádku a záložek.
-* **Sjednocený životní cyklus:** Zavřením desktopového okna křížkem skript automaticky a čistě ukončí běžící FastAPI server bez zanechání zombie procesů.
+### 3. Network Loopback Shield
+* Webový server FastAPI i Blender socket server naslouchají striktně na loopback rozhraní (`127.0.0.1`, `localhost`, `::1`).
+* Citlivé endpointy (`/api/config`, `/api/llm/test-connection`, `/api/app/shutdown`) okamžitě odmítají požadavky z vnějších IP adres kódem `403 Forbidden`, čímž chrání API klíče a konfiguraci před útoky ze sítě (SSRF).
 
 ---
 
-## 🧪 Testování a produkční stabilita: 176 Unit Testů (100% Úspěšnost)
+## 💻 Hardwarové nároky a doporučení
 
-Stabilita celého ekosystému je doložena rozsáhlým testovacím balíkem pokrývajícím všech 20 nástrojů, socketový protokol, parser i sémantickou paměť:
-
-```bash
-PYTHONPATH=. ./venv/bin/python -m unittest discover -s scratch/ -p "test_*.py"
-```
-
-```text
-Ran 176 tests in 20.885s
-
-OK (100% pass rate — 0 chyb, 0 selhání)
-```
-
-Pokryté oblasti testů:
-1. `test_local_ai_mesh.py` — TripoSR wrapper, generování OBJ/PLY, mock/reálná inference, QuadriFlow integrace.
-2. `test_compositor_pipeline.py` — Postprodukční kompozitor, presety a nodové stromy.
-3. `test_image_to_3d_bridge.py` — Blueprint reference, vektorizace kontur a kognitivní Vision AI.
-4. `test_animation_motion_nodes.py` — F-křivky, interpolace, procedurální drivery.
-5. `test_geometry_nodes_bridge.py` — Tvorba nodových skupin na Geometry Nodes modifikátoru.
-6. `test_parametric_modeling.py` — CAD parametrické modely a hard-surface modifikátory.
-7. `test_uv_pipeline.py` — Texel density audity a Smart UV packing.
-8. `test_procedural_shader.py` — Procedurální materiály a Principled BSDF nody.
-9. `test_product_studio.py` — Světla, kamery a cyclorama studio pozadí.
-10. `test_mesh_doctor.py` — bmesh inspekce a automatické opravy geometrie.
-11. `test_semantic_memory.py` — FAISS vektorové ukládání a kontinuita relací.
-12. `test_blender_inspection.py` & `test_blender_self_healing.py` — Telemetrie a samoopravná smyčka kódu.
-13. `test_function_calling.py` — Validace všech 20 nástrojů v systémovém promptu a JSON parseru.
+| Komponenta | Minimální konfigurace | Doporučená konfigurace (Lokální GGUF) | Cloud / Hybridní režim |
+|---|---|---|---|
+| **Procesor (CPU)** | 4jádrový CPU (x86_64) | 8jádrový CPU s podporou AVX2 | 4jádrový CPU |
+| **Operační paměť (RAM)** | 8 GB RAM | 16 GB - 32 GB RAM | 8 GB RAM |
+| **Grafická karta (GPU)** | Integrovaná grafika | Dedikovaná GPU s Vulkanem (např. AMD RX 560 4GB / NVIDIA GTX 1060+) | Není vyžadována (0 MB VRAM při použití Groq / Gemini) |
+| **Místo na disku** | 5 GB SSD volného místa | 15 GB NVMe SSD (včetně .gguf modelů) | 3 GB SSD volného místa |
+| **Software** | Python 3.11+, Blender 4.x LTS | Python 3.11, Blender 4.2.1 LTS | Python 3.11, Blender 4.2.1 LTS |
 
 ---
 
-## 🖥️ Hardwarové požadavky
+## 🚀 Instalace a rychlý start
 
-| Specifikace | Minimum | Doporučeno (Produkční běh) |
-|---|---|---|
-| **Operační paměť (RAM)** | 16 GB | **32 GB+** |
-| **Grafická paměť (VRAM)** | 8 GB (NVIDIA CUDA) | **12+ GB VRAM (NVIDIA RTX)** |
-| **Použití & Zátěž** | Základní běh menšího LLM a lehčí práce v Blenderu | Plynulý souběžný běh GGUF modelu, Whisperu, generování přes TripoSR a samotného Blenderu bez pádů (Out of Memory) |
-| **Úložiště** | 10 GB volného místa na SSD | Rychlý NVMe SSD disk (rychlé načítání vah modelů) |
-
----
-
-## 💻 Technologický Stack & Požadavky
-
-* **3D Software:** Blender 4.2.1 LTS (vyžaduje spuštěný skript `blender_receiver.py` v Text Editoru).
-* **Python:** 3.11 (doporučeno pro maximální kompatibilitu knihoven).
-* **LLM Engine:** `llama-cpp-python` (GGUF modely Qwen 2.5, GLM-4).
-* **Hlasový subsystém:** `faster-whisper`, `openwakeword`, `TTS` (Coqui TTS), `gruut`, `pyaudio`.
-* **Vektorová paměť:** `faiss-cpu`, `sentence-transformers` (`all-MiniLM-L6-v2`).
-* **AI 3D Inference:** `TripoSR`, `torch`, `torchvision`, `trimesh`, `pillow`, `rembg`.
-
----
-
-## 🚀 Rychlý start
-
-### Možnost A: Automatická instalace jedním skriptem (Doporučeno pro Linux)
+### Krok 1: Klonování repozitáře a vytvoření virtuálního prostředí
 ```bash
 git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
 cd ai-assistant-voice-cs
 
-chmod +x install.sh
-./install.sh
-```
-*(Volitelně přidejte `--with-tripo` pro automatickou kompilaci TripoSR a torchmcubes ze zdrojových kódů)*.
-
-### Možnost B: Manuální instalace krok za krokem
-
-#### 1. Klonování a příprava virtuálního prostředí
-```bash
-git clone https://github.com/Polygonbeater/ai-assistant-voice-cs.git
-cd ai-assistant-voice-cs
-
+# Vytvoření virtuálního prostředí s Pythonem 3.11
 python3.11 -m venv venv
 source venv/bin/activate
 ```
 
-### 2. Instalace systémových knihoven (Linux)
+### Krok 2: Instalace závislostí
 ```bash
-sudo apt update
-sudo apt install -y python3-dev portaudio19-dev ffmpeg build-essential
-```
-
-> [!IMPORTANT]
-> Balíček `build-essential` (obsahující kompilátory gcc a g++) je nezbytný pro úspěšnou kompilaci C++ rozšíření `torchmcubes` při lokální instalaci TripoSR.
-
-### 3. Instalace Python závislostí
-Závislosti jsou striktně fixovány v `requirements.txt` proti rozbití syntetizéru `gruut`:
-```bash
+pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
-*(Volitelné: instalace TripoSR pro plnou lokální GPU rekonstrukci)*:
+> **Poznámka pro GPU akceleraci (Vulkan):**
+> Pro zprovoznění Vulkan akcelerace v `llama-cpp-python` zadejte při instalaci:
+> ```bash
+> CMAKE_ARGS="-DGGML_VULKAN=on" pip install --force-reinstall --no-cache-dir llama-cpp-python
+> ```
+
+### Krok 3: Konfigurace
+Zkopírujte vzorovou konfiguraci do [`config.json`](file:///home/polygon/ai-assistant-voice-cs/config.json):
 ```bash
-pip install git+https://github.com/VAST-AI-Research/TripoSR.git
-pip install git+https://github.com/tatsy/torchmcubes.git
+cp config.example.json config.json
 ```
 
-### 4. Spuštění serveru v Blenderu
-1. Otevřete **Blender 4.2.1 LTS**.
-2. V horním menu zvolte záložku **Scripting**.
-3. Otevřete soubor `blender_receiver.py` a stiskněte **Run Script** (`Alt + P`).
-4. V konzoli Blenderu se potvrdí: `[AI-Blender] Server naslouchá na 127.0.0.1:9876`.
-
-### 5. Spuštění asistenta (Polygon Beater Desktop Experience)
+### Krok 4: Spuštění webového serveru a aplikace
+Spusťte backend server:
 ```bash
-# Spuštění Click-and-Run Desktopové aplikace / Web UI (doporučeno)
-python main.py
-
-# Případně spuštění samostatného desktopového okna
-python start_app.py
+venv/bin/python web_server.py
 ```
-Můžete ihned mluvit do mikrofonu nebo psát do chatu:
-* *"Zkontroluj aktivní model přes Mesh Doctor a oprav případné chyby."*
-* *"Nastav produktové studio s 85mm kamerou a vytvoř materiál z kartáčovaného kovu."*
-* *"Vezmi obrázek robota a vytvoř z něj produkční 3D mesh s čistými quady a upečenou texturou."*
+nebo kompletní desktopovou aplikaci:
+```bash
+./start_app.sh
+```
+Aplikace bude dostupná v prohlížeči na adrese **`http://127.0.0.1:8000`**.
+
+### Krok 5: Propojení s Blenderem
+1. Spusťte **Blender 4.x**.
+2. Otevřete záložku **Scripting** (nebo okno *Text Editor*).
+3. Otevřete soubor [`blender_receiver.py`](file:///home/polygon/ai-assistant-voice-cs/blender_receiver.py) a klikněte na tlačítko **Run Script** (`Alt + P`).
+4. V konzoli Blenderu se zobrazí hlášení: `[Blender Receiver] Server naslouchá na 127.0.0.1:9876`.
+5. Webové rozhraní Polygon Beater okamžitě zobrazí stav: **`Blender: Připojen`**.
 
 ---
 
-## 👨‍💻 Autor
+## 📂 Přehled struktury projektu
 
-* **Autor:** **Vítězslav Koneval** (*Polygon Beater*)
-* **Specializace:** AI 3D Technical Direction, Procedural Geometry, Local AI Architecture
-* **GitHub:** [@Polygonbeater](https://github.com/Polygonbeater)
+```
+ai-assistant-voice-cs/
+├── web_server.py           # FastAPI backend — REST & SSE streaming API, security loopback shield
+├── llama_module.py         # Kognitivní jádro — lokální Llama GGUF, OpenAI client, RAG & dispatching
+├── blender_connector.py    # TCP Socket klient pro komunikaci s Blenderem (127.0.0.1:9876)
+├── blender_receiver.py     # Přijímací daemon skript spouštěný v Blender Text Editoru
+├── code_validator.py       # AST bezpečnostní validátor pro statickou analýzu Python kódu
+├── document_service.py     # Lokální vektorová dokumentová báze (RAG) a sémantická paměť (FAISS)
+├── history_repository.py   # Správa a ukládání relací a zpráv v JSON formátu
+├── web_search.py           # Odlehčené vyhledávání přes DuckDuckGo s optimalizací kontextu
+├── config.example.json     # Referenční šablona konfigurace
+├── requirements.txt        # Konsolidovaný seznam přesně pinovaných závislostí
+├── tests/                  # Sada 27 automatických unit testů (AST, API, Blender, RAG)
+│   ├── test_code_validator.py
+│   ├── test_llm_connection_endpoint.py
+│   ├── test_blender_connector.py
+│   └── test_web_server.py
+└── web_ui/                 # Dark-Tech frontend (Vanilla JS, CSS Grid, 0 CDN závislostí)
+    ├── index.html          # Hlavní HTML struktura s 3D workspace a modálními dialogy
+    ├── style.css           # Responzivní design, CSS proměnné, animace a split-panely
+    └── script.js           # Klientská logika, SSE zpracování, i18n lokalizace, AST integrace
+```
 
 ---
 
-## 🤝 Zapojte se do vývoje (Contributing)
+## 🧪 Testování a verifikace
 
-Příspěvky od 3D komunity a vývojářů jsou vřele vítány! Máte nápad na nový parametrický generátor, procedurální shader, automatizaci nodů nebo vylepšení pro Blender?
+```bash
+# Spuštění celé sady 27 unit testů
+venv/bin/python -m unittest discover -s tests
 
-1. **Forkněte repozitář** a vytvořte novou větev: `git checkout -b feature/novy-blender-nastroj`
-2. **Přidejte implementaci nástroje** do `blender_receiver.py`, klientskou metodu do `blender_connector.py` a zaregistrujte schéma do `llama_module.py`.
-3. **Doplňte unit testy** k ověření funkčnosti a zachování 100% stability.
-4. **Otevřete Pull Request** — každý příspěvek rozšiřující tvůrčí možnosti asistenta je vítán!
+# Kontrola kompilace Pythonu a JavaScriptu
+venv/bin/python -m py_compile web_server.py llama_module.py blender_connector.py code_validator.py
+node --check web_ui/script.js
+```
 
 ---
 
 ## 📄 Licence
 
-Tento projekt je vydán jako Open-Source pod licencí **MIT** — je volně k použití, modifikaci a šíření pro osobní, komerční i výzkumné účely.
+Tento projekt je licencován pod licencí **MIT** — podrobnosti naleznete v souboru [LICENSE](LICENSE).
 
-Copyright (c) 2026 Vítězslav Koneval (*Polygon Beater*).
+**Autor a hlavní architekt:** Vítězslav Koneval (*Polygon Beater*)  
+**GitHub:** [github.com/Polygonbeater/ai-assistant-voice-cs](https://github.com/Polygonbeater/ai-assistant-voice-cs)
