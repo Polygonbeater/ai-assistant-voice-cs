@@ -638,12 +638,13 @@ body.is-resizing-card * {
   gap: 6px;
   max-width: 100%;
   padding: 4px 9px;
-  background: var(--bg-surface);
+  background-color: var(--bg-surface-elevated, #161b22);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
 }
 .preset-select-wrapper:focus-within {
   border-color: var(--cyan-primary);
+  box-shadow: 0 0 0 1px var(--cyan-primary);
 }
 
 .preset-icon {
@@ -665,18 +666,44 @@ body.is-resizing-card * {
   min-width: 0;
   max-width: 260px;
   padding: 0;
-  background: transparent;
+  background-color: var(--bg-surface-elevated, #161b22);
   border: 0;
   font-size: 11px;
 }
 .preset-select-wrapper .polygon-select:focus {
   border-color: transparent;
+  box-shadow: none;
+}
+
+#select-preset {
+  color-scheme: dark;
+  background-color: var(--bg-surface-elevated, #161b22);
+  color: var(--text-primary, #e6edf3);
+}
+
+select {
+  color-scheme: dark;
+  background-color: var(--bg-surface-elevated, #161b22);
+  color: var(--text-primary, #e6edf3);
+  outline: none;
+}
+select option {
+  background-color: var(--bg-surface-elevated, #161b22);
+  color: var(--text-primary, #e6edf3);
+}
+select option:hover {
+  background-color: var(--bg-surface-hover, #1e2638);
+  color: var(--text-primary, #e6edf3);
+}
+select option:checked {
+  background-color: var(--cyan-primary, #38bdf8);
+  color: var(--bg-canvas, #0f172a);
 }
 
 .polygon-select,
 .antigravity-select {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
+  background-color: var(--bg-surface-elevated, #161b22);
+  color: var(--text-primary, #e6edf3);
   border: 1px solid var(--border-subtle);
   font-size: 11.5px;
   padding: 5px 8px;
@@ -687,6 +714,7 @@ body.is-resizing-card * {
 .polygon-select:focus,
 .antigravity-select:focus {
   border-color: var(--cyan-primary);
+  box-shadow: 0 0 0 1px var(--cyan-primary);
 }
 
 .toggle-pill {
