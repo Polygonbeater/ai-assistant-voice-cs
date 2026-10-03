@@ -142,6 +142,49 @@ class BlenderBridgeContractTests(unittest.TestCase):
             resp = json.loads(sent_data.decode("utf-8").strip())
             self.assertEqual(resp.get("status"), "pong")
 
+    def test_receiver_rejects_dangerous_code_via_ast_validation(self):
+        """Ověří, že blender_receiver přímo v socketovém handleru i v execute_trusted_blender_code odmítne nebezpečný kód."""
+        mock_bpy = MagicMock()
+        mock_bpy.app.version = (4, 2, 0)
+        mock_bpy.data.filepath = "test.blend"
+        with patch.dict("sys.modules", {"bpy": mock_bpy}):
+            import blender_receiver
+
+            server = blender_receiver.BlenderSocketServer()
+            token = blender_receiver.get_blender_auth_token()
+
+            dangerous_codes = [
+                "import os\nos.system('whoami')",
+                "import subprocess\nsubprocess.run(['ls'])",
+                "import bpy\nbpy.data.texts.load('/etc/evil.py')",
+                "import bpy\nimg = bpy.data.images.new('x', 1, 1)\nimg.save_render('/etc/evil.png')",
+                "eval('1+1')",
+                "().__class__.__bases__[0].__subclasses__()",
+            ]
+
+            for code in dangerous_codes:
+                mock_conn = MagicMock()
+                payload = json.dumps({
+                    "action": "run_bpy_script",
+                    "code": code,
+                    "auth_token": token,
+                }).encode("utf-8") + b"\n"
+                mock_conn.recv.side_effect = [payload, b""]
+
+                server._handle_client(mock_conn, ("127.0.0.1", 12345))
+
+                sent_data = b"".join(call.args[0] for call in mock_conn.sendall.call_args_list)
+                resp = json.loads(sent_data.decode("utf-8").strip())
+                self.assertEqual(resp.get("status"), "error", f"Kód '{code}' nebyl receiverem zamítnut!")
+                self.assertEqual(resp.get("error_type"), "CodeValidationError", f"Chybný error_type pro '{code}'")
+                self.assertIn("AST validace kódu selhala", resp.get("error", ""))
+
+            # Test přímého volání execute_trusted_blender_code
+            for code in dangerous_codes:
+                with self.assertRaises(ValueError) as ctx:
+                    blender_receiver.execute_trusted_blender_code(code)
+                self.assertIn("AST validace kódu selhala", str(ctx.exception))
+
 
 class SelfDevLoopPathSecurityTests(unittest.TestCase):
     def test_safe_paths_in_allowed_directories(self):

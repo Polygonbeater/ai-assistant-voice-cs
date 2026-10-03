@@ -361,6 +361,7 @@ class SettingsUpdateRequest(BaseModel):
     local_model: Optional[str] = None
     active_provider: Optional[str] = None
     llm_provider: Optional[dict[str, Any]] = None
+    blender: Optional[dict[str, Any]] = None
 
 # ------------------------------------------------------------------------------
 # Endpoints: Systém & Stav
@@ -1169,6 +1170,13 @@ def get_config():
         sub["has_api_key"] = bool(raw_key)
         sub["api_key"] = mask_api_key(raw_key)
 
+    # Bezpečnostní maskování citlivého Blender auth_tokenu
+    blender_sec = safe_cfg.get("blender")
+    if isinstance(blender_sec, dict):
+        raw_token = config.get("blender", {}).get("auth_token", "")
+        blender_sec["has_auth_token"] = bool(raw_token)
+        blender_sec["auth_token"] = mask_api_key(raw_token)
+
     return {
         "config": safe_cfg,
         "analytical_presets": list(ANALYTICAL_PRESETS.keys()),
@@ -1214,6 +1222,15 @@ def update_config(req: SettingsUpdateRequest, request: Request):
                     elif k != "has_api_key":
                         current[k] = v
 
+    if req.blender and isinstance(req.blender, dict):
+        blender_cfg = config.setdefault("blender", {})
+        for k, v in req.blender.items():
+            if k == "auth_token":
+                if v and "••••" not in v and "..." not in v:
+                    blender_cfg["auth_token"] = v.strip()
+            elif k != "has_auth_token":
+                blender_cfg[k] = v
+
     # Přepnutí lokálního modelu, pokud bylo zvoleno a liší se od aktuálního
     if req.local_model and req.local_model.strip() and req.local_model.strip() != llama_cfg.get("model"):
         new_m = req.local_model.strip()
@@ -1231,6 +1248,7 @@ def update_config(req: SettingsUpdateRequest, request: Request):
         "config": get_config()["config"],
         "active_brain": get_active_provider_info(),
     }
+
 
 @app.post("/api/app/shutdown")
 def shutdown_app(request: Request):

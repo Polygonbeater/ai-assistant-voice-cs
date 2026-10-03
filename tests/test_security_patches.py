@@ -368,6 +368,35 @@ class TestDemo(unittest.TestCase):
         with self.assertRaises(BlenderExecutionError):
             request_scene_inspection(output_path="/etc/evil.png", raise_on_error=True)
 
+    def test_config_endpoint_redacts_auth_token(self):
+        """Ověří, že GET /api/config nikdy nevrací citlivý auth_token v plain textu."""
+        original_blender = web_server.config.get("blender")
+        try:
+            web_server.config["blender"] = {
+                "host": "127.0.0.1",
+                "port": 9876,
+                "auth_token": "super-secret-blender-token-12345",
+            }
+            resp = self.client.get("/api/config")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            blender_cfg = data.get("config", {}).get("blender", {})
 
+            # Token nesmí být roven plain text hodnotě
+            self.assertNotEqual(blender_cfg.get("auth_token"), "super-secret-blender-token-12345")
+            self.assertTrue(blender_cfg.get("has_auth_token"))
+            self.assertIn("••••", blender_cfg.get("auth_token", ""))
+
+            # Ověříme, že POST /api/config také vrací maskovaný token
+            update_resp = self.client.post("/api/config", json={"temperature": 0.5})
+            self.assertEqual(update_resp.status_code, 200)
+            update_blender_cfg = update_resp.json().get("config", {}).get("blender", {})
+            self.assertNotEqual(update_blender_cfg.get("auth_token"), "super-secret-blender-token-12345")
+            self.assertIn("••••", update_blender_cfg.get("auth_token", ""))
+        finally:
+            if original_blender is not None:
+                web_server.config["blender"] = original_blender
+            else:
+                web_server.config.pop("blender", None)
 if __name__ == "__main__":
     unittest.main()

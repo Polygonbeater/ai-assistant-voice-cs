@@ -28,6 +28,14 @@ import traceback
 
 import bpy
 
+try:
+    from code_validator import validate_blender_code
+except ImportError:
+    _proj_root = str(pathlib.Path(__file__).resolve().parent)
+    if _proj_root not in sys.path:
+        sys.path.insert(0, _proj_root)
+    from code_validator import validate_blender_code
+
 HOST = "127.0.0.1"
 PORT = 9876
 
@@ -329,6 +337,44 @@ class BlenderSocketServer:
                 conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
                 conn.close()
                 return
+
+            # Vynucení AST validace pro spouštění skriptů (run_bpy_script) přímo v socket handleru
+            if action == "run_bpy_script":
+                code_value = message.get("code")
+                if not isinstance(code_value, str):
+                    resp = {
+                        "status": "error",
+                        "error_type": "InvalidCodeType",
+                        "error": "Pole 'code' musí být textový řetězec.",
+                        "message": "Pole 'code' musí být textový řetězec.",
+                    }
+                    conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                    conn.close()
+                    return
+
+                code = code_value.strip()
+                if not code:
+                    resp = {
+                        "status": "error",
+                        "error_type": "EmptyCodeError",
+                        "error": "Pole 'code' je prázdné.",
+                        "message": "Pole 'code' je prázdné.",
+                    }
+                    conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                    conn.close()
+                    return
+
+                is_valid, validation_msg = validate_blender_code(code)
+                if not is_valid:
+                    resp = {
+                        "status": "error",
+                        "error_type": "CodeValidationError",
+                        "error": f"AST validace kódu selhala: {validation_msg}",
+                        "message": validation_msg,
+                    }
+                    conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                    conn.close()
+                    return
 
             # Spuštění kódu v hlavním vlákně Blenderu přes frontu
             completion_event = threading.Event()
@@ -704,6 +750,10 @@ def execute_trusted_blender_code(code: str) -> tuple[str, str]:
     - Zde se kód vykonává v definovaném kontextu se zachycením stdout/stderr a automatickým
       překreslením 3D viewportu.
     """
+    is_valid, validation_msg = validate_blender_code(code)
+    if not is_valid:
+        raise ValueError(f"AST validace kódu selhala: {validation_msg}")
+
     stdout_capture = io.StringIO()
     stderr_capture = io.StringIO()
     exec_globals = {
@@ -772,6 +822,20 @@ def process_blender_queue_timer():
                 completion_event.set()
                 _RECEIVER_INSTANCE.request_queue.task_done()
                 continue
+
+            is_valid, validation_msg = validate_blender_code(code)
+            if not is_valid:
+                result_container["response"] = {
+                    "status": "error",
+                    "error_type": "CodeValidationError",
+                    "action": "run_bpy_script",
+                    "error": f"AST validace kódu selhala: {validation_msg}",
+                    "message": validation_msg,
+                }
+                completion_event.set()
+                _RECEIVER_INSTANCE.request_queue.task_done()
+                continue
+
             try:
                 stdout_out, stderr_out = execute_trusted_blender_code(code)
 
