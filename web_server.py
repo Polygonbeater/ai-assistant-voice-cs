@@ -8,6 +8,7 @@ Plně zachovává logiku kognitivního jádra, nástrojů, Blender bridge, RAG a
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -72,6 +73,15 @@ def load_config(path: str = "config.json") -> dict:
     return {}
 
 config = load_config()
+
+def require_loopback_client(request: Request) -> None:
+    client_host = request.client.host if request.client else ""
+    try:
+        is_loopback = ipaddress.ip_address(client_host).is_loopback
+    except ValueError:
+        is_loopback = False
+    if not is_loopback:
+        raise HTTPException(status_code=403, detail="Tato operace je povolena pouze z lokálního zařízení.")
 
 def save_config_file(path: str = "config.json") -> bool:
     try:
@@ -291,7 +301,8 @@ class SwitchLocalModelRequest(BaseModel):
 
 class TestConnectionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
-    provider: str = "groq"
+    provider: Optional[str] = None
+    provider_type: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -1038,12 +1049,24 @@ def switch_local_model(req: SwitchLocalModelRequest):
         raise HTTPException(status_code=500, detail=f"Chyba při zavádění modelu: {exc}")
 
 @app.post("/api/llm/test-connection")
-def test_connection_endpoint(req: TestConnectionRequest):
+def test_connection_endpoint(req: TestConnectionRequest, request: Request):
     """Otestuje spojení s vybraným API poskytovatelem (Ping API)."""
-    provider = (req.provider or "groq").lower().strip()
-    provider_cfg = config.get("llm_provider", {}).get(provider, {})
+    require_loopback_client(request)
 
-    base_url = (req.base_url or "").strip() or provider_cfg.get("base_url", "")
+    if req.provider and req.provider_type and req.provider.lower().strip() != req.provider_type.lower().strip():
+        raise HTTPException(status_code=400, detail="Typ poskytovatele není jednoznačný.")
+
+    provider = (req.provider_type or req.provider or "groq").lower().strip()
+    if provider not in {"groq", "gemini", "custom"}:
+        raise HTTPException(status_code=400, detail="Neznámý poskytovatel.")
+
+    provider_cfg = config.get("llm_provider", {}).get(provider, {})
+    requested_api_key = (req.api_key or "").strip()
+    uses_saved_api_key = not requested_api_key or "••••" in requested_api_key
+    base_url = (
+        (provider_cfg.get("base_url", "") if uses_saved_api_key else (req.base_url or "").strip())
+        or provider_cfg.get("base_url", "")
+    )
     if not base_url:
         if provider == "groq":
             base_url = "https://api.groq.com/openai/v1"
@@ -1052,9 +1075,7 @@ def test_connection_endpoint(req: TestConnectionRequest):
         else:
             base_url = "https://api.openai.com/v1"
 
-    api_key = (req.api_key or "").strip()
-    if not api_key or "••••" in api_key:
-        api_key = provider_cfg.get("api_key", "")
+    api_key = provider_cfg.get("api_key", "") if uses_saved_api_key else requested_api_key
 
     model = (req.model or "").strip() or provider_cfg.get("model", "")
     if not model:
@@ -1101,7 +1122,9 @@ def get_config():
     }
 
 @app.post("/api/config")
-def update_config(req: SettingsUpdateRequest):
+def update_config(req: SettingsUpdateRequest, request: Request):
+    require_loopback_client(request)
+
     llama_cfg = config.setdefault("llama", {})
     if req.temperature is not None:
         llama_cfg["temperature"] = req.temperature
