@@ -1042,6 +1042,32 @@ select option:checked {
   max-width: 100%;
 }
 
+a {
+  cursor: pointer;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.message-content a,
+.research-source-link {
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.message-content a {
+  display: inline-block;
+}
+
+.message-content a:hover,
+.research-source-link:hover {
+  text-decoration: underline;
+}
+
 .message-avatar {
   width: 22px;
   height: 22px;
@@ -1772,12 +1798,18 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.research-source-link:hover {
-  text-decoration: underline;
+
+.research-source-entry,
+.research-source-link span {
+  min-width: 0;
+}
+
+.research-source-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
 }
 .research-source-link svg {
   width: 12px;

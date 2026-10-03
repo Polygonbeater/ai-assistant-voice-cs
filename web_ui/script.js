@@ -1889,7 +1889,7 @@
     if (sources.length > 0) {
       linksHtml = sources.map(r => `
         <div class="research-source-entry">
-          <a class="research-source-link source-link" href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer">
+          <a class="research-source-link source-link" href="${escapeHtml(r.url || '#')}" title="${escapeHtml(r.url || '')}" target="_blank" rel="noopener noreferrer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
             <span>${escapeHtml(r.title || r.url || 'Web Source')}</span>
           </a>
@@ -2008,6 +2008,37 @@
   // Export showCodeDiff globally
   window.showCodeDiff = (code) => showCodeDiff(code);
 
+  function linkifyBareUrls(text) {
+    let inProtectedElement = false;
+    return text.split(/(<\/?(?:a|code)\b[^>]*>)/gi).map(part => {
+      if (/^<(?:a|code)\b/i.test(part)) {
+        inProtectedElement = true;
+        return part;
+      }
+      if (/^<\/(?:a|code)\b/i.test(part)) {
+        inProtectedElement = false;
+        return part;
+      }
+      if (inProtectedElement) return part;
+
+      return part.replace(/https?:\/\/[^\s<>"']+/gi, (url) => {
+        const trailingPunctuation = url.match(/[.,!?;:)\]}]+$/)?.[0] || '';
+        const fullUrl = trailingPunctuation ? url.slice(0, -trailingPunctuation.length) : url;
+        if (!fullUrl) return url;
+
+        let label = fullUrl;
+        try {
+          const parsedUrl = new URL(fullUrl.replace(/&amp;/g, '&'));
+          label = `${parsedUrl.hostname}${parsedUrl.pathname === '/' ? '' : parsedUrl.pathname}`;
+        } catch (error) {
+          // Keep the escaped URL as the visible label if it cannot be parsed.
+        }
+        if (label.length > 38) label = `${label.slice(0, 37)}…`;
+        return `<a href="${fullUrl}" title="${fullUrl}" target="_blank" rel="noopener noreferrer">${label}</a>${trailingPunctuation}`;
+      });
+    }).join('');
+  }
+
   function renderMarkdown(rawText) {
     if (!rawText) return '';
 
@@ -2105,9 +2136,11 @@
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, rawUrl) => {
       const trimmedUrl = rawUrl.trim();
       const isSafe = /^https?:\/\//i.test(trimmedUrl);
-      const safeHref = isSafe ? escapeHtml(trimmedUrl) : '#';
-      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      const safeHref = isSafe ? trimmedUrl : '#';
+      return `<a href="${safeHref}" title="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     });
+
+    text = linkifyBareUrls(text);
 
     // Viewport preview snapshot link detection
     text = text.replace(/(\/tmp\/[a-zA-Z0-9_\-]+\.png)/g, (match) => {
@@ -2406,7 +2439,7 @@
         <span class="message-timestamp">${new Date().toLocaleTimeString()}</span>
       </div>
       <div class="message-tool-status-area" style="display: none;"></div>
-      <div class="message-body message-content">${isUser ? escapeHtml(initialContent) : renderMarkdown(initialContent)}</div>
+      <div class="message-body message-content">${isUser ? linkifyBareUrls(escapeHtml(initialContent)) : renderMarkdown(initialContent)}</div>
       <div class="message-actions-footer" style="display: none;"></div>
     `;
 
@@ -2467,18 +2500,21 @@
       });
       if (!response.ok) {
         showToast(t('external_link_unavailable'), 'warn');
+        window.open(url, '_blank', 'noopener,noreferrer');
         return;
       }
       showToast(t('external_link_opened'), 'info');
     } catch (error) {
+      console.warn('Backend external-link opening failed; opening link in a new tab.', error);
       showToast(t('external_link_unavailable'), 'warn');
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   }
 
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
-    const link = event.target.closest('a.research-source-link, .message-content a[href]');
-    if (!link) return;
+    const link = event.target.closest('a');
+    if (!link || (!link.matches('.research-source-link') && !link.closest('.message-content'))) return;
 
     const url = link.getAttribute('href') || '';
     if (!/^https?:\/\//i.test(url)) return;

@@ -31,7 +31,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blender_connector import (
     is_blender_available,
@@ -376,7 +376,7 @@ class ChatRequest(BaseModel):
     images: Optional[list[str]] = None
 
 class ExternalUrlRequest(BaseModel):
-    url: str
+    url: str = Field(min_length=1, max_length=32768)
 
 class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")

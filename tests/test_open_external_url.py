@@ -79,6 +79,21 @@ class TestOpenExternalUrl(unittest.TestCase):
         safe_get.assert_awaited_once()
         open_new_tab.assert_called_once_with("https://example.com/article")
 
+    def test_accepts_long_google_news_style_token_urls(self):
+        token = "Abcdefghijklmnopqrstuvwxyz0123456789-_" * 300
+        url = f"https://news.google.com/rss/articles/{token}?hl=en-US&gl=US&ceid=US:en"
+        checked_response = Mock(status=200)
+        with (
+            patch("web_server.is_safe_web_url", return_value=True),
+            patch("web_server.aiohttp.ClientSession", return_value=FakeSession()),
+            patch("web_server._safe_get", new=AsyncMock(return_value=checked_response)) as safe_get,
+            patch("web_server.webbrowser.open_new_tab", return_value=True),
+        ):
+            response = self.client.post("/api/open-external-url", json={"url": url})
+
+        self.assertEqual(response.status_code, 200)
+        safe_get.assert_awaited_once()
+
     def test_unavailable_or_missing_url_is_not_opened(self):
         for checked_response in (None, Mock(status=404)):
             with self.subTest(response=checked_response):
