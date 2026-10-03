@@ -570,6 +570,43 @@ def calculate_uv_metrics(obj, texture_res=2048):
     }
 
 
+def execute_trusted_blender_code(code: str) -> tuple[str, str]:
+    """
+    Spustí prověřený Python/bpy skript v kontextu hlavního vlákna Blenderu.
+
+    BEZPEČNOSTNÍ MODEL & ROLE SERVEROVÉHO AST GATEKEEPERU:
+    - Veškerý kód přicházející z webu nebo od AI asistenta je před odesláním do Blenderu
+      striktně validován serverovým AST Gatekeeperem (`code_validator.py`).
+    - Validátor zakazuje nebezpečné moduly (os, sys, subprocess, shutil, socket...),
+      blokuje přístup k dunder atributům (.__class__, .__globals__, .__subclasses__),
+      zakazuje reflexní funkce (getattr, setattr, vars, dir, eval, exec) a vymáhá whitelist
+      povolených modulů (bpy, bmesh, math, mathutils, random, json, colorsys).
+    - Tento receiver naslouchá výhradně na lokálním loopback rozhraní (127.0.0.1:9876).
+    - Zde se kód vykonává v definovaném kontextu se zachycením stdout/stderr a automatickým
+      překreslením 3D viewportu.
+    """
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+    exec_globals = {
+        "bpy": bpy,
+        "__name__": "__blender_ai_script__",
+        "__builtins__": __builtins__,
+    }
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        compiled_code = compile(code, "<ai_generated_bpy_script>", "exec")
+        exec(compiled_code, exec_globals)  # noqa: S102
+
+    # Překreslení 3D viewportu po operaci
+    if hasattr(bpy.context, "window_manager") and bpy.context.window_manager:
+        for window in bpy.context.window_manager.windows:
+            if window.screen:
+                for area in window.screen.areas:
+                    if area.type == 'VIEW_3D':
+                        area.tag_redraw()
+
+    return stdout_capture.getvalue(), stderr_capture.getvalue()
+
+
 def process_blender_queue_timer():
     """
     Tato funkce je volána pravidelně z HLAVNÍHO VLÁKNA Blenderu pomocí bpy.app.timers.
@@ -593,9 +630,7 @@ def process_blender_queue_timer():
             continue
 
         # 0. Spuštění BPY skriptu vygenerovaného AI asistentem (action == "run_bpy_script")
-        # POZNÁMKA: exec() je zde záměrný – kód generuje LLM a je spouštěn výhradně v
-        # izolovaném prostředí Blenderu přes lokální TCP socket 127.0.0.1:9876.
-        # Tato cesta NENÍ dostupná z webového rozhraní.
+        # Provádí se přes explicitní auditovanou funkci execute_trusted_blender_code.
         if action == "run_bpy_script":
             code_value = message.get("code")
             if not isinstance(code_value, str):
@@ -608,7 +643,7 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
                 continue
             code = code_value.strip()
-            print(f"\n[AI-Blender] >>> Spouštím run_bpy_script ({len(code)} znaků)...")
+            print(f"\n[AI-Blender] >>> Spouštím execute_trusted_blender_code ({len(code)} znaků)...")
             if not code:
                 result_container["response"] = {
                     "status": "error",
@@ -619,20 +654,7 @@ def process_blender_queue_timer():
                 _RECEIVER_INSTANCE.request_queue.task_done()
                 continue
             try:
-                stdout_capture = io.StringIO()
-                stderr_capture = io.StringIO()
-                exec_globals = {"bpy": bpy, "__name__": "__blender_ai_script__"}
-                with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
-                    exec(compile(code, "<ai_generated_bpy_script>", "exec"), exec_globals)  # noqa: S102
-
-                stdout_out = stdout_capture.getvalue()
-                stderr_out = stderr_capture.getvalue()
-
-                # Překreslení 3D viewportu po operaci
-                for window in bpy.context.window_manager.windows:
-                    for area in window.screen.areas:
-                        if area.type == 'VIEW_3D':
-                            area.tag_redraw()
+                stdout_out, stderr_out = execute_trusted_blender_code(code)
 
                 result_container["response"] = {
                     "status": "success",
@@ -640,7 +662,7 @@ def process_blender_queue_timer():
                     "output": stdout_out,
                     "stderr": stderr_out,
                 }
-                print(f"✅ [AI-Blender] run_bpy_script dokončen. stdout={stdout_out[:200]!r}")
+                print(f"✅ [AI-Blender] execute_trusted_blender_code dokončen. stdout={stdout_out[:200]!r}")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 result_container["response"] = {
@@ -649,7 +671,7 @@ def process_blender_queue_timer():
                     "error": str(e),
                     "traceback": err_trace,
                 }
-                print(f"❌ [AI-Blender] Chyba run_bpy_script: {e}")
+                print(f"❌ [AI-Blender] Chyba execute_trusted_blender_code: {e}")
                 print(err_trace)
             finally:
                 completion_event.set()

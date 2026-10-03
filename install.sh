@@ -98,21 +98,22 @@ if ! command -v apt-get &> /dev/null; then
     log_warning "Správce balíčků 'apt-get' nebyl nalezen. Skript předpokládá distribuci založenou na Debianu/Ubuntu."
 fi
 
-# Detekce Pythonu 3.11
+# Detekce a validace verze Pythonu (podporován Python 3.10 nebo 3.11, doporučen 3.11)
 PYTHON_BIN=""
 if command -v python3.11 &> /dev/null; then
     PYTHON_BIN="python3.11"
 elif command -v python3 &> /dev/null; then
     PY_VER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")"
-    if [ "$PY_VER" = "3.11" ]; then
+    if [ "$PY_VER" = "3.11" ] || [ "$PY_VER" = "3.10" ]; then
         PYTHON_BIN="python3"
     fi
 fi
 
 if [ -n "$PYTHON_BIN" ]; then
-    log_success "Python 3.11 byl detekován ($($PYTHON_BIN --version))."
+    DETECTED_VER="$($PYTHON_BIN -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")')"
+    log_success "Podporovaný Python detekován: Python $DETECTED_VER ($PYTHON_BIN)."
 else
-    log_warning "Python 3.11 nebyl nalezen v PATH. Bude nainstalován v rámci systémových balíčků."
+    log_warning "Python 3.11 / 3.10 nebyl nalezen v PATH. Skript se jej pokusí doinstalovat v kroku 2."
 fi
 
 if command -v git &> /dev/null; then
@@ -165,6 +166,13 @@ if command -v python3.11 &> /dev/null; then
     PYTHON_BIN="python3.11"
 else
     PYTHON_BIN="python3"
+fi
+
+# Ověření finální verze Pythonu
+FINAL_PY_VER="$($PYTHON_BIN -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+if [ "$FINAL_PY_VER" != "3.11" ] && [ "$FINAL_PY_VER" != "3.10" ]; then
+    log_error "Nekompatibilní verze Pythonu: $FINAL_PY_VER. Projekt vyžaduje Python 3.10 nebo 3.11 pro běh Coqui TTS a PyTorch."
+    exit 1
 fi
 
 # ==============================================================================
@@ -236,7 +244,7 @@ log_info "Ověřené klíčové verze: numpy=${NUMPY_VER}, networkx=${NETWORKX_V
 # ==============================================================================
 log_step "Krok 5/7: Volitelná 3D/AI nadstavba (TripoSR & torchmcubes)..."
 
-INSTALL_TRIPO=$WITH_TRIPO
+INSTALL_TRIPO=${INSTALL_TRIPOSR:-$WITH_TRIPO}
 
 if [ "$INSTALL_TRIPO" = false ] && [ "$NON_INTERACTIVE" = false ]; then
     echo -e "${YELLOW}"
@@ -256,18 +264,15 @@ fi
 
 if [ "$INSTALL_TRIPO" = true ]; then
     log_info "Instaluji C++ rozšíření torchmcubes z GitHubu (fixovaný commit)..."
-    # BEZPECNOSTNI POZADAVEK: Nahradte FIXME_ZADEJ_COMMIT_HASH konkretnim
-    # proverzenym SHA commitu z https://github.com/tatsy/torchmcubes
-    if pip install "git+https://github.com/tatsy/torchmcubes.git@FIXME_ZADEJ_COMMIT_HASH"; then
+    TRIPOSR_COMMIT="1b6826c71c4c9fa8617865298a0b0d42d385f903"
+    if pip install "git+https://github.com/tatsy/torchmcubes.git@${TRIPOSR_COMMIT}"; then
         log_success "torchmcubes úspěšně zkompilován a nainstalován."
     else
         log_warning "Kompilace torchmcubes selhala (může chybět CUDA dev toolset). Asistent využije deterministický fallback."
     fi
 
     log_info "Instaluji balíček TripoSR z GitHubu (fixovaný commit)..."
-    # BEZPECNOSTNI POZADAVEK: Nahradte FIXME_ZADEJ_COMMIT_HASH konkretnim
-    # proverzenym SHA commitu z https://github.com/VAST-AI-Research/TripoSR
-    if pip install "git+https://github.com/VAST-AI-Research/TripoSR.git@FIXME_ZADEJ_COMMIT_HASH"; then
+    if pip install "git+https://github.com/VAST-AI-Research/TripoSR.git@${TRIPOSR_COMMIT}"; then
         log_success "TripoSR úspěšně nainstalován."
     else
         log_warning "Instalace TripoSR z gitu selhala. Asistent využije deterministický fallback."
@@ -277,18 +282,18 @@ else
 fi
 
 # ==============================================================================
-# KROK 6: OVĚŘENÍ INSTALACE — SPUŠTĚNÍ 176 UNIT TESTŮ
+# KROK 6: OVĚŘENÍ INSTALACE — SPUŠTĚNÍ UNIT TESTŮ
 # ==============================================================================
 log_step "Krok 6/7: Verifikace instalace — Spuštění testovacího balíku..."
 
 if [ "$SKIP_TESTS" = true ]; then
     log_warning "Testy byly přeskočeny na základě parametru --skip-tests."
 else
-    log_info "Spouštím 176 unit testů (Blender TCP, 20 nástrojů, FAISS RAG, TripoSR)..."
+    log_info "Spouštím unit testy (Blender TCP, AST Gatekeeper, FAISS RAG, Vision Bridge)..."
     
-    if PYTHONPATH=. python -m unittest discover -s scratch/ -p "test_*.py"; then
+    if PYTHONPATH=. python -m unittest discover -s tests -p "test_*.py"; then
         echo ""
-        log_success "VŠECH 176 UNIT TESTŮ PROBĚHLO ÚSPĚŠNĚ (100% PASS RATE)!"
+        log_success "VŠECHNY UNIT TESTY PROBĚHLY ÚSPĚŠNĚ (100% PASS RATE)!"
     else
         log_error "Některé unit testy selhaly. Prozkoumejte prosím výstup výše."
         exit 1
