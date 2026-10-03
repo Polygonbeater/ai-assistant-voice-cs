@@ -102,7 +102,7 @@ class AssistantGUI(tk.Tk):
             value=str(config.get("llama", {}).get("temperature", 0.7))
         )
         self.llm_max_tokens = tk.StringVar(
-            value=str(config.get("llama", {}).get("max_tokens", 1024))
+            value=str(config.get("llama", {}).get("max_tokens", 8192))
         )
         self.whisper_language = tk.StringVar(
             value=config.get("whisper", {}).get("language", "cs")

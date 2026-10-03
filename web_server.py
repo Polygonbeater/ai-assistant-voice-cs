@@ -1215,7 +1215,7 @@ def get_config():
         "active_provider": "local",
         "groq": {"api_key": "", "model": "openai/gpt-oss-120b", "base_url": "https://api.groq.com/openai/v1"},
         "gemini": {"api_key": "", "model": "gemini-2.0-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
-        "custom": {"provider_name": "OpenAI", "base_url": "https://api.openai.com/v1", "api_key": "", "model": "gpt-4o", "temperature": 0.7, "max_tokens": 2048}
+        "custom": {"provider_name": "OpenAI", "base_url": "https://api.openai.com/v1", "api_key": "", "model": "gpt-4o", "temperature": 0.7}
     })
     for p_name in ("groq", "gemini", "custom"):
         sub = llm_prov.get(p_name, {})

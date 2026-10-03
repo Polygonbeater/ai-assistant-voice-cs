@@ -1441,7 +1441,7 @@
       if (el.selectPreset) el.selectPreset.value = 'standard';
 
       if (el.cfgTemp) el.cfgTemp.value = 0.7;
-      if (el.cfgTokens) el.cfgTokens.value = 1024;
+      if (el.cfgTokens) el.cfgTokens.value = 8192;
       if (el.cfgSysprompt) el.cfgSysprompt.value = '';
       if (el.cfgLanguage) el.cfgLanguage.value = 'en';
 
@@ -3732,7 +3732,7 @@ print(f"Active object: {act.name if act else 'None'}")
       const provCfg = cfg.llm_provider || {};
 
       if (el.cfgTemp) el.cfgTemp.value = llama.temperature ?? 0.7;
-      if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 1024;
+      if (el.cfgTokens) el.cfgTokens.value = llama.max_tokens ?? 8192;
       if (el.cfgSysprompt) el.cfgSysprompt.value = llama.system_prompt ?? data.default_system_prompt ?? '';
 
       // Provider selection
@@ -3786,7 +3786,7 @@ print(f"Active object: {act.name if act else 'None'}")
       const payload = {
         language: el.cfgLanguage ? el.cfgLanguage.value : state.language,
         temperature: parseFloat(el.cfgTemp ? el.cfgTemp.value : 0.7) || 0.7,
-        max_tokens: parseInt(el.cfgTokens ? el.cfgTokens.value : 1024, 10) || 1024,
+        max_tokens: parseInt(el.cfgTokens ? el.cfgTokens.value : 8192, 10) || 8192,
         system_prompt: el.cfgSysprompt ? el.cfgSysprompt.value : '',
         active_provider: activeProvider,
         local_model: (activeProvider === 'local' && el.cfgLocalModel) ? el.cfgLocalModel.value : undefined,
