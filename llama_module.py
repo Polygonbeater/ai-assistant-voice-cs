@@ -5057,6 +5057,7 @@ def generate_response(
     active_session_id: str | None = None,
     enable_tools: bool = True,
     tool_callback=None,
+    images: list[str] | None = None,
     **kwargs
 ):
     """
@@ -5219,7 +5220,25 @@ def generate_response(
             c = turn.get("content") or turn.get("text") or ""
             if c:
                 messages.append({"role": r, "content": c})
-    messages.append({"role": "user", "content": prompt})
+
+    # Multimodální struktura pro uživatelskou zprávu (OpenAI Vision API kompatibilní)
+    if images and isinstance(images, (list, tuple)) and len(images) > 0:
+        content_list: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        for img_b64 in images:
+            if not img_b64:
+                continue
+            img_str = str(img_b64).strip()
+            if img_str.startswith("data:image/"):
+                img_url = img_str
+            else:
+                img_url = f"data:image/jpeg;base64,{img_str}"
+            content_list.append({
+                "type": "image_url",
+                "image_url": {"url": img_url}
+            })
+        messages.append({"role": "user", "content": content_list})
+    else:
+        messages.append({"role": "user", "content": prompt})
 
     # Určení maximálního počtu tokenů
     raw_max = llama_config.get('max_tokens', 'auto')
@@ -5407,6 +5426,31 @@ def generate_response(
             yield rc
 
     except Exception as exc:
+        err_str = str(exc).lower()
+        if images and (
+            "vision" in err_str
+            or "image" in err_str
+            or "400" in err_str
+            or "bad request" in err_str
+            or "type" in err_str
+            or "multimodal" in err_str
+            or "content" in err_str
+            or "invalid" in err_str
+        ):
+            logging.warning("Model nepodporuje Vision (obrazový vstup): %s", exc)
+            fallback_msg = (
+                "Vidím, že jsi nahrál obrázek, ale můj aktuálně aktivní model nepodporuje zpracování obrazu (Vision). "
+                "Přepni prosím na multimodální model nebo využij Cloud API."
+                if req_lang == "cs"
+                else
+                "I see you uploaded an image, but my currently active model does not support image processing (Vision). "
+                "Please switch to a multimodal model or use a Cloud API."
+            )
+            if callback_on_token:
+                callback_on_token(fallback_msg)
+            yield fallback_msg
+            return
+
         logging.error("Chyba při generování: %s", exc)
         err_msg = f"Omlouvám se, došlo k chybě: {exc}"
         if callback_on_token:

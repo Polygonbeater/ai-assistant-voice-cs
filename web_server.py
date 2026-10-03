@@ -331,6 +331,7 @@ class ChatRequest(BaseModel):
     activeTools: Optional[list[str]] = None
     mode_3d: Optional[bool] = None
     mode3d: Optional[bool] = None
+    images: Optional[list[str]] = None
 
 class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -687,6 +688,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                 memory_service=memory_service,
                 active_session_id=session_id,
                 tool_callback=_on_tool,
+                images=req.images,
             ):
                 collected_sentences.append(chunk)
 

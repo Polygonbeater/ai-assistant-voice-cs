@@ -142,6 +142,13 @@ class DocumentService:
         ".ts",
     }
 
+    IMAGE_SUFFIXES = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+    }
+
     def __init__(
         self,
         config: dict | None = None,
@@ -284,7 +291,10 @@ class DocumentService:
             raise FileNotFoundError(f"Dokument neexistuje: {document_path}")
 
         suffix = document_path.suffix.lower()
-        if suffix == ".pdf":
+        if suffix in self.IMAGE_SUFFIXES:
+            logger.info("Soubor %s je obrazový formát (%s); textové čtení přeskočeno.", document_path.name, suffix)
+            text = f"Zde je vložen obrázek {document_path.name}. Obsah nelze textově prohledávat."
+        elif suffix == ".pdf":
             text = self._read_pdf(document_path)
         elif suffix == ".docx":
             text = self._read_docx(document_path)

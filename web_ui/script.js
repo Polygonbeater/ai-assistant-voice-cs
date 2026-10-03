@@ -47,6 +47,7 @@
     selectSessionSeq: 0,
     selectSessionAbortController: null,
     attachedFile: null,
+    attachedImages: [],
     isRecording: false,
     mediaRecorder: null,
     audioChunks: [],
@@ -2460,10 +2461,17 @@
       ? t('default_doc_prompt')
       : ''));
 
+    // Capture attached images before potential upload/reset
+    const imagesToSend = (state.attachedImages && state.attachedImages.length > 0) ? [...state.attachedImages] : [];
+
     // Process attachment if present
     if (state.attachedFile) {
+      const isImg = isImageFile(state.attachedFile);
       const uploaded = await uploadPendingAttachment();
       if (!uploaded) return;
+      if (isImg) {
+        setAttachedFile(null);
+      }
     }
 
     const promptText = effectivePrompt;
@@ -2554,6 +2562,7 @@
         active_tools: getEffectiveActiveToolNames(),
         mode_3d: (state.activeRightTab === '3d'),
         language: state.language || 'en',
+        images: imagesToSend,
       };
 
       const response = await fetch('/api/chat', {
@@ -2831,21 +2840,63 @@
   }
 
   // ===========================================================================
-  // RAG ATTACHMENTS & UPLOAD
+  // RAG ATTACHMENTS & MULTIMODAL VISION UPLOAD
   // ===========================================================================
-  function setAttachedFile(file) {
+  function isImageFile(file) {
+    if (!file) return false;
+    if (file.type && file.type.startsWith('image/')) return true;
+    const name = (file.name || '').toLowerCase();
+    return ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].some(ext => name.endsWith(ext));
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = reader.result;
+        if (typeof res === 'string') {
+          const match = res.match(/^data:image\/[^;]+;base64,(.+)$/);
+          resolve(match ? match[1] : res);
+        } else {
+          resolve('');
+        }
+      };
+      reader.onerror = err => reject(err);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function setAttachedFile(file) {
     state.attachedFile = file;
+    state.attachedImages = [];
     if (file) {
-      el.attachedFileName.textContent = `${file.name} (${Math.round(file.size / 1024)} kB)`;
+      const isImg = isImageFile(file);
+      const icon = isImg ? '🖼️ ' : '📄 ';
+      el.attachedFileName.textContent = `${icon}${file.name} (${Math.round(file.size / 1024)} kB)`;
       el.attachedFileBanner.style.display = 'inline-flex';
+      if (isImg) {
+        try {
+          const b64 = await fileToBase64(file);
+          if (b64) {
+            state.attachedImages = [b64];
+          }
+        } catch (err) {
+          logConsole(`Error reading image: ${err.message}`, 'error');
+        }
+      }
     } else {
       el.attachedFileBanner.style.display = 'none';
       if (el.fileInput) el.fileInput.value = '';
+      state.attachedImages = [];
     }
   }
 
   async function uploadPendingAttachment() {
-    if (!state.attachedFile) return;
+    if (!state.attachedFile) return true;
+    if (isImageFile(state.attachedFile)) {
+      // Images are transmitted directly via multimodal vision payload in chat request
+      return true;
+    }
     const formData = new FormData();
     formData.append('file', state.attachedFile);
 
