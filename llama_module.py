@@ -5494,15 +5494,25 @@ def generate_response(
         for chunk in second_stream:
             if stop_event and stop_event.is_set():
                 break
-            delta = chunk["choices"][0].get("delta", {})
-            text_piece = delta.get("content") or ""
-            if text_piece:
-                if callback_on_token:
-                    callback_on_token(text_piece)
-                sentence_buffer += text_piece
-                ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
-                for rc in ready_chunks:
-                    yield rc
+            choices = chunk.get("choices") if isinstance(chunk, dict) else None
+            if not isinstance(choices, list) or not choices:
+                continue
+            choice = choices[0]
+            if not isinstance(choice, dict):
+                continue
+            delta = choice.get("delta")
+            if not isinstance(delta, dict):
+                continue
+            text_piece = delta.get("content")
+            if not isinstance(text_piece, str) or not text_piece:
+                continue
+
+            if callback_on_token:
+                callback_on_token(text_piece)
+            sentence_buffer += text_piece
+            ready_chunks, sentence_buffer = extract_sentence_chunks(sentence_buffer, is_final=False)
+            for rc in ready_chunks:
+                yield rc
 
         final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
         for rc in final_chunks:

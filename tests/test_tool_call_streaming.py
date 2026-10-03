@@ -5,11 +5,14 @@ from llama_module import generate_response
 
 
 class ToolCallStreamingTests(unittest.TestCase):
-    def _generate(self, first_stream):
+    def _generate(self, first_stream, second_stream=None):
         llm = MagicMock()
         llm.create_chat_completion.side_effect = [
             iter(first_stream),
-            iter([{"choices": [{"delta": {"content": "Here is the result."}}]}]),
+            iter(
+                second_stream
+                or [{"choices": [{"delta": {"content": "Here is the result."}}]}]
+            ),
         ]
         dispatcher = MagicMock()
         dispatcher.dispatch.return_value = {
@@ -97,6 +100,30 @@ class ToolCallStreamingTests(unittest.TestCase):
         )
         self.assertEqual(response, ["Here is the result."])
         self.assertEqual(emitted_tokens, ["Here is the result."])
+
+    def test_second_stream_skips_non_text_chunks_and_yields_complete_response(self):
+        response, emitted_tokens, _ = self._generate(
+            [
+                {
+                    "choices": [{
+                        "delta": {
+                            "tool_calls": [{
+                                "index": 0,
+                                "function": {"name": "search_web", "arguments": '{"query":"weather"}'},
+                            }]
+                        }
+                    }]
+                },
+            ],
+            [
+                {"choices": []},
+                {"choices": [{"delta": {"content": "The "}}]},
+                {"choices": [{"delta": {"content": "answer is 42"}}]},
+            ],
+        )
+
+        self.assertEqual(response, ["The answer is 42"])
+        self.assertEqual(emitted_tokens, ["The ", "answer is 42"])
 
 
 if __name__ == "__main__":

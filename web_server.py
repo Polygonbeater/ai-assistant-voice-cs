@@ -738,7 +738,22 @@ async def chat_stream(req: ChatRequest, request: Request):
             ):
                 collected_sentences.append(chunk)
 
-            full_reply = "".join(collected_tokens).strip() or " ".join(collected_sentences).strip()
+            yielded_reply = " ".join(collected_sentences).strip()
+            callback_reply = "".join(collected_tokens).strip()
+            normalized_yielded = re.sub(r"\s+", " ", yielded_reply).strip()
+            normalized_callback = re.sub(r"\s+", " ", callback_reply).strip()
+            yielded_reply_was_streamed = bool(normalized_yielded) and (
+                normalized_yielded in normalized_callback
+            )
+            if yielded_reply and not yielded_reply_was_streamed:
+                for chunk in collected_sentences:
+                    event_queue.put({"type": "token", "content": chunk, "chunk": chunk})
+
+            full_reply = (
+                callback_reply
+                if yielded_reply_was_streamed
+                else yielded_reply or callback_reply
+            )
             if full_reply:
                 history_repository.append(session_id, "assistant", full_reply)
 
