@@ -2517,68 +2517,71 @@
   // ===========================================================================
   // CHAT STREAMING (SSE POST /api/chat)
   // ===========================================================================
+  let isSendingLock = false;
+
   async function sendMessage(overridePrompt = null, options = {}) {
-    if (state.isStreaming || state.isRagUploading) return;
+    if (state.isStreaming || isSendingLock) return;
+    isSendingLock = true;
 
-    // Await pending asynchronous file read if still in progress
-    if (state.isFileLoading && state.pendingFileRead) {
-      try {
-        await state.pendingFileRead;
-      } catch (e) {
-        // ignore
+    try {
+      // Await pending asynchronous file read if still in progress
+      if (state.isFileLoading && state.pendingFileRead) {
+        try {
+          await state.pendingFileRead;
+        } catch (e) {
+          // handled in setAttachedFile
+        }
       }
-    }
 
-    // Await pending RAG document upload if still in progress
-    if (state.isRagUploading && state.pendingRagUpload) {
-      try {
-        await state.pendingRagUpload;
-      } catch (e) {
-        // ignore
+      // Await pending RAG document upload if still in progress
+      if (state.isRagUploading && state.pendingRagUpload) {
+        try {
+          await state.pendingRagUpload;
+        } catch (e) {
+          // handled in uploadPendingAttachment
+        }
       }
-    }
-    if (state.isRagUploading) return;
 
-    // Abort if an attached image failed to load or has empty base64 content
-    if (state.attachedFile && isImageFile(state.attachedFile)) {
-      const hasValidImage = Array.isArray(state.attachedImages) && state.attachedImages.some(img => {
-        if (typeof img !== 'string') return false;
-        const commaIdx = img.indexOf(',');
-        const raw = (commaIdx !== -1) ? img.slice(commaIdx + 1).trim() : img.trim();
-        return raw.length > 0;
-      });
-      if (!hasValidImage) {
-        logConsole('Cannot send message: attached image failed to read or payload is empty.', 'error');
-        showToast(t('image_read_error'), 'error');
-        return;
+      if (state.isStreaming) return;
+
+      // Abort if an attached image failed to load or has invalid base64 content
+      if (state.attachedFile && isImageFile(state.attachedFile)) {
+        const hasValidImage = Array.isArray(state.attachedImages) && state.attachedImages.some(img => {
+          return Boolean(extractAndValidateBase64(img));
+        });
+        if (!hasValidImage) {
+          logConsole('Cannot send message: attached image failed to read or payload is invalid base64.', 'error');
+          showToast(t('image_read_error'), 'error');
+          return;
+        }
       }
-    }
 
-    const isProofread = Boolean(options && options.isProofread);
+      const isProofread = Boolean(options && options.isProofread);
 
-    const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
-      ? overridePrompt.trim()
-      : (el.promptInput ? el.promptInput.value.trim() : '');
+      const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
+        ? overridePrompt.trim()
+        : (el.promptInput ? el.promptInput.value.trim() : '');
 
-    if (!rawPrompt && !state.attachedFile) return;
+      if (!rawPrompt && !state.attachedFile) return;
 
-    // Default prompt when sending attachment with empty input
-    const effectivePrompt = (rawPrompt || (state.attachedFile
-      ? t('default_doc_prompt')
-      : ''));
+      // Default prompt when sending attachment with empty input
+      const effectivePrompt = (rawPrompt || (state.attachedFile
+        ? t('default_doc_prompt')
+        : ''));
 
-    // Capture attached images before potential upload/reset
-    const imagesToSend = (state.attachedImages && state.attachedImages.length > 0) ? [...state.attachedImages] : [];
+      // Capture attached images before potential upload/reset
+      const imagesToSend = (state.attachedImages && state.attachedImages.length > 0) ? [...state.attachedImages] : [];
 
-    // Process attachment if present
-    if (state.attachedFile) {
-      const isImg = isImageFile(state.attachedFile);
-      const uploaded = await uploadPendingAttachment();
-      if (!uploaded) return;
-      if (isImg) {
-        setAttachedFile(null);
+      // Process attachment if present
+      if (state.attachedFile) {
+        const isImg = isImageFile(state.attachedFile);
+        const fileToProcess = state.attachedFile;
+        const uploaded = await uploadPendingAttachment();
+        if (!uploaded) return;
+        if (isImg && state.attachedFile === fileToProcess) {
+          setAttachedFile(null);
+        }
       }
-    }
 
     const promptText = effectivePrompt;
     if (el.promptInput) {
@@ -2870,6 +2873,7 @@
       }
       state.isStreaming = false;
       state.abortController = null;
+      isSendingLock = false;
       updateStreamingUi(false);
       // Extra pojistka: odstranění visícího textu načítání
       const titleEl = document.getElementById('active-session-title');
@@ -2881,7 +2885,10 @@
       }
       scrollToBottom();
     }
+  } finally {
+    isSendingLock = false;
   }
+}
 
   async function stopGeneration() {
     if (!state.isStreaming) return;
@@ -2957,20 +2964,30 @@
 
   let uploadToken = 0;
 
+  function extractAndValidateBase64(dataUriOrRaw) {
+    if (typeof dataUriOrRaw !== 'string') return null;
+    const commaIdx = dataUriOrRaw.indexOf(',');
+    const raw = (commaIdx !== -1) ? dataUriOrRaw.slice(commaIdx + 1) : dataUriOrRaw;
+    const clean = raw.replace(/\s+/g, '');
+    if (clean.length > 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(clean)) {
+      return clean;
+    }
+    return null;
+  }
+
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const res = reader.result;
         if (typeof res === 'string' && res.length > 0) {
-          const commaIdx = res.indexOf(',');
-          const raw = (commaIdx !== -1) ? res.slice(commaIdx + 1).trim() : res.trim();
-          if (raw.length > 0) {
+          const valid = extractAndValidateBase64(res);
+          if (valid) {
             resolve(res);
             return;
           }
         }
-        reject(new Error('Empty image payload'));
+        reject(new Error('Invalid or empty base64 image payload'));
       };
       reader.onerror = err => reject(err || new Error('FileReader failed'));
       reader.readAsDataURL(file);
@@ -3001,16 +3018,10 @@
             if (currentUploadToken !== uploadToken) {
               return;
             }
-            if (b64 && typeof b64 === 'string') {
-              const commaIdx = b64.indexOf(',');
-              const rawData = (commaIdx !== -1) ? b64.slice(commaIdx + 1).trim() : b64.trim();
-              if (rawData.length > 0) {
-                state.attachedImages = [b64];
-              } else {
-                throw new Error('Empty base64 payload');
-              }
+            if (b64 && extractAndValidateBase64(b64)) {
+              state.attachedImages = [b64];
             } else {
-              throw new Error('Empty file content');
+              throw new Error('Invalid base64 payload');
             }
           } catch (err) {
             if (currentUploadToken !== uploadToken) {
@@ -3059,6 +3070,9 @@
       return true;
     }
 
+    const fileToUpload = state.attachedFile;
+    const currentTokenAtUpload = uploadToken;
+
     state.isRagUploading = true;
     state.isFileLoading = true;
     if (el.btnSend) {
@@ -3067,10 +3081,10 @@
 
     const uploadPromise = (async () => {
       const formData = new FormData();
-      formData.append('file', state.attachedFile);
+      formData.append('file', fileToUpload);
 
       try {
-        logConsole(`Uploading document to RAG: ${state.attachedFile.name}...`, 'info');
+        logConsole(`Uploading document to RAG: ${fileToUpload.name}...`, 'info');
         const res = await fetch('/api/rag/upload', {
           method: 'POST',
           body: formData,
@@ -3090,7 +3104,9 @@
           throw new Error('No indexable text found in file.');
         }
         logConsole(`Indexing complete: ${data.filename} (${data.chunks_indexed} chunks)`, 'info');
-        setAttachedFile(null);
+        if (state.attachedFile === fileToUpload && uploadToken === currentTokenAtUpload) {
+          setAttachedFile(null);
+        }
         await refreshSystemStatus();
         return true;
       } catch (err) {
@@ -4022,7 +4038,7 @@ print(f"Active object: {act.name if act else 'None'}")
       el.promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          if (state.isFileLoading || state.isRagUploading || state.isStreaming || (el.btnSend && el.btnSend.disabled)) {
+          if (state.isStreaming || isSendingLock) {
             return;
           }
           sendMessage();
@@ -4038,7 +4054,7 @@ print(f"Active object: {act.name if act else 'None'}")
     // Suggestion chips
     document.querySelectorAll('.suggestion-chip').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (state.isFileLoading || state.isRagUploading || state.isStreaming || (el.btnSend && el.btnSend.disabled)) {
+        if (state.isStreaming || isSendingLock) {
           return;
         }
         const text = btn.dataset.prompt;
