@@ -13,6 +13,12 @@ models/*
 # Lokální konfigurace a privátní API klíče
 config.json
 !config.example.json
+.env
+.env.*
+*.env
+*.key
+*.pem
+secrets.json
 
 # Virtuální prostředí a balíčky
 venv/

@@ -688,7 +688,7 @@
       provider_local_desc: 'Private CPU & Vulkan GPU execution',
       provider_badge_offline: '100% Offline',
       provider_groq: 'Groq Cloud',
-      provider_groq_desc: 'Ultra-fast Llama 3.3 & Qwen 2.5',
+      provider_groq_desc: 'Ultra-fast GPT OSS & Qwen 3.8',
       provider_gemini: 'Google Gemini',
       provider_gemini_desc: 'Gemini 2.0 Flash & 1.5 Pro',
       provider_custom: 'Custom / Paid API',
@@ -939,7 +939,7 @@
       provider_local_desc: 'Privátní běh na CPU a Vulkan GPU',
       provider_badge_offline: '100% Offline',
       provider_groq: 'Groq Cloud',
-      provider_groq_desc: 'Bleskové modely Llama 3.3 a Qwen 2.5',
+      provider_groq_desc: 'Bleskové modely GPT OSS a Qwen 3.8',
       provider_gemini: 'Google Gemini',
       provider_gemini_desc: 'Gemini 2.0 Flash a 1.5 Pro',
       provider_custom: 'Vlastní / Placené API',
@@ -3742,7 +3742,7 @@ print(f"Active object: {act.name if act else 'None'}")
       // Groq
       const groqCfg = provCfg.groq || {};
       if (el.cfgGroqKey) el.cfgGroqKey.value = groqCfg.api_key || '';
-      if (el.cfgGroqModel) el.cfgGroqModel.value = groqCfg.model || 'llama-3.3-70b-versatile';
+      if (el.cfgGroqModel) el.cfgGroqModel.value = groqCfg.model || 'openai/gpt-oss-120b';
 
       // Gemini
       const geminiCfg = provCfg.gemini || {};
@@ -3794,7 +3794,7 @@ print(f"Active object: {act.name if act else 'None'}")
           active_provider: activeProvider,
           groq: {
             api_key: el.cfgGroqKey ? el.cfgGroqKey.value.trim() : '',
-            model: el.cfgGroqModel ? el.cfgGroqModel.value.trim() : 'llama-3.3-70b-versatile',
+            model: el.cfgGroqModel ? el.cfgGroqModel.value.trim() : 'openai/gpt-oss-120b',
           },
           gemini: {
             api_key: el.cfgGeminiKey ? el.cfgGeminiKey.value.trim() : '',

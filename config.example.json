@@ -50,7 +50,7 @@
     "active_provider": "local",
     "groq": {
       "api_key": "",
-      "model": "llama-3.3-70b-versatile",
+      "model": "openai/gpt-oss-120b",
       "base_url": "https://api.groq.com/openai/v1"
     },
     "gemini": {
