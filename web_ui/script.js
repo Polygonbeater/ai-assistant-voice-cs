@@ -543,6 +543,8 @@
       send_btn_title: 'Send message',
       stop_btn_title: 'Stop generation',
       default_doc_prompt: 'Process this attached document.',
+      image_read_error: 'Failed to read image file. Please try selecting the image again.',
+      rag_upload_error: 'Failed to upload document to RAG.',
 
       resizer_title_right: 'Drag to resize right sidebar',
       inspector_title: '3D VIEWPORT & TELEMETRY',
@@ -792,6 +794,8 @@
       send_btn_title: 'Odeslat zprávu',
       stop_btn_title: 'Zastavit generování',
       default_doc_prompt: 'Zpracuj tento přiložený dokument.',
+      image_read_error: 'Chyba při čtení obrázku. Zkuste soubor vybrat znovu.',
+      rag_upload_error: 'Chyba při nahrávání dokumentu do RAG báze.',
 
       resizer_title_right: 'Tažením změnit šířku pravého panelu',
       inspector_title: '3D VIEWPORT & TELEMETRIE',
@@ -2523,6 +2527,15 @@
       }
     }
 
+    // Abort if an attached image failed to load or has empty content
+    if (state.attachedFile && isImageFile(state.attachedFile)) {
+      if (!state.attachedImages || state.attachedImages.length === 0) {
+        logConsole('Cannot send message: attached image failed to read or is invalid.', 'error');
+        showToast(t('image_read_error'), 'error');
+        return;
+      }
+    }
+
     const isProofread = Boolean(options && options.isProofread);
 
     const rawPrompt = (typeof overridePrompt === 'string' && overridePrompt.trim())
@@ -2964,12 +2977,16 @@
             }
             if (b64) {
               state.attachedImages = [b64];
+            } else {
+              throw new Error('Empty file content');
             }
           } catch (err) {
             if (currentUploadToken !== uploadToken) {
               return;
             }
+            state.attachedImages = [];
             logConsole(`Error reading image: ${err.message}`, 'error');
+            showToast(`${t('image_read_error')} (${err.message})`, 'error');
           } finally {
             if (currentUploadToken === uploadToken) {
               state.isFileLoading = false;
@@ -3009,6 +3026,12 @@
       // Images are transmitted directly via multimodal vision payload in chat request
       return true;
     }
+
+    state.isFileLoading = true;
+    if (el.btnSend) {
+      el.btnSend.disabled = true;
+    }
+
     const formData = new FormData();
     formData.append('file', state.attachedFile);
 
@@ -3038,7 +3061,13 @@
       return true;
     } catch (err) {
       logConsole(`Attachment indexing error: ${err.message}`, 'error');
+      showToast(`${t('rag_upload_error')} (${err.message})`, 'error');
       return false;
+    } finally {
+      state.isFileLoading = false;
+      if (el.btnSend && !state.isStreaming) {
+        el.btnSend.disabled = false;
+      }
     }
   }
 
