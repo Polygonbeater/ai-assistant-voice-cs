@@ -590,15 +590,15 @@ def test_provider_connection(
             stream=False,
         )
         elapsed_ms = round((time.monotonic() - t0) * 1000)
-        content = ""
         choices = res.get("choices") or []
-        if choices:
-            content = choices[0].get("message", {}).get("content", "")
+        msg_obj = (choices[0].get("message") or {}) if choices else {}
+        content = msg_obj.get("content") or msg_obj.get("reasoning") or ""
+        clean_reply = str(content).strip()[:100]
         return {
             "status": "ok",
             "latency_ms": elapsed_ms,
             "model": model,
-            "reply": content.strip()[:100],
+            "reply": clean_reply,
             "message": f"Spojení úspěšné! Model '{model}' odpověděl za {elapsed_ms} ms.",
         }
     except Exception as exc:
