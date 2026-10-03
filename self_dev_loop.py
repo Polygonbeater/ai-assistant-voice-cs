@@ -69,7 +69,7 @@ def extract_and_save_code(response_text):
         if code_match:
             candidate_code = code_match.group(1)
             if "unittest" in candidate_code or "auto_rig" in candidate_code:
-                all_blocks.append(("scratch/test_auto_rig.py", candidate_code))
+                all_blocks.append(("tests/test_auto_rig.py", candidate_code))
 
     seen_paths = set()
     for raw_filepath, code in all_blocks:
@@ -135,7 +135,7 @@ def run_unit_tests():
     env = dict(os.environ)
     env["PYTHONPATH"] = "."
     result = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", "scratch/", "-p", "test_*.py"], 
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests/", "-p", "test_*.py"], 
         capture_output=True, text=True, env=env
     )
     combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
@@ -149,7 +149,7 @@ def self_development_loop(task_prompt, max_iterations=5):
                 "Jsi autonomní AI Python programátor specializovaný na 3D nástroje pro Blender.\n"
                 "Kód vracej VŽDY v markdown blocích začínajících ```python.\n"
                 "Před blok napiš hlavičku cílového souboru, např.:\n"
-                "# target: scratch/test_auto_rig.py\n"
+                "# target: tests/test_auto_rig.py\n"
                 "```python\n"
                 "# kód zde\n"
                 "```\n\n"
@@ -177,7 +177,7 @@ def self_development_loop(task_prompt, max_iterations=5):
                 "role": "user",
                 "content": (
                     "Kód nebyl vyparsován. Ujisti se, že jsi použil formát:\n"
-                    "# target: scratch/test_auto_rig.py\n"
+                    "# target: tests/test_auto_rig.py\n"
                     "```python\n"
                     "import unittest\n"
                     "# ...\n"
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     Navazujeme na vývoj 3D asistenta pro Blender. Implementuj nástroj č. 22: auto_rig_and_skin.
     1. V 'blender_receiver.py' a 'llama_module.py' je již nástroj 'auto_rig_and_skin' integrován.
     2. Vygeneruj unit testy do souboru:
-    # target: scratch/test_auto_rig.py
+    # target: tests/test_auto_rig.py
     ```python
     import unittest
     from unittest.mock import patch, MagicMock
