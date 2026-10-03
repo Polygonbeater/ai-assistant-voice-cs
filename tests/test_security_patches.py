@@ -441,6 +441,53 @@ class TestDemo(unittest.TestCase):
             call_headers = mock_post.call_args[1]["headers"]
             self.assertEqual(call_headers.get("Authorization"), "Bearer sk-test-secret-key-123")
 
+    def test_dns_rebinding_host_header_protection(self):
+        """Ověří, že DNS Rebinding útok přes cizí Host hlavičku (např. attacker.com) je odmítnut s 403 (C1)."""
+        # Útočná doména
+        attacker_client = TestClient(web_server.app, headers={"Host": "attacker.com", "X-Polygon-Client": "true"})
+        resp = attacker_client.get("/api/config")
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("Host", resp.json().get("detail", ""))
+
+        # Legitimní loopback host s portem
+        valid_client = TestClient(web_server.app, headers={"Host": "127.0.0.1:8000", "X-Polygon-Client": "true"})
+        resp_valid = valid_client.get("/api/config")
+        self.assertEqual(resp_valid.status_code, 200)
+
+    def test_transactional_model_switch_rollback(self):
+        """Ověří, že při selhání načtení modelu v switch-model se active_provider rollbackuje (H4)."""
+        orig_prov = web_server.config.get("llm_provider", {}).get("active_provider")
+        try:
+            web_server.config.setdefault("llm_provider", {})["active_provider"] = "groq"
+            # Přepnutí na neexistující model
+            resp = self.client.post("/api/llm/switch-model", json={"model_path": "nonexistent_model.gguf"})
+            self.assertEqual(resp.status_code, 404)
+            # Ověřit, že active_provider nebyl přepsán na 'local'
+            self.assertEqual(web_server.config["llm_provider"]["active_provider"], "groq")
+        finally:
+            if orig_prov is not None:
+                web_server.config["llm_provider"]["active_provider"] = orig_prov
+
+    def test_self_dev_loop_ast_allows_sys_path_and_blocks_dangerous_calls(self):
+        """Ověří, že self_dev_loop povoluje manipulaci se sys.path, ale blokuje open() a os (H1)."""
+        from self_dev_loop import validate_python_code_safety
+        # Bezpečný kód s import sys a sys.path
+        safe_code = "import sys\nimport unittest\nsys.path.insert(0, '.')\nclass TestSample(unittest.TestCase):\n    pass\n"
+        is_safe, err = validate_python_code_safety(safe_code)
+        self.assertTrue(is_safe, f"Bezpečný testovací kód neprošel: {err}")
+
+        # Nebezpečný kód s open()
+        unsafe_open = "import sys\nf = open('/tmp/evil.txt', 'w')\n"
+        is_safe, err = validate_python_code_safety(unsafe_open)
+        self.assertFalse(is_safe)
+        self.assertIn("open", err)
+
+        # Nebezpečný kód s import os
+        unsafe_os = "import os\nos.system('whoami')\n"
+        is_safe, err = validate_python_code_safety(unsafe_os)
+        self.assertFalse(is_safe)
+        self.assertIn("os", err)
+
 
 if __name__ == "__main__":
     unittest.main()

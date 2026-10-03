@@ -295,7 +295,21 @@ async def security_shield_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # 1. Loopback ochrana pro všechny /api/ endpointy
+    # 1. DNS Rebinding Shield: Ověření Host hlavičky (přístup pouze přes loopback)
+    raw_host = request.headers.get("host") or ""
+    host_name = raw_host.strip().lower()
+    if host_name:
+        if host_name.startswith("[") and "]" in host_name:
+            host_name = host_name[:host_name.index("]") + 1]
+        elif ":" in host_name:
+            host_name = host_name.split(":", 1)[0]
+        if host_name not in ("127.0.0.1", "localhost", "::1", "[::1]", "testserver"):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Neplatná Host hlavička: přístup povolen pouze přes loopback."},
+            )
+
+    # 2. Loopback ochrana pro všechny /api/ endpointy
     if request.url.path.startswith("/api/"):
         client_host = request.client.host if request.client else ""
         if client_host not in ("testclient", "localhost", "127.0.0.1", "::1"):
@@ -1126,9 +1140,11 @@ def switch_local_model(req: SwitchLocalModelRequest, request: Request):
         else:
             raise HTTPException(status_code=404, detail=f"Soubor modelu '{path_str}' nebyl nalezen.")
 
+    backup_config = json.loads(json.dumps(config))
     try:
-        config.setdefault("llm_provider", {})["active_provider"] = "local"
         reload_local_llm(new_model_path=path_str)
+        config.setdefault("llm_provider", {})["active_provider"] = "local"
+        save_config_file()
         return {
             "status": "ok",
             "message": f"Model '{path_str}' byl úspěšně zaveden do paměti.",
@@ -1136,7 +1152,9 @@ def switch_local_model(req: SwitchLocalModelRequest, request: Request):
             "active_brain": get_active_provider_info(),
         }
     except Exception as exc:
-        logger.exception("Chyba při přepínání modelu: %s", exc)
+        config.clear()
+        config.update(backup_config)
+        logger.exception("Chyba při přepínání modelu (proveden rollback): %s", exc)
         raise HTTPException(status_code=500, detail=f"Chyba při zavádění modelu: {exc}")
 
 @app.post("/api/llm/test-connection")
@@ -1266,18 +1284,24 @@ def update_config(req: SettingsUpdateRequest, request: Request):
             elif k != "has_auth_token":
                 blender_cfg[k] = v
 
-    # Přepnutí lokálního modelu, pokud bylo zvoleno a liší se od aktuálního
-    if req.local_model and req.local_model.strip() and req.local_model.strip() != llama_cfg.get("model"):
-        new_m = req.local_model.strip()
-        try:
+    backup_config = json.loads(json.dumps(config))
+    try:
+        # Přepnutí lokálního modelu, pokud bylo zvoleno a liší se od aktuálního
+        if req.local_model and req.local_model.strip() and req.local_model.strip() != llama_cfg.get("model"):
+            new_m = req.local_model.strip()
             reload_local_llm(new_model_path=new_m)
-        except Exception as e:
-            logger.warning("Nepodařilo se přepnout lokální model: %s", e)
-            raise HTTPException(status_code=400, detail=f"Nepodařilo se přepnout lokální model: {e}")
-    else:
-        saved = save_config_file()
-        if not saved:
-            raise HTTPException(status_code=500, detail="Nepodařilo se uložit konfiguraci do souboru config.json.")
+        else:
+            saved = save_config_file()
+            if not saved:
+                raise RuntimeError("Nepodařilo se uložit konfiguraci do souboru config.json.")
+    except Exception as e:
+        config.clear()
+        config.update(backup_config)
+        logger.warning("Rollback konfigurace kvůli chybě: %s", e)
+        if isinstance(e, HTTPException):
+            raise e
+        status = 400 if isinstance(e, (ValueError, FileNotFoundError)) else 500
+        raise HTTPException(status_code=status, detail=f"Chyba při aktualizaci konfigurace: {e}")
 
     return {
         "status": "success",

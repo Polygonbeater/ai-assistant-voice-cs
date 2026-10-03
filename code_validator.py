@@ -55,8 +55,8 @@ BANNED_SAVE_METHODS: frozenset[str] = frozenset({
     "save_sequence",
 })
 
-# Zákaz přístupu k dunder atributům a nebezpečným vlastnostem souborového API (filepath, filepath_raw)
-BANNED_ATTRIBUTES: frozenset[str] = frozenset({
+# Interní systémové identifikátory zakázané i jako samostatné proměnné
+BANNED_INTERNAL_NAMES: frozenset[str] = frozenset({
     "__subclasses__",
     "__builtins__",
     "__globals__",
@@ -65,13 +65,57 @@ BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__reduce__",
     "__reduce_ex__",
     "__import__",
+})
+
+# Zákaz přístupu k nebezpečným vlastnostem objektů a animačních ovladačů (I/O, drivers)
+BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "filepath",
     "filepath_raw",
     "filepath_from_user",
+    "driver_add",
+    "driver_remove",
+    "driver_namespace",
+}) | BANNED_INTERNAL_NAMES
+
+# Kategorie operátorů bpy.ops, které manipulují se soubory, systémem, skripty či oknem
+BANNED_BPY_OPS_CATEGORIES: frozenset[str] = frozenset({
+    "wm",
+    "preferences",
+    "screen",
+    "text",
+    "script",
+    "console",
+    "image",
+    "render",
+    "sound",
+    "poselib",
+    "workspace",
+    "info",
+    "export_scene",
+    "import_scene",
+    "export_mesh",
+    "import_mesh",
+    "export_anim",
+    "import_anim",
 })
 
 # Zákaz nebezpečných atributů a souborových I/O operací na objektu bpy
 BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
+    "bpy.utils",
+    "utils",
+    "bpy.app.handlers",
+    "app.handlers",
+    "bpy.app.timers",
+    "app.timers",
+    "bpy.data.libraries",
+    "data.libraries",
+    "bpy.data.screens",
+    "data.screens",
+    "bpy.data.workspaces",
+    "data.workspaces",
+    "driver_add",
+    "driver_remove",
+    "driver_namespace",
     "bpy.data.texts",
     "data.texts",
     "texts",
@@ -133,6 +177,18 @@ BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
 })
 
 BANNED_BPY_PREFIXES: tuple[str, ...] = (
+    "bpy.utils.",
+    "utils.",
+    "bpy.app.handlers.",
+    "app.handlers.",
+    "bpy.app.timers.",
+    "app.timers.",
+    "bpy.data.libraries.",
+    "data.libraries.",
+    "bpy.data.screens.",
+    "data.screens.",
+    "bpy.data.workspaces.",
+    "data.workspaces.",
     "bpy.data.texts.",
     "data.texts.",
     "bpy.ops.text.",
@@ -278,6 +334,21 @@ class BlenderCodeValidator(ast.NodeVisitor):
                 f"Bezpečnostní pojistka: Přístup k nebezpečnému atributu nebo souborové I/O operaci '{chain}' je zakázán."
             )
 
+        # Kontrola kategorií operátorů bpy.ops (např. wm, text, preferences, console, script)
+        parts = chain.split(".")
+        if len(parts) >= 3 and parts[0] == "bpy" and parts[1] == "ops":
+            category = parts[2]
+            if category in BANNED_BPY_OPS_CATEGORIES or category.startswith("export_") or category.startswith("import_"):
+                raise ValueError(
+                    f"Bezpečnostní pojistka: Volání operátorů z kategorie 'bpy.ops.{category}' ({chain}) je zakázáno."
+                )
+        elif len(parts) >= 2 and parts[0] == "ops":
+            category = parts[1]
+            if category in BANNED_BPY_OPS_CATEGORIES or category.startswith("export_") or category.startswith("import_"):
+                raise ValueError(
+                    f"Bezpečnostní pojistka: Volání operátorů z kategorie 'ops.{category}' ({chain}) je zakázáno."
+                )
+
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             root_module = alias.name.split(".")[0]
@@ -345,7 +416,7 @@ class BlenderCodeValidator(ast.NodeVisitor):
         """Zablokuje použití zakázaných funkcí i jako aliasů nebo proměnných."""
         if node.id in BLOCKED_FUNCTIONS:
             raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{node.id}' je striktně zakázáno.")
-        if node.id in ("__builtins__", "__globals__") or node.id.startswith("__") or node.id in BANNED_ATTRIBUTES:
+        if node.id in BANNED_INTERNAL_NAMES or node.id.startswith("__"):
             raise ValueError(f"Bezpečnostní pojistka: Přímý přístup k internímu identifikátoru '{node.id}' je striktně zakázán.")
         self.generic_visit(node)
 

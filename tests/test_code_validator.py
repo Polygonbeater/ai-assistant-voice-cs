@@ -254,6 +254,31 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
             self.assertIn("Bezpečnostní pojistka", msg)
             self.assertIn("Nekonečné smyčky", msg)
 
+    def test_local_variable_named_filepath_allowed(self):
+        """Ověří, že běžná lokální proměnná s názvem filepath není falešně pozitivně blokována (M1)."""
+        valid_snippets = [
+            "filepath = '/tmp/test.png'\nprint(filepath)",
+            "def process_image(filepath):\n    return filepath",
+            "for filepath in ['a.blend', 'b.blend']:\n    pass",
+        ]
+        for snippet in valid_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertTrue(is_valid, f"Lokální proměnná filepath byla chybně zablokována: {msg}")
+
+    def test_driver_manipulation_and_preferences_blocked(self):
+        """Ověří, že manipulace s animačními drivery a operátory preferences jsou zablokovány (C3)."""
+        blocked_snippets = [
+            "import bpy\nobj = bpy.context.active_object\nobj.driver_add('location', 0)",
+            "import bpy\nbpy.ops.preferences.addon_enable(module='evil')",
+            "import bpy\nbpy.utils.exec_path()",
+            "import bpy\nbpy.app.timers.register(lambda: None)",
+            "import bpy\nbpy.app.handlers.render_pre.append(lambda s: None)",
+        ]
+        for snippet in blocked_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Snippet '{snippet}' měl být zablokován!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

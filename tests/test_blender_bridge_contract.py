@@ -185,6 +185,36 @@ class BlenderBridgeContractTests(unittest.TestCase):
                     blender_receiver.execute_trusted_blender_code(code)
                 self.assertIn("AST validace kódu selhala", str(ctx.exception))
 
+    def test_receiver_render_unsafe_path_handled_without_timer_crash(self):
+        """Ověří, že nebezpečná cesta pro render neshodí časovač Blenderu (C2)."""
+        import threading
+        mock_bpy = MagicMock()
+        mock_bpy.app.version = (4, 2, 0)
+        mock_bpy.data.filepath = "test.blend"
+        with patch.dict("sys.modules", {"bpy": mock_bpy}):
+            import blender_receiver
+
+            server = blender_receiver.BlenderSocketServer()
+            blender_receiver._RECEIVER_INSTANCE = server
+            server.is_running = True
+
+            comp_event = threading.Event()
+            result_container = {}
+            # Vložíme škodlivý požadavek na render do systémové fronty
+            server.request_queue.put(({
+                "action": "render",
+                "output_path": "/etc/shadow",
+            }, comp_event, result_container))
+
+            # Spustíme zpracování fronty přes timer
+            timer_res = blender_receiver.process_blender_queue_timer()
+
+            # Timer musí přežít a vrátit interval 0.05
+            self.assertEqual(timer_res, 0.05)
+            self.assertTrue(comp_event.is_set())
+            self.assertEqual(result_container.get("response", {}).get("status"), "error")
+            self.assertIn("Bezpečnostní pojistka", result_container.get("response", {}).get("error", ""))
+
 
 class SelfDevLoopPathSecurityTests(unittest.TestCase):
     def test_safe_paths_in_allowed_directories(self):

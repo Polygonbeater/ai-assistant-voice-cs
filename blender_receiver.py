@@ -756,10 +756,14 @@ def execute_trusted_blender_code(code: str) -> tuple[str, str]:
 
     stdout_capture = io.StringIO()
     stderr_capture = io.StringIO()
+    safe_builtins = dict(__builtins__ if isinstance(__builtins__, dict) else __builtins__.__dict__)
+    for unsafe_key in ("__import__", "open", "eval", "exec", "compile", "breakpoint"):
+        safe_builtins.pop(unsafe_key, None)
+
     exec_globals = {
         "bpy": bpy,
         "__name__": "__blender_ai_script__",
-        "__builtins__": __builtins__,
+        "__builtins__": safe_builtins,
     }
     with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
         compiled_code = compile(code, "<ai_generated_bpy_script>", "exec")
@@ -776,11 +780,7 @@ def execute_trusted_blender_code(code: str) -> tuple[str, str]:
     return stdout_capture.getvalue(), stderr_capture.getvalue()
 
 
-def process_blender_queue_timer():
-    """
-    Tato funkce je volána pravidelně z HLAVNÍHO VLÁKNA Blenderu pomocí bpy.app.timers.
-    Bezpečně spouští příchozí Python kód přímo v kontextu Blender scény nebo provádí inspekci.
-    """
+def _process_blender_queue_timer_impl():
     global _RECEIVER_INSTANCE
     if not _RECEIVER_INSTANCE or not _RECEIVER_INSTANCE.is_running:
         return None  # Ukončí časovač
@@ -3647,15 +3647,15 @@ def process_blender_queue_timer():
 
         # 19. Vyrenderování scény / náhledu (action == "render")
         if action == "render":
-            raw_output_path = message.get("output_path", "/tmp/blender_render.png")
-            is_safe, err_msg, safe_path = is_safe_output_path(raw_output_path)
-            if not is_safe or safe_path is None:
-                raise ValueError(f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro render: {err_msg}")
-            output_path = str(safe_path)
-            engine = message.get("engine")
-            use_viewport = bool(message.get("viewport", False))
-            print(f"\n[AI-Blender] >>> Vykonávám render (cíl={output_path}, engine={engine})...")
             try:
+                raw_output_path = message.get("output_path", "/tmp/blender_render.png")
+                is_safe, err_msg, safe_path = is_safe_output_path(raw_output_path)
+                if not is_safe or safe_path is None:
+                    raise ValueError(f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro render: {err_msg}")
+                output_path = str(safe_path)
+                engine = message.get("engine")
+                use_viewport = bool(message.get("viewport", False))
+                print(f"\n[AI-Blender] >>> Vykonávám render (cíl={output_path}, engine={engine})...")
                 scene = bpy.context.scene
                 if engine and engine in ("CYCLES", "BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"):
                     scene.render.engine = engine
@@ -3935,6 +3935,20 @@ def process_blender_queue_timer():
 
     # Spouštět každých 50 ms pro minimální latenci
     return 0.05
+
+
+def process_blender_queue_timer():
+    """
+    Tato funkce je volána pravidelně z HLAVNÍHO VLÁKNA Blenderu pomocí bpy.app.timers.
+    Bezpečně spouští příchozí Python kód přímo v kontextu Blender scény nebo provádí inspekci.
+    Chrání časovač před neošetřenými výjimkami, aby se v Blenderu nikdy neodregistroval.
+    """
+    try:
+        return _process_blender_queue_timer_impl()
+    except Exception as fatal_timer_err:
+        print(f"❌ [AI-Blender] Kritická neošetřená chyba v process_blender_queue_timer: {fatal_timer_err}")
+        traceback.print_exc()
+        return 0.05
 
 
 def start_server():

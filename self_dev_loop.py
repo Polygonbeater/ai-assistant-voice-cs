@@ -23,11 +23,33 @@ def validate_python_code_safety(code: str) -> Tuple[bool, str]:
     except SyntaxError as e:
         return False, f"Chyba syntaxe: {e}"
 
-    banned_calls = {"eval", "exec", "compile", "__import__", "globals", "locals", "getattr", "setattr", "delattr", "system", "popen", "spawn"}
+    banned_calls = {
+        "eval",
+        "exec",
+        "compile",
+        "__import__",
+        "globals",
+        "locals",
+        "getattr",
+        "setattr",
+        "delattr",
+        "system",
+        "popen",
+        "spawn",
+        "open",
+        "write_text",
+        "write_bytes",
+        "unlink",
+        "remove",
+        "rmdir",
+        "rmtree",
+        "chmod",
+        "chown",
+        "exit",
+    }
     banned_modules = {
         "os",
         "subprocess",
-        "sys",
         "shutil",
         "socket",
         "urllib",
