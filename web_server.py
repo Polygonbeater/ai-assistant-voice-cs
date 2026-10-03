@@ -52,12 +52,17 @@ from llama_module import (
     DEFAULT_SYSTEM_PROMPT,
     PRESETS_CATALOG,
     OpenAICompatibleClient,
+    apply_workspace_write_proposal,
     classify_methodology,
     detect_analytical_mode,
     generate_response,
+    get_workspace_dir,
+    is_default_workspace,
     initialize_llama,
     load_analytical_prompt,
+    reset_workspace_dir,
     scan_local_models,
+    set_workspace_dir,
     test_provider_connection,
     unload_llama_model,
 )
@@ -65,6 +70,9 @@ from web_search import PublicOnlyResolver, _safe_get, is_safe_web_url
 
 logger = logging.getLogger("web_server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+_pending_workspace_diffs: dict[str, dict[str, Any]] = {}
+_pending_workspace_diffs_lock = threading.Lock()
+_MAX_PENDING_WORKSPACE_DIFFS = 100
 
 # ------------------------------------------------------------------------------
 # Konfigurace a Inicializace komponent
@@ -377,6 +385,12 @@ class ChatRequest(BaseModel):
 
 class ExternalUrlRequest(BaseModel):
     url: str = Field(min_length=1, max_length=32768)
+
+class WorkspacePathRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=32768)
+
+class WorkspaceDiffRequest(BaseModel):
+    proposal_id: str = Field(min_length=1, max_length=128)
 
 class SessionRenameRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -760,7 +774,72 @@ async def chat_stream(req: ChatRequest, request: Request):
             def _on_tool(event_type: str, data: dict[str, Any]):
                 payload = {"type": event_type}
                 payload.update(data)
+                proposal_event = None
+                if event_type == "tool_end" and data.get("tool") == "write_file":
+                    tool_result = data.get("result")
+                    proposal = tool_result.get("proposal") if isinstance(tool_result, dict) else None
+                    if isinstance(proposal, dict):
+                        proposal_id = uuid.uuid4().hex
+                        with _pending_workspace_diffs_lock:
+                            if len(_pending_workspace_diffs) >= _MAX_PENDING_WORKSPACE_DIFFS:
+                                oldest_proposal = next(iter(_pending_workspace_diffs))
+                                _pending_workspace_diffs.pop(oldest_proposal)
+                            _pending_workspace_diffs[proposal_id] = proposal
+                        payload["result"] = {
+                            key: value for key, value in tool_result.items() if key != "proposal"
+                        }
+                        proposal_event = {
+                            "type": "code_diff_proposal",
+                            "proposal_id": proposal_id,
+                            "file_path": proposal["file_path"],
+                            "original_content": proposal["original_content"],
+                            "new_content": proposal["new_content"],
+                            "unified_diff": proposal["unified_diff"],
+                        }
+                if data.get("tool") == "write_file" and isinstance(data.get("arguments"), dict):
+                    payload["arguments"] = {
+                        key: value for key, value in data["arguments"].items() if key != "content"
+                    }
+                fs_tools = {
+                    "list_directory": ("list", "rel_path", "directory"),
+                    "read_file": ("read", "file_path", "file"),
+                    "write_file": ("write", "file_path", "file"),
+                    "search_in_files": ("search", "file_pattern", "files"),
+                }
+                fs_tool = fs_tools.get(str(data.get("tool", "")))
+                if fs_tool:
+                    operation, path_key, path_label = fs_tool
+                    tool_arguments = data.get("arguments")
+                    if not isinstance(tool_arguments, dict):
+                        tool_arguments = {}
+                    path_value = str(tool_arguments.get(path_key) or ("." if operation == "list" else ""))
+                    operation_text = {
+                        "list": {
+                            "start": ("Prohlížím adresář", "Listing directory"),
+                            "end": ("Výpis adresáře dokončen", "Directory listing complete"),
+                        },
+                        "read": {
+                            "start": ("Čtu soubor", "Reading file"),
+                            "end": ("Přečteno", "Read"),
+                        },
+                        "write": {
+                            "start": ("Ukládám změny", "Saving changes"),
+                            "end": ("Uloženo", "Saved"),
+                        },
+                        "search": {
+                            "start": ("Hledám v souborech", "Searching files"),
+                            "end": ("Vyhledávání dokončeno", "Search complete"),
+                        },
+                    }[operation]
+                    phase = "end" if event_type == "tool_end" else "start"
+                    verb = operation_text[phase][0] if req_lang != "en" else operation_text[phase][1]
+                    payload["fs_operation"] = {
+                        "operation": operation,
+                        "message": f"[FS] {verb}: {path_value or path_label}",
+                    }
                 event_queue.put(payload)
+                if proposal_event:
+                    event_queue.put(proposal_event)
                 # Odeslání specializovaných SSE eventů pro UI panely (Research / RAG)
                 if event_type == "tool_end":
                     tool_name = data.get("tool")
@@ -1291,6 +1370,79 @@ def test_connection_endpoint(req: TestConnectionRequest, request: Request):
 # ------------------------------------------------------------------------------
 # Endpoints: Konfigurace & Nastavení
 # ------------------------------------------------------------------------------
+
+@app.get("/api/workspace")
+def get_workspace(request: Request):
+    require_loopback_client(request)
+    path = get_workspace_dir()
+    return {
+        "status": "ok",
+        "path": path,
+        "is_default": is_default_workspace(),
+        "permissions": {
+            "readable": os.access(path, os.R_OK | os.X_OK),
+            "writable": os.access(path, os.W_OK | os.X_OK),
+        },
+    }
+
+
+@app.post("/api/workspace")
+def update_workspace(req: WorkspacePathRequest, request: Request):
+    require_loopback_client(request)
+    try:
+        path = set_workspace_dir(req.path)
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("[FS] Pracovní adresář změněn na: %s", path)
+    return {
+        "status": "ok",
+        "path": path,
+        "is_default": is_default_workspace(),
+        "permissions": {"readable": True, "writable": True},
+    }
+
+
+@app.post("/api/workspace/reset")
+def reset_workspace(request: Request):
+    require_loopback_client(request)
+    path = reset_workspace_dir()
+    logger.info("[FS] Pracovní adresář změněn na: %s", path)
+    return {
+        "status": "ok",
+        "path": path,
+        "is_default": True,
+        "permissions": {
+            "readable": os.access(path, os.R_OK | os.X_OK),
+            "writable": os.access(path, os.W_OK | os.X_OK),
+        },
+    }
+
+
+@app.post("/api/workspace/apply-diff")
+def apply_workspace_diff(req: WorkspaceDiffRequest, request: Request):
+    require_loopback_client(request)
+    with _pending_workspace_diffs_lock:
+        proposal = _pending_workspace_diffs.get(req.proposal_id)
+        if proposal is None:
+            raise HTTPException(status_code=404, detail="Návrh změny neexistuje nebo již byl použit.")
+        try:
+            result = apply_workspace_write_proposal(proposal)
+        except (PermissionError, ValueError, OSError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        del _pending_workspace_diffs[req.proposal_id]
+    logger.info("[FS] Schválená změna uložena: %s", proposal["file_path"])
+    return {"status": "ok", "file_path": proposal["file_path"], "result": result["result"]}
+
+
+@app.post("/api/workspace/discard-diff")
+def discard_workspace_diff(req: WorkspaceDiffRequest, request: Request):
+    require_loopback_client(request)
+    with _pending_workspace_diffs_lock:
+        if _pending_workspace_diffs.pop(req.proposal_id, None) is None:
+            raise HTTPException(status_code=404, detail="Návrh změny neexistuje nebo již byl použit.")
+    logger.info("[FS] Návrh změny zahozen: %s", req.proposal_id)
+    return {"status": "ok"}
+
 
 @app.get("/api/config")
 def get_config():

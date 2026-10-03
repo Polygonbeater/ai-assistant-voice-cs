@@ -52,7 +52,7 @@ The assistant's architecture synchronizes three tightly integrated pillars: hear
 │ • Cloud LPUs & Multimodal: Groq, Gemini Flash Latest, DeepSeek         │
 │ • Long-term Semantic Memory: FAISS vector database + all-MiniLM-L6-v2  │
 │ • Local Document RAG: PDF / DOCX parsing and contextual extraction     │
-│ • Dynamic Contextual Tool Loader (22 registered tools -> 4 in chat)    │
+│ • Dynamic Contextual Tool Loader (26 registered tools -> 8 in chat)    │
 │ • Online Research: DuckDuckGo search + automated snippet extraction   │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ token stream / sentence events
@@ -83,6 +83,7 @@ The assistant's architecture synchronizes three tightly integrated pillars: hear
 * **Universal API Client (`OpenAICompatibleClient`):** Built-in streaming HTTP client for Groq, Google Gemini (via OpenAI endpoint), DeepSeek, OpenRouter, Mistral, Ollama, and vLLM. Includes live ping latency tests.
 * **Long-Term Semantic Memory (FAISS RAG):** Completed conversation sessions are decomposed into semantic vectors via `all-MiniLM-L6-v2` and stored in a persistent local **FAISS** vector database. The assistant seamlessly recalls past technical decisions (*"What dimensions did we choose for the electronics enclosure last week?"*).
 * **Dynamic Contextual Tool Loading:** Automatically adjusts the system prompt depending on context. In standard chat mode or when Blender is offline, 18 heavy 3D tools are omitted from the prompt, **saving over 3,000 prompt evaluation tokens per request** and dramatically boosting CPU/GPU response speed.
+* **Project File Tools:** The assistant can list, search, read, and write project files. Reads are limited to 500 KB, writes stay inside the active project root, sensitive paths and private keys are blocked, and the assistant is instructed to read relevant code before editing it. Change or reset the active workspace under **Settings → General Preferences → Project Workspace**.
 
 ---
 

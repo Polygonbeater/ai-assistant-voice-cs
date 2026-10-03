@@ -1,7 +1,10 @@
+import difflib
+import fnmatch
 import json
 import logging
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +13,317 @@ from llama_cpp import Llama
 import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+DEFAULT_WORKSPACE_DIR = os.path.abspath(os.path.dirname(__file__))
+_workspace_dir = DEFAULT_WORKSPACE_DIR
+_workspace_lock = threading.RLock()
+_DANGEROUS_WORKSPACE_ROOTS = ("/", "/etc", "/sys", "/proc", "/root")
+_WORKSPACE_BLOCKED_PARTS = {".git", ".env", "__pycache__", ".venv", "venv"}
+_WORKSPACE_IGNORED_PARTS = _WORKSPACE_BLOCKED_PARTS | {
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".cache",
+    "cache",
+    "caches",
+    "node_modules",
+}
+_MAX_WORKSPACE_READ_BYTES = 500 * 1024
+
+
+def get_workspace_dir() -> str:
+    """Return the currently active project workspace."""
+    with _workspace_lock:
+        return _workspace_dir
+
+
+def is_default_workspace() -> bool:
+    return os.path.realpath(get_workspace_dir()) == os.path.realpath(DEFAULT_WORKSPACE_DIR)
+
+
+def set_workspace_dir(path: str) -> str:
+    """Validate and activate an accessible, non-system project directory."""
+    global _workspace_dir
+    if not isinstance(path, str) or not path or not os.path.isabs(path):
+        raise ValueError("Cesta workspace musí být absolutní.")
+
+    resolved_path = os.path.realpath(path)
+    if not os.path.isdir(resolved_path):
+        raise ValueError("Workspace musí být existující adresář.")
+    if not os.access(resolved_path, os.R_OK | os.W_OK | os.X_OK):
+        raise PermissionError("Workspace musí být přístupný pro čtení i zápis.")
+    for dangerous_root in _DANGEROUS_WORKSPACE_ROOTS:
+        canonical_dangerous_root = os.path.realpath(dangerous_root)
+        try:
+            if canonical_dangerous_root == os.path.abspath(os.sep):
+                is_dangerous = resolved_path == canonical_dangerous_root
+            else:
+                is_dangerous = os.path.commonpath((canonical_dangerous_root, resolved_path)) == canonical_dangerous_root
+        except ValueError:
+            is_dangerous = False
+        if is_dangerous:
+            raise PermissionError(f"Nebezpečný systémový adresář nelze použít jako workspace: {dangerous_root}")
+
+    with _workspace_lock:
+        _workspace_dir = resolved_path
+    return resolved_path
+
+
+def reset_workspace_dir() -> str:
+    """Reset the active project workspace to the assistant repository."""
+    return set_workspace_dir(DEFAULT_WORKSPACE_DIR)
+
+
+def validate_workspace_path(rel_path: str, workspace_dir: str | None = None) -> str:
+    """Resolve a strictly relative project path and reject traversal/sensitive targets."""
+    if not isinstance(rel_path, str) or not rel_path:
+        raise PermissionError("Cesta musí být relativní k adresáři projektu.")
+
+    normalized = rel_path.replace("\\", "/")
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+        raise PermissionError("Cesta musí být relativní k adresáři projektu.")
+    raw_parts = normalized.split("/")
+    if any(part == ".." for part in raw_parts):
+        raise PermissionError("Přístup mimo adresář projektu není povolen.")
+
+    workspace_dir = workspace_dir or get_workspace_dir()
+    canonical_workspace = os.path.realpath(workspace_dir)
+    canonical_path = os.path.realpath(os.path.join(workspace_dir, normalized.replace("/", os.sep)))
+    try:
+        inside_workspace = os.path.commonpath((canonical_workspace, canonical_path)) == canonical_workspace
+    except ValueError:
+        inside_workspace = False
+    if not inside_workspace:
+        raise PermissionError("Přístup mimo adresář projektu není povolen.")
+
+    relative_parts = os.path.relpath(canonical_path, canonical_workspace).replace("\\", "/").split("/")
+    requested_parts = [part for part in raw_parts if part and part != "."]
+    checked_parts = requested_parts + relative_parts
+    if any(part.casefold() in _WORKSPACE_BLOCKED_PARTS for part in checked_parts):
+        raise PermissionError("Přístup k citlivým souborům a složkám není povolen.")
+    if any(part.casefold().startswith(".env.") for part in checked_parts):
+        raise PermissionError("Přístup k citlivým souborům a složkám není povolen.")
+    if any(os.path.splitext(part)[1].lower() in {".pem", ".key"} for part in checked_parts):
+        raise PermissionError("Přístup k soukromým klíčům není povolen.")
+    return canonical_path
+
+
+def _workspace_result(result: str, **details: Any) -> dict[str, Any]:
+    return {"status": "success", "result": result, **details}
+
+
+def _execute_list_directory(rel_path: str = ".") -> dict[str, Any]:
+    workspace_dir = get_workspace_dir()
+    directory = validate_workspace_path(rel_path, workspace_dir)
+    if not os.path.isdir(directory):
+        raise NotADirectoryError(f"Není adresář: {rel_path}")
+
+    entries = []
+    with os.scandir(directory) as iterator:
+        for entry in iterator:
+            if entry.name.casefold() in _WORKSPACE_IGNORED_PARTS or entry.name.casefold().endswith((".pyc", ".pyo")):
+                continue
+            entry_rel_path = os.path.relpath(entry.path, workspace_dir)
+            try:
+                validate_workspace_path(entry_rel_path, workspace_dir)
+            except PermissionError:
+                continue
+            if entry.is_symlink():
+                continue
+            is_directory = entry.is_dir(follow_symlinks=False)
+            size = entry.stat(follow_symlinks=False).st_size
+            entries.append((not is_directory, entry.name.casefold(), entry.name, is_directory, size))
+
+    entries.sort()
+    listing = [
+        f"{'[DIR] ' if is_directory else '[FILE]'} {name} ({size:,} B)"
+        for _, _, name, is_directory, size in entries
+    ]
+    result = f"Obsah adresáře {os.path.relpath(directory, workspace_dir)}:\n"
+    result += "\n".join(listing) if listing else "(prázdný adresář)"
+    return _workspace_result(result, entries=[
+        {"name": name, "type": "directory" if is_directory else "file", "size": size}
+        for _, _, name, is_directory, size in entries
+    ])
+
+
+def _execute_read_file(
+    file_path: str,
+    start_line: int | None = None,
+    end_line: int | None = None,
+) -> dict[str, Any]:
+    workspace_dir = get_workspace_dir()
+    path = validate_workspace_path(file_path, workspace_dir)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Soubor neexistuje: {file_path}")
+    if start_line is not None and start_line < 1:
+        raise ValueError("start_line musí být nejméně 1.")
+    if end_line is not None and end_line < 1:
+        raise ValueError("end_line musí být nejméně 1.")
+    if start_line is not None and end_line is not None and end_line < start_line:
+        raise ValueError("end_line nesmí být menší než start_line.")
+
+    with open(path, "rb") as source:
+        raw_content = source.read(_MAX_WORKSPACE_READ_BYTES + 1)
+    truncated = len(raw_content) > _MAX_WORKSPACE_READ_BYTES
+    raw_content = raw_content[:_MAX_WORKSPACE_READ_BYTES]
+    if b"\x00" in raw_content:
+        raise ValueError(f"Soubor není textový: {file_path}")
+    try:
+        text = raw_content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        if truncated and exc.end == len(raw_content):
+            text = raw_content[:exc.start].decode("utf-8")
+        else:
+            raise ValueError(f"Soubor není textový UTF-8: {file_path}") from exc
+
+    lines = []
+    used_bytes = 0
+    first_line = start_line or 1
+    truncation_notice = f"[Čtení zkráceno na {_MAX_WORKSPACE_READ_BYTES // 1024} KB.]"
+    output_limit = _MAX_WORKSPACE_READ_BYTES - len(truncation_notice.encode("utf-8")) - 1
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if line_number < first_line:
+            continue
+        if end_line is not None and line_number > end_line:
+            break
+        prefix = f"{line_number}: "
+        prefix_size = len(prefix.encode("utf-8")) + (1 if lines else 0)
+        available = output_limit - used_bytes - prefix_size
+        line_bytes = line.encode("utf-8")
+        if available < 0:
+            truncated = True
+            break
+        if len(line_bytes) > available:
+            partial_line = line_bytes[:available].decode("utf-8", errors="ignore")
+            lines.append(prefix + partial_line)
+            truncated = True
+            break
+        lines.append(prefix + line)
+        used_bytes += prefix_size + len(line_bytes)
+
+    output = "\n".join(lines)
+    if truncated:
+        output += f"\n{truncation_notice}"
+    if not output:
+        output = "(soubor neobsahuje vybrané řádky)"
+    return _workspace_result(output, file_path=file_path, truncated=truncated)
+
+
+def _execute_write_file(file_path: str, content: str) -> dict[str, Any]:
+    proposal = create_workspace_write_proposal(file_path, content)
+    return {
+        "status": "proposal",
+        "result": f"Změna souboru {file_path} čeká na potvrzení uživatele v prohlížeči diffu.",
+        "proposal": proposal,
+    }
+
+
+def create_workspace_write_proposal(file_path: str, content: str) -> dict[str, Any]:
+    workspace_dir = get_workspace_dir()
+    path = validate_workspace_path(file_path, workspace_dir)
+    original_exists = os.path.exists(path)
+    if original_exists and not os.path.isfile(path):
+        raise IsADirectoryError(f"Cílová cesta není soubor: {file_path}")
+    if original_exists:
+        with open(path, "r", encoding="utf-8", newline="") as source:
+            original_content = source.read()
+    else:
+        original_content = ""
+    diff = "".join(
+        difflib.unified_diff(
+            original_content.splitlines(keepends=True),
+            content.splitlines(keepends=True),
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+        )
+    )
+    return {
+        "file_path": file_path,
+        "original_content": original_content,
+        "new_content": content,
+        "unified_diff": diff or "(bez změn)",
+        "workspace_dir": workspace_dir,
+        "original_exists": original_exists,
+    }
+
+
+def apply_workspace_write_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
+    file_path = proposal["file_path"]
+    workspace_dir = proposal["workspace_dir"]
+    if os.path.realpath(workspace_dir) != os.path.realpath(get_workspace_dir()):
+        raise ValueError("Aktivní workspace se od vytvoření návrhu změnil.")
+    path = validate_workspace_path(file_path, workspace_dir)
+    original_exists = bool(proposal["original_exists"])
+    if os.path.exists(path) != original_exists:
+        raise ValueError("Soubor se od vytvoření návrhu změnil; vytvořte nový návrh.")
+    if original_exists:
+        if not os.path.isfile(path):
+            raise ValueError("Původní soubor již není běžným souborem.")
+        with open(path, "r", encoding="utf-8", newline="") as source:
+            current_content = source.read()
+        if current_content != proposal["original_content"]:
+            raise ValueError("Soubor se od vytvoření návrhu změnil; vytvořte nový návrh.")
+
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    path = validate_workspace_path(file_path, workspace_dir)
+    if os.path.isdir(path):
+        raise IsADirectoryError(f"Cílová cesta je adresář: {file_path}")
+    with open(path, "w", encoding="utf-8", newline="") as destination:
+        destination.write(proposal["new_content"])
+    return _workspace_result(
+        f"Soubor {file_path} byl uložen ({len(proposal['new_content'])} znaků).",
+        file_path=file_path,
+        characters_written=len(proposal["new_content"]),
+    )
+
+
+def _execute_search_in_files(query: str, file_pattern: str) -> dict[str, Any]:
+    if not query:
+        raise ValueError("Vyhledávací dotaz nesmí být prázdný.")
+    if not file_pattern or os.path.isabs(file_pattern) or ".." in file_pattern.replace("\\", "/").split("/"):
+        raise ValueError("file_pattern musí být bezpečný relativní glob, například '*.py'.")
+    try:
+        matcher = re.compile(query)
+    except re.error as exc:
+        raise ValueError(f"Neplatný regulární výraz: {exc}") from exc
+
+    matches = []
+    total_matches = 0
+    workspace_dir = get_workspace_dir()
+    for root, dirs, files in os.walk(workspace_dir, followlinks=False):
+        dirs[:] = [
+            name for name in dirs
+            if name.casefold() not in _WORKSPACE_IGNORED_PARTS and not os.path.islink(os.path.join(root, name))
+        ]
+        for name in files:
+            if name.casefold().endswith((".pyc", ".pyo")):
+                continue
+            path = os.path.join(root, name)
+            relative_path = os.path.relpath(path, workspace_dir)
+            if not (fnmatch.fnmatch(name, file_pattern) or fnmatch.fnmatch(relative_path, file_pattern)):
+                continue
+            try:
+                validate_workspace_path(relative_path, workspace_dir)
+                if os.path.islink(path):
+                    continue
+                with open(path, "r", encoding="utf-8") as source:
+                    for line_number, line in enumerate(source, start=1):
+                        if "\x00" in line:
+                            break
+                        if matcher.search(line):
+                            total_matches += 1
+                            if len(matches) < 200:
+                                matches.append(f"{relative_path}:{line_number}: {line.rstrip()[:500]}")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+    result = "\n".join(matches) if matches else "Nenalezeny žádné shody."
+    if total_matches > len(matches):
+        result += f"\n[Zobrazeno prvních {len(matches)} z {total_matches} shod.]"
+    return _workspace_result(result, matches=total_matches, truncated=total_matches > len(matches))
+
 
 DEFAULT_MAX_RESPONSE_TOKENS = 8192
 
@@ -1487,6 +1801,69 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_directory",
+            "description": "Vypíše soubory a podsložky projektu včetně typu a velikosti. Citlivé cesty a binární mezipaměti jsou skryté.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rel_path": {
+                        "type": "string",
+                        "description": "Relativní cesta k adresáři projektu; výchozí hodnota '.' označuje kořen projektu.",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Přečte textový soubor projektu s čísly řádků, případně jen zadaný rozsah. Výstup je omezen na 500 KB.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Relativní cesta k souboru projektu."},
+                    "start_line": {"type": "integer", "minimum": 1, "description": "První čtený řádek, výchozí 1."},
+                    "end_line": {"type": "integer", "minimum": 1, "description": "Poslední čtený řádek včetně, volitelné."},
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Vygeneruje návrh vytvoření nebo přepsání souboru projektu v UTF-8 a unified diff. Soubor se nezmění, dokud uživatel návrh výslovně neschválí ve vizuálním diff prohlížeči.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Relativní cílová cesta v projektu."},
+                    "content": {"type": "string", "description": "Kompletní nový obsah souboru."},
+                },
+                "required": ["file_path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_in_files",
+            "description": "Vyhledá regulární výraz po jednotlivých řádcích v textových souborech projektu. Výsledek je omezen na 200 shod.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Hledaný text nebo regulární výraz."},
+                    "file_pattern": {"type": "string", "description": "Glob pro typ souborů, například '*.py', '*.js' nebo '*.html'."},
+                },
+                "required": ["query", "file_pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "query_local_rag",
             "description": "Sémantické vyhledávání v lokálně nahraných a zaindexovaných dokumentech (PDF, DOCX, zdrojové kódy, texty) pomocí FAISS vektorové databáze.",
             "parameters": {
@@ -2141,6 +2518,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 
 ALLOWED_TOOL_NAMES = {
     "search_web",
+    "list_directory",
+    "read_file",
+    "write_file",
+    "search_in_files",
     "query_local_rag",
     "query_memory_rag",
     "execute_blender_code",
@@ -2171,6 +2552,10 @@ TOOL_CATEGORIES: dict[str, str] = {
     "query_memory_rag": "web",
     # Systém
     "analyze_viewport_image": "system",
+    "list_directory": "system",
+    "read_file": "system",
+    "write_file": "system",
+    "search_in_files": "system",
     # 3D & Blender
     "execute_blender_code": "3d",
     "inspect_blender_scene": "3d",
@@ -2306,7 +2691,12 @@ def build_tool_use_prompt(tools: list[dict[str, Any]] | None = None) -> str:
         "4. Pokud voláš nástroj, odpověz VÝHRADNĚ JSON objektem pro volání nástroje a nepřidávej žádný zbytečný úvodní ani závěrečný text.\n"
         "5. Při volání SEARCH_WEB vytvářej neutrální dotazy z faktických klíčových slov; argument query může obsahovat až 3 fráze oddělené novým řádkem. Nikdy automaticky nevkládej konkrétní názvy médií ani domén (např. ČT24, Novinky, iDNES, BBC), pokud je uživatel výslovně nepožaduje; neomezuj region na ČR, pokud to nevyžaduje dotaz. Pro mezinárodní, technická a vědecká témata zahrň anglický dotaz; aktuální události ukotvi rokem 2026.\n"
         "6. Při finální syntéze webové rešerše opři tvrzení o skutečně zjištěná fakta a cituj je čísly [1], [2]. Každá citace musí odpovídat očíslovanému zdroji a uveď jeho původ (název zdroje/doménu); nepřisuzuj zdrojům nic, co v nich není.\n"
-        "7. KOGNITIVNÍ VIZUÁLNÍ PARAMETRIZACE (Image-to-3D Vision):\n"
+        "7. Při práci se soubory projektu nejprve podle potřeby použij LIST_DIRECTORY nebo SEARCH_IN_FILES k nalezení souboru, "
+        "potom vždy zavolej READ_FILE a přečti relevantní obsah i kontext před jakoukoli úpravou. Teprve poté smíš použít "
+        "WRITE_FILE k vytvoření návrhu změny. WRITE_FILE disk nemění: změnu aplikuje pouze uživatelovým výslovným "
+        "potvrzením v záložce Kód & Diff; nikdy netvrď, že je změna zapsána před tímto potvrzením. Upravovaný soubor "
+        "nejdříve zkontroluj, zachovej nesouvisející obsah a nevymýšlej neověřený kontext.\n"
+        "8. KOGNITIVNÍ VIZUÁLNÍ PARAMETRIZACE (Image-to-3D Vision):\n"
         "Pokud uživatel pošle fotku mechanického dílu (např. krabičky, krytu, ozubeného kola) s požadavkem na vymodelování, "
         "vizuálně obrázek zanalyzuj, odhadni poměry a reálné rozměry v mm, a následně rovnou zavolej náš existující nástroj "
         "generate_parametric_model s těmito odhadnutými parametry.\n"
@@ -2429,6 +2819,10 @@ class UnifiedToolDispatcher:
     """
     Centrální dispatcher pro spouštění registrovaných nástrojů:
     - search_web(query)
+    - list_directory(rel_path)
+    - read_file(file_path, start_line, end_line)
+    - write_file(file_path, content)
+    - search_in_files(query, file_pattern)
     - query_local_rag(query)
     - query_memory_rag(query)
     - execute_blender_code(code) (včetně Self-Healing smyčky)
@@ -2476,11 +2870,38 @@ class UnifiedToolDispatcher:
         """Centrální dispatcher pro spuštění vybraného nástroje."""
         tool_name = (tool_name or "").strip()
         arguments = arguments or {}
-        logging.info("UnifiedToolDispatcher: Volání nástroje '%s' s argumenty: %s", tool_name, arguments)
+        logged_arguments = (
+            {key: value for key, value in arguments.items() if key != "content"}
+            if tool_name == "write_file"
+            else arguments
+        )
+        logging.info("UnifiedToolDispatcher: Volání nástroje '%s' s argumenty: %s", tool_name, logged_arguments)
 
         if tool_name == "search_web":
             query = str(arguments.get("query", "")).strip()
             return self._execute_search_web(query)
+        elif tool_name == "list_directory":
+            rel_path = str(arguments.get("rel_path", ".")).strip() or "."
+            return _execute_list_directory(rel_path)
+        elif tool_name == "read_file":
+            file_path = str(arguments.get("file_path", "")).strip()
+            start_line = arguments.get("start_line")
+            end_line = arguments.get("end_line")
+            return _execute_read_file(
+                file_path,
+                start_line=int(start_line) if start_line is not None else None,
+                end_line=int(end_line) if end_line is not None else None,
+            )
+        elif tool_name == "write_file":
+            file_path = str(arguments.get("file_path", "")).strip()
+            content = arguments.get("content")
+            if not isinstance(content, str):
+                raise ValueError("Obsah souboru musí být textový řetězec.")
+            return _execute_write_file(file_path, content)
+        elif tool_name == "search_in_files":
+            query = str(arguments.get("query", ""))
+            file_pattern = str(arguments.get("file_pattern", ""))
+            return _execute_search_in_files(query, file_pattern)
         elif tool_name == "query_local_rag":
             query = str(arguments.get("query", "")).strip()
             return self._execute_query_local_rag(query)

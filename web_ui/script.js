@@ -70,13 +70,16 @@
     // Tools Inspector & Registry
     toolsConfig: {},
     toolsRegistry: [],
+    workspacePath: '',
+    workspaceIsDefault: true,
+    pendingWorkspaceDiff: null,
   };
 
   let lastKnownBlenderCode = "";
   let currentDiffPendingCode = "";
 
   // ===========================================================================
-  // TOOLS REGISTRY (22 Registered Tools)
+  // TOOLS REGISTRY (26 Registered Tools)
   // ===========================================================================
   const TOOLS_REGISTRY = [
     // Web & Rešerše (3)
@@ -116,6 +119,42 @@
       title_en: 'Viewport Vision Analysis',
       desc_cs: 'Pořízení snímku obrazovky nebo 3D viewportu a jeho detailní multimodální kognitivní analýza.',
       desc_en: 'Capturing viewport screenshot and performing deep multimodal vision understanding.',
+      requires_blender: false,
+    },
+    {
+      name: 'list_directory',
+      category: 'system',
+      title_cs: 'Výpis souborů projektu',
+      title_en: 'List Project Directory',
+      desc_cs: 'Vypíše soubory a složky projektu včetně typu a velikosti; citlivé cesty a mezipaměti vynechá.',
+      desc_en: 'Lists project files and folders with type and size, excluding sensitive paths and caches.',
+      requires_blender: false,
+    },
+    {
+      name: 'read_file',
+      category: 'system',
+      title_cs: 'Čtení souboru projektu',
+      title_en: 'Read Project File',
+      desc_cs: 'Přečte textový soubor nebo rozsah řádků s číslováním a limitem 500 KB.',
+      desc_en: 'Reads a project text file or line range with line numbers and a 500 KB limit.',
+      requires_blender: false,
+    },
+    {
+      name: 'write_file',
+      category: 'system',
+      title_cs: 'Zápis souboru projektu',
+      title_en: 'Write Project File',
+      desc_cs: 'Bezpečně vytvoří nebo přepíše soubor projektu v kódování UTF-8.',
+      desc_en: 'Safely creates or overwrites a project file using UTF-8 encoding.',
+      requires_blender: false,
+    },
+    {
+      name: 'search_in_files',
+      category: 'system',
+      title_cs: 'Hledání v souborech projektu',
+      title_en: 'Search Project Files',
+      desc_cs: 'Vyhledá text nebo regulární výraz ve zvolených typech souborů projektu.',
+      desc_en: 'Searches project files for text or a regular expression by file pattern.',
       requires_blender: false,
     },
 
@@ -312,9 +351,18 @@
     tabBtn3d: document.getElementById('tab-btn-3d'),
     tabBtnResearch: document.getElementById('tab-btn-research'),
     tabBtnAgent: document.getElementById('tab-btn-agent'),
+    tabBtnCode: document.getElementById('tab-btn-code'),
     pane3d: document.getElementById('pane-3d'),
     paneResearch: document.getElementById('pane-research'),
     paneAgent: document.getElementById('pane-agent'),
+    paneCode: document.getElementById('pane-code'),
+    workspaceDiffFile: document.getElementById('workspace-diff-file'),
+    workspaceDiffEmpty: document.getElementById('workspace-diff-empty'),
+    workspaceDiffContent: document.getElementById('workspace-diff-content'),
+    workspaceDiffActions: document.getElementById('workspace-diff-actions'),
+    workspaceDiffStatus: document.getElementById('workspace-diff-status'),
+    btnApplyWorkspaceDiff: document.getElementById('btn-apply-workspace-diff'),
+    btnDiscardWorkspaceDiff: document.getElementById('btn-discard-workspace-diff'),
 
     // Research Feeds
     researchSourcesList: document.getElementById('research-sources-list'),
@@ -329,6 +377,7 @@
 
     // Chat & Tools
     activeSessionTitle: document.getElementById('active-session-title'),
+    workspaceHeaderBadge: document.getElementById('workspace-header-badge'),
     btnTools: document.getElementById('btn-tools'),
     toolsCountText: document.getElementById('tools-count-text'),
     modalTools: document.getElementById('modal-tools'),
@@ -451,6 +500,10 @@
     cfgTemp: document.getElementById('cfg-temp'),
     cfgTokens: document.getElementById('cfg-tokens'),
     cfgSysprompt: document.getElementById('cfg-sysprompt'),
+    workspacePathInput: document.getElementById('workspace-path-input'),
+    workspaceStatus: document.getElementById('workspace-status'),
+    btnSetWorkspace: document.getElementById('btn-set-workspace'),
+    btnResetWorkspace: document.getElementById('btn-reset-workspace'),
     btnResetDefaults: document.getElementById('btn-reset-defaults'),
     btnSaveSettings: document.getElementById('btn-save-settings'),
 
@@ -642,6 +695,14 @@
       tab_research_title: 'Web Research & Knowledge Base References',
       tab_agent: 'Agent Log',
       tab_agent_title: 'Agent Execution Workflow & Tool Traces',
+      tab_code: 'Code & Diff',
+      tab_code_title: 'Review and approve project code changes',
+      workspace_diff_title: 'PENDING FILE CHANGE',
+      workspace_diff_empty: 'There are no pending code changes.',
+      workspace_diff_apply: 'Apply Changes to File',
+      workspace_diff_discard: 'Discard Proposal',
+      workspace_diff_applied: 'Approved changes saved to {path}.',
+      workspace_diff_discarded: 'Change proposal discarded.',
       card_viewport_title: 'LIVE VIEWPORT PREVIEW',
       viewport_active: 'Active',
       viewport_offline: 'Offline',
@@ -770,6 +831,19 @@
       external_link_unavailable: 'The link is unavailable or invalid.',
       settings_tab_brain: 'AI Brain & Providers',
       settings_tab_general: 'General Preferences',
+      workspace_settings_title: 'Project Workspace',
+      workspace_settings_desc: 'Choose the project directory used by project file tools.',
+      workspace_path_label: 'Workspace directory:',
+      workspace_set_button: 'Set Folder',
+      workspace_reset_button: 'Default Folder',
+      workspace_active: 'Workspace: {name}',
+      workspace_status_active: 'Active workspace: {path}',
+      workspace_status_default: 'Default workspace: {path}',
+      workspace_status_invalid: 'Invalid workspace: {error}',
+      workspace_access_unavailable: 'Read/write access unavailable',
+      workspace_path_required: 'Enter an absolute workspace path.',
+      workspace_change_failed: 'Could not change workspace: {error}',
+      workspace_changed_log: '[FS] Workspace changed to: {path}',
       cfg_brain_desc: 'Choose whether to run completely private on local hardware (.gguf) or connect ultra-fast cloud/custom AI providers.',
       provider_local: 'Local Model (.gguf)',
       provider_local_desc: 'Private CPU & Vulkan GPU execution',
@@ -895,6 +969,14 @@
       tab_research_title: 'Webové rešerše a citace z báze znalostí',
       tab_agent: 'Agent Log',
       tab_agent_title: 'Kroky agenta a volání nástrojů',
+      tab_code: 'Kód & Diff',
+      tab_code_title: 'Zkontrolovat a schválit změny kódu projektu',
+      workspace_diff_title: 'NÁVRH ZMĚN SOUBORU',
+      workspace_diff_empty: 'Zatím není k dispozici žádný návrh změn.',
+      workspace_diff_apply: 'Aplikovat změny do souboru',
+      workspace_diff_discard: 'Zahodit návrh',
+      workspace_diff_applied: 'Schválené změny byly uloženy do {path}.',
+      workspace_diff_discarded: 'Návrh změny byl zahozen.',
       card_viewport_title: 'ŽIVÝ NÁHLED VIEWPORTU',
       viewport_active: 'Aktivní',
       viewport_offline: 'Offline',
@@ -1023,6 +1105,19 @@
       external_link_unavailable: 'Odkaz není dostupný nebo je neplatný.',
       settings_tab_brain: 'AI Brain & Poskytovatelé',
       settings_tab_general: 'Obecná konfigurace',
+      workspace_settings_title: 'Pracovní adresář projektu (Workspace)',
+      workspace_settings_desc: 'Vyberte adresář projektu, se kterým budou pracovat nástroje pro soubory.',
+      workspace_path_label: 'Pracovní adresář:',
+      workspace_set_button: 'Nastavit složku',
+      workspace_reset_button: 'Výchozí složka',
+      workspace_active: 'Workspace: {name}',
+      workspace_status_active: 'Aktivní workspace: {path}',
+      workspace_status_default: 'Výchozí workspace: {path}',
+      workspace_status_invalid: 'Neplatný workspace: {error}',
+      workspace_access_unavailable: 'Adresář není přístupný pro čtení i zápis',
+      workspace_path_required: 'Zadejte absolutní cestu k workspace.',
+      workspace_change_failed: 'Nepodařilo se změnit workspace: {error}',
+      workspace_changed_log: '[FS] Pracovní adresář změněn na: {path}',
       cfg_brain_desc: 'Zvolte, zda poběžíte privátně na lokálním hardwaru (.gguf), nebo připojíte bleskové cloudové a vlastní AI poskytovatele.',
       provider_local: 'Lokální model (.gguf)',
       provider_local_desc: 'Privátní běh na CPU a Vulkan GPU',
@@ -1207,6 +1302,9 @@
     if (el.modalTools && el.modalTools.style.display !== 'none') {
       renderToolsInspector();
     }
+    refreshWorkspaceStatus({ syncInput: false }).catch(error => {
+      logConsole(`Workspace status error: ${error.message}`, 'error');
+    });
     refreshBlenderStatus();
     refreshSystemStatus();
     logConsole(lang === 'cs' ? 'Jazyk rozhraní přepnut na češtinu.' : 'Interface language set to English.', 'info');
@@ -1252,7 +1350,7 @@
   };
 
   function switchInspectorTab(tabName, savePref = true) {
-    const validTabs = ['3d', 'research', 'agent'];
+    const validTabs = ['3d', 'research', 'agent', 'code'];
     const active = validTabs.includes(tabName) ? tabName : '3d';
     state.activeRightTab = active;
 
@@ -1260,11 +1358,13 @@
       '3d': el.tabBtn3d,
       'research': el.tabBtnResearch,
       'agent': el.tabBtnAgent,
+      'code': el.tabBtnCode,
     };
     const tabPanes = {
       '3d': el.pane3d,
       'research': el.paneResearch,
       'agent': el.paneAgent,
+      'code': el.paneCode,
     };
 
     Object.keys(tabBtns).forEach(key => {
@@ -1748,8 +1848,14 @@
   // CONTEXT WORKSPACE FEEDS: RESEARCH & AGENT TRACES
   // ===========================================================================
   const MAX_AGENT_STEPS = 100;
+  const FS_TOOL_ICONS = {
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"></path><path d="M7 6h.01M7 12h.01M7 18h.01"></path></svg>',
+    read: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h8"></path></svg>',
+    write: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>',
+  };
 
-  function addAgentStep(message, type = 'info', badge = 'STEP') {
+  function addAgentStep(message, type = 'info', badge = 'STEP', icon = '') {
     if (!el.agentStepsTimeline || !message) return;
 
     // Remove empty state placeholder if present
@@ -1762,6 +1868,7 @@
     const time = new Date().toLocaleTimeString();
     item.innerHTML = `
       <div class="agent-step-header">
+        ${icon ? `<span class="agent-step-icon" aria-hidden="true">${icon}</span>` : ''}
         <span class="agent-step-badge">${escapeHtml(badge)}</span>
         <span class="agent-step-time">${time}</span>
       </div>
@@ -1776,6 +1883,97 @@
     }
 
     el.agentStepsTimeline.scrollTop = el.agentStepsTimeline.scrollHeight;
+  }
+
+  function renderWorkspaceDiff(proposal) {
+    state.pendingWorkspaceDiff = proposal;
+    if (el.workspaceDiffFile) el.workspaceDiffFile.textContent = proposal.file_path;
+    if (el.workspaceDiffEmpty) el.workspaceDiffEmpty.hidden = true;
+    if (el.workspaceDiffContent) {
+      el.workspaceDiffContent.hidden = false;
+      el.workspaceDiffContent.innerHTML = String(proposal.unified_diff || '')
+        .split('\n')
+        .map(line => {
+          let className = 'diff-context-line';
+          if (line.startsWith('+++') || line.startsWith('---')) className = 'diff-file-line';
+          else if (line.startsWith('@@')) className = 'diff-hunk-line';
+          else if (line.startsWith('+')) className = 'diff-added-line';
+          else if (line.startsWith('-')) className = 'diff-removed-line';
+          return `<span class="workspace-diff-line ${className}">${escapeHtml(line || ' ')}</span>`;
+        })
+        .join('');
+    }
+    if (el.workspaceDiffActions) el.workspaceDiffActions.hidden = false;
+    if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = '';
+    switchInspectorTab('code');
+  }
+
+  function clearWorkspaceDiff() {
+    state.pendingWorkspaceDiff = null;
+    if (el.workspaceDiffFile) el.workspaceDiffFile.textContent = t('workspace_diff_empty');
+    if (el.workspaceDiffEmpty) el.workspaceDiffEmpty.hidden = false;
+    if (el.workspaceDiffContent) {
+      el.workspaceDiffContent.hidden = true;
+      el.workspaceDiffContent.textContent = '';
+    }
+    if (el.workspaceDiffActions) el.workspaceDiffActions.hidden = true;
+    if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = '';
+  }
+
+  async function applyWorkspaceDiff() {
+    const proposal = state.pendingWorkspaceDiff;
+    if (!proposal || !el.btnApplyWorkspaceDiff) return;
+    el.btnApplyWorkspaceDiff.disabled = true;
+    el.btnDiscardWorkspaceDiff.disabled = true;
+    try {
+      const response = await fetch('/api/workspace/apply-diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposal_id: proposal.proposal_id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.status !== 'ok') {
+        throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+      }
+      clearWorkspaceDiff();
+      const message = t('workspace_diff_applied', { path: data.file_path });
+      addAgentStep(`[FS] ${message}`, 'info', 'FS', FS_TOOL_ICONS.write);
+      logConsole(`[FS] ${message}`, 'info');
+    } catch (error) {
+      if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = error.message;
+      logConsole(`Diff apply failed: ${error.message}`, 'error');
+    } finally {
+      el.btnApplyWorkspaceDiff.disabled = false;
+      el.btnDiscardWorkspaceDiff.disabled = false;
+    }
+  }
+
+  async function discardWorkspaceDiff() {
+    const proposal = state.pendingWorkspaceDiff;
+    if (!proposal || !el.btnDiscardWorkspaceDiff) return;
+    el.btnApplyWorkspaceDiff.disabled = true;
+    el.btnDiscardWorkspaceDiff.disabled = true;
+    try {
+      const response = await fetch('/api/workspace/discard-diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposal_id: proposal.proposal_id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.status !== 'ok') {
+        throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+      }
+      clearWorkspaceDiff();
+      const message = `[FS] ${t('workspace_diff_discarded')}`;
+      addAgentStep(message, 'info', 'FS', FS_TOOL_ICONS.write);
+      logConsole(message, 'info');
+    } catch (error) {
+      if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = error.message;
+      logConsole(`Diff discard failed: ${error.message}`, 'error');
+    } finally {
+      el.btnApplyWorkspaceDiff.disabled = false;
+      el.btnDiscardWorkspaceDiff.disabled = false;
+    }
   }
 
   function clearAgentSteps() {
@@ -2914,8 +3112,13 @@
             if (el.liveStatusText) {
               el.liveStatusText.textContent = statusMsg;
             }
-            addAgentStep(`Invoked tool: ${toolName}`, 'info', 'TOOL');
-            logConsole(`[Tool Call Start] ${toolName}`, 'info');
+            if (data.fs_operation) {
+              addAgentStep(data.fs_operation.message, 'info', 'FS', FS_TOOL_ICONS[data.fs_operation.operation] || '');
+              logConsole(data.fs_operation.message, 'info');
+            } else {
+              addAgentStep(`Invoked tool: ${toolName}`, 'info', 'TOOL');
+              logConsole(`[Tool Call Start] ${toolName}`, 'info');
+            }
             scrollToBottom();
           } else if (data.type === 'tool_end') {
             const toolName = data.tool || data.name || 'tool';
@@ -2930,9 +3133,19 @@
             if (el.liveStatusText) {
               el.liveStatusText.textContent = t('thinking_status');
             }
-            addAgentStep(`Completed tool: ${toolName}`, 'info', 'DONE');
-            logConsole(`[Tool Call End] ${toolName}`, 'info');
+            if (data.fs_operation) {
+              addAgentStep(data.fs_operation.message, 'info', 'FS', FS_TOOL_ICONS[data.fs_operation.operation] || '');
+              logConsole(data.fs_operation.message, 'info');
+            } else {
+              addAgentStep(`Completed tool: ${toolName}`, 'info', 'DONE');
+              logConsole(`[Tool Call End] ${toolName}`, 'info');
+            }
             scrollToBottom();
+          } else if (data.type === 'code_diff_proposal') {
+            renderWorkspaceDiff(data);
+            const message = `[FS] ${t('workspace_diff_title')}: ${data.file_path}`;
+            addAgentStep(message, 'info', 'DIFF', FS_TOOL_ICONS.write);
+            logConsole(message, 'info');
           } else if (data.type === 'status') {
             if (toolArea) {
               toolArea.style.display = 'block';
@@ -3875,10 +4088,91 @@ print(f"Active object: {act.name if act else 'None'}")
   // ===========================================================================
   // SETTINGS MODAL & PERSISTENCE
   // ===========================================================================
+  function updateWorkspaceDisplay(workspace, { syncInput = false, error = '' } = {}) {
+    const path = workspace?.path || state.workspacePath;
+    if (path) {
+      state.workspacePath = path;
+      state.workspaceIsDefault = Boolean(workspace?.is_default);
+    }
+
+    if (syncInput && el.workspacePathInput) {
+      el.workspacePathInput.value = state.workspacePath;
+    }
+
+    const folderName = state.workspacePath.split(/[\\/]/).filter(Boolean).pop() || state.workspacePath;
+    if (el.workspaceHeaderBadge) {
+      el.workspaceHeaderBadge.textContent = t('workspace_active', { name: folderName || '—' });
+      el.workspaceHeaderBadge.title = state.workspacePath;
+      el.workspaceHeaderBadge.classList.toggle('workspace-header-default', state.workspaceIsDefault);
+    }
+
+    if (el.workspaceStatus) {
+      const accessible = workspace?.permissions?.readable && workspace?.permissions?.writable;
+      el.workspaceStatus.classList.toggle('error', Boolean(error) || !accessible);
+      if (error) {
+        el.workspaceStatus.textContent = t('workspace_status_invalid', { error });
+      } else if (!accessible) {
+        el.workspaceStatus.textContent = t('workspace_status_invalid', { error: t('workspace_access_unavailable') });
+      } else {
+        const message = state.workspaceIsDefault ? 'workspace_status_default' : 'workspace_status_active';
+        el.workspaceStatus.textContent = t(message, { path: state.workspacePath });
+      }
+    }
+  }
+
+  async function refreshWorkspaceStatus({ syncInput = true } = {}) {
+    const response = await fetch('/api/workspace');
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.status !== 'ok') {
+      throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+    }
+    updateWorkspaceDisplay(data, { syncInput });
+    return data;
+  }
+
+  function logWorkspaceChange(path) {
+    const message = t('workspace_changed_log', { path });
+    addAgentStep(message, 'info', 'FS', FS_TOOL_ICONS.list);
+    logConsole(message, 'info');
+  }
+
+  async function changeWorkspace(reset = false) {
+    const button = reset ? el.btnResetWorkspace : el.btnSetWorkspace;
+    const path = el.workspacePathInput?.value.trim() || '';
+    try {
+      if (!reset && !path) {
+        throw new Error(t('workspace_path_required'));
+      }
+      if (button) button.disabled = true;
+      const response = await fetch(reset ? '/api/workspace/reset' : '/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        ...(!reset ? { body: JSON.stringify({ path }) } : {}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.status !== 'ok') {
+        throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+      }
+      updateWorkspaceDisplay(data, { syncInput: true });
+      logWorkspaceChange(data.path);
+    } catch (error) {
+      updateWorkspaceDisplay(null, { error: error.message });
+      logConsole(t('workspace_change_failed', { error: error.message }), 'error');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   async function openSettingsModal() {
     if (!el.modalSettings) return;
     el.modalSettings.style.display = 'flex';
     switchSettingsTab('brain');
+    try {
+      await refreshWorkspaceStatus();
+    } catch (error) {
+      updateWorkspaceDisplay(null, { error: error.message });
+      logConsole(`Workspace status error: ${error.message}`, 'error');
+    }
 
     if (el.cfgLanguage) {
       el.cfgLanguage.value = state.language;
@@ -4397,6 +4691,9 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.tabBtn3d) el.tabBtn3d.addEventListener('click', () => switchInspectorTab('3d'));
     if (el.tabBtnResearch) el.tabBtnResearch.addEventListener('click', () => switchInspectorTab('research'));
     if (el.tabBtnAgent) el.tabBtnAgent.addEventListener('click', () => switchInspectorTab('agent'));
+    if (el.tabBtnCode) el.tabBtnCode.addEventListener('click', () => switchInspectorTab('code'));
+    if (el.btnApplyWorkspaceDiff) el.btnApplyWorkspaceDiff.addEventListener('click', applyWorkspaceDiff);
+    if (el.btnDiscardWorkspaceDiff) el.btnDiscardWorkspaceDiff.addEventListener('click', discardWorkspaceDiff);
 
     if (el.btnOpenKnowledgeFromTab) {
       el.btnOpenKnowledgeFromTab.addEventListener('click', openRagModal);
@@ -4494,6 +4791,8 @@ print(f"Active object: {act.name if act else 'None'}")
     if (el.btnCloseSettingsModal) el.btnCloseSettingsModal.addEventListener('click', closeSettingsModal);
     if (el.btnSaveSettings) el.btnSaveSettings.addEventListener('click', saveSettings);
     if (el.btnResetDefaults) el.btnResetDefaults.addEventListener('click', resetToDefaults);
+    if (el.btnSetWorkspace) el.btnSetWorkspace.addEventListener('click', () => changeWorkspace(false));
+    if (el.btnResetWorkspace) el.btnResetWorkspace.addEventListener('click', () => changeWorkspace(true));
     if (el.btnReindexMemory) el.btnReindexMemory.addEventListener('click', reindexAllMemory);
 
     // Settings Tabs (AI Brain vs General)
@@ -4682,6 +4981,12 @@ print(f"Active object: {act.name if act else 'None'}")
 
     logConsole(state.language === 'cs' ? 'Inicializuji Polygon Beater Web UI klienta...' : 'Initializing Polygon Beater Web UI client...', 'info');
     await loadSessions();
+    try {
+      await refreshWorkspaceStatus();
+    } catch (error) {
+      updateWorkspaceDisplay(null, { error: error.message });
+      logConsole(`Workspace status error: ${error.message}`, 'error');
+    }
     await refreshSystemStatus();
     await refreshBlenderStatus();
 

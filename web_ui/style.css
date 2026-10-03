@@ -582,6 +582,36 @@ body.is-resizing-card * {
   box-shadow: 0 0 0 1px var(--cyan-primary);
 }
 
+.workspace-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 8px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--emerald-accent);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-header-badge::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  flex: 0 0 auto;
+}
+.workspace-header-badge.workspace-header-default {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
 .chat-tools-btn,
 .chat-tools-count {
   display: inline-flex;
@@ -1658,7 +1688,8 @@ pre {
 }
 
 .inspector-tab-btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1741,6 +1772,65 @@ pre {
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+}
+
+.workspace-diff-card {
+  flex: 1;
+  min-height: 0;
+}
+.workspace-diff-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.workspace-diff-content {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  tab-size: 4;
+}
+.workspace-diff-line {
+  display: block;
+  min-height: 1.55em;
+  padding: 0 8px;
+  white-space: pre;
+}
+.workspace-diff-line.diff-added-line {
+  background: rgba(46, 160, 67, 0.2);
+  color: #7ee787;
+}
+.workspace-diff-line.diff-removed-line {
+  background: rgba(248, 81, 73, 0.2);
+  color: #ff7b72;
+}
+.workspace-diff-line.diff-hunk-line {
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--cyan-primary);
+}
+.workspace-diff-line.diff-file-line {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.workspace-diff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.workspace-diff-status {
+  color: var(--rose-accent);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .research-sources-feed svg,
@@ -1955,6 +2045,17 @@ pre {
   background: rgba(56, 189, 248, 0.12);
   color: var(--cyan-primary);
   flex-shrink: 0;
+}
+.agent-step-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--cyan-primary);
+  flex-shrink: 0;
+}
+.agent-step-icon svg {
+  width: 100%;
+  height: 100%;
 }
 .agent-step-badge.tool {
   background: rgba(129, 140, 248, 0.15);
@@ -3077,6 +3178,69 @@ pre {
   color: var(--text-secondary);
   line-height: 1.45;
   margin-bottom: 2px;
+}
+
+.workspace-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-canvas);
+}
+.workspace-settings-heading h4 {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.workspace-settings-heading .settings-section-desc {
+  margin: 0;
+}
+.workspace-path-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.workspace-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.workspace-path-input {
+  min-width: 180px;
+  flex: 1 1 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.workspace-path-input:focus {
+  border-color: var(--cyan-primary);
+}
+.workspace-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--emerald-accent);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.workspace-status::before {
+  width: 7px;
+  height: 7px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  flex: 0 0 auto;
+}
+.workspace-status.error {
+  color: var(--rose-accent);
 }
 
 /* Provider Selector Cards Grid */

@@ -128,6 +128,7 @@
         <div class="chat-header">
           <div class="chat-header-title-group">
             <span class="chat-title-editable" id="active-session-title" contenteditable="true" data-i18n-title="click_to_rename" title="Click to rename session" data-i18n="chat_loading">Loading...</span>
+            <span class="workspace-header-badge" id="workspace-header-badge" title="">Workspace: —</span>
             <button class="chat-tools-btn" id="btn-tools" type="button" data-i18n-title="btn_tools_title" title="Open Tools Inspector & Registered Tools">
               <svg class="tools-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
               <span id="tools-count-text" class="chat-tools-count-text" data-i18n="chat_tools_count">22 Tools Active</span>
@@ -320,6 +321,10 @@
           <button class="inspector-tab-btn" id="tab-btn-agent" data-tab="agent" data-i18n-title="tab_agent_title" title="Agent Execution Log & Tool Calls">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
             <span data-i18n="tab_agent">Agent Log</span>
+          </button>
+          <button class="inspector-tab-btn" id="tab-btn-code" data-tab="code" data-i18n-title="tab_code_title" title="Review and approve project code changes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6M14 4l-4 16"></path></svg>
+            <span data-i18n="tab_code">Kód & Diff</span>
           </button>
         </div>
 
@@ -657,6 +662,22 @@
             </div>
           </div>
 
+          <div class="inspector-tab-pane" id="pane-code" style="display: none;">
+            <div class="inspector-card workspace-diff-card">
+              <div class="card-header">
+                <span class="card-title" data-i18n="workspace_diff_title">NÁVRH ZMĚN SOUBORU</span>
+                <span class="card-badge" id="workspace-diff-file">Žádný návrh</span>
+              </div>
+              <div class="workspace-diff-empty" id="workspace-diff-empty" data-i18n="workspace_diff_empty">Zatím není k dispozici žádný návrh změn.</div>
+              <pre class="workspace-diff-content" id="workspace-diff-content" hidden></pre>
+              <div class="workspace-diff-actions" id="workspace-diff-actions" hidden>
+                <button type="button" class="primary-btn btn-sm" id="btn-apply-workspace-diff" data-i18n="workspace_diff_apply">Aplikovat změny do souboru</button>
+                <button type="button" class="secondary-btn btn-sm" id="btn-discard-workspace-diff" data-i18n="workspace_diff_discard">Zahodit návrh</button>
+              </div>
+              <div class="workspace-diff-status" id="workspace-diff-status" role="status" aria-live="polite"></div>
+            </div>
+          </div>
+
         </div>
       </aside>
 
@@ -700,6 +721,7 @@
           <!-- Dynamically populated categories -->
         </div>
       </div>
+
     </div>
   </div>
 
@@ -975,6 +997,19 @@
         <!-- PANE 2: GENERAL PREFERENCES -->
         <div class="settings-tab-pane" id="pane-cfg-general" style="display: none;">
           <div class="settings-form">
+            <section class="workspace-settings-section" aria-labelledby="workspace-settings-title">
+              <div class="workspace-settings-heading">
+                <h4 id="workspace-settings-title" data-i18n="workspace_settings_title">Project Workspace</h4>
+                <p class="settings-section-desc" data-i18n="workspace_settings_desc">Choose the project directory used by project file tools.</p>
+              </div>
+              <label class="workspace-path-label" for="workspace-path-input" data-i18n="workspace_path_label">Workspace directory:</label>
+              <div class="workspace-path-row">
+                <input type="text" id="workspace-path-input" class="workspace-path-input" autocomplete="off" spellcheck="false">
+                <button type="button" class="secondary-btn btn-sm" id="btn-set-workspace" data-i18n="workspace_set_button">Set Folder</button>
+                <button type="button" class="secondary-btn btn-sm" id="btn-reset-workspace" data-i18n="workspace_reset_button">Default Folder</button>
+              </div>
+              <div class="workspace-status" id="workspace-status" role="status" aria-live="polite"></div>
+            </section>
             <div class="form-row">
               <label for="cfg-language" data-i18n="cfg_language">Interface Language:</label>
               <select id="cfg-language" class="polygon-select">

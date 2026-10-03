@@ -52,7 +52,7 @@ Jádro systému tvoří tři synchronizované pilíře, které určují, jak asi
 │ • Cloud LPU & Multimodalita: Groq, Gemini Flash Latest, DeepSeek     │
 │ • Dlouhodobá sémantická paměť: FAISS vektorová databáze + MiniLM       │
 │ • Lokální dokumentový RAG: PDF / DOCX parsing a vyhledávání faktů      │
-│ • Dynamické kontextové načítání nástrojů (22 nástrojů -> 4 v chatu)   │
+│ • Dynamické kontextové načítání nástrojů (26 nástrojů -> 8 v chatu)   │
 │ • Online rešerše: DuckDuckGo vyhledávání + optimalizovaný kontext      │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ tokenový stream / větné události
@@ -83,6 +83,7 @@ Jádro systému tvoří tři synchronizované pilíře, které určují, jak asi
 * **Univerzální API klient (`OpenAICompatibleClient`):** Integrovaný streaming klient pro Groq, Google Gemini (přes OpenAI endpoint), DeepSeek, OpenRouter, Mistral, Ollama a vLLM včetně měření latence v reálném čase.
 * **Dlouhodobá sémantická paměť relací (Memory RAG):** Konverzace jsou na pozadí ukládány jako sémantické vektory přes `all-MiniLM-L6-v2` do lokální vektorové databáze **FAISS**. Asistent si spolehlivě vybaví technická rozhodnutí (*"Jaké rozměry jsme minule zvolili pro krabičku na elektroniku?"*).
 * **Dynamické kontextové načítání nástrojů:** Pokud je aktivní profil Standardní chat nebo je Blender offline, asistent nepředává do systémového promptu 18 náročných 3D nástrojů, což **ušetří přes 3 000 tokenů na dotaz** a zásadně zrychlí generování na CPU i GPU.
+* **Nástroje pro soubory projektu:** Asistent může soubory projektu vypisovat, prohledávat, číst a zapisovat. Čtení je omezené na 500 KB, zápis je uzamčený uvnitř aktivního kořene projektu a citlivé cesty i privátní klíče jsou blokovány. Před úpravou kódu má asistent nejprve přečíst relevantní soubor. Workspace lze změnit nebo obnovit v **Nastavení → Obecná konfigurace → Pracovní adresář projektu**.
 
 ---
 
