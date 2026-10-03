@@ -22,6 +22,7 @@ import pathlib
 import queue
 import socket
 import sys
+import tempfile
 import threading
 import traceback
 
@@ -29,6 +30,55 @@ import bpy
 
 HOST = "127.0.0.1"
 PORT = 9876
+
+
+def is_safe_output_path(filepath: str, allowed_dirs: list[str] | None = None) -> tuple[bool, str, pathlib.Path | None]:
+    """
+    Bezpečnostní validace a sandboxing cílové cesty pro render/viewport/export.
+    Ověří, že cílová cesta leží výhradně v povoleném adresáři (/tmp, tempfile, scratch/ uvnitř projektu)
+    a neobsahuje nepovolený path traversal ('..').
+    """
+    if not filepath or not str(filepath).strip():
+        return False, "Výstupní cesta nesmí být prázdná.", None
+
+    clean_str = str(filepath).strip().strip("'\"`:*#")
+
+    if ".." in pathlib.Path(clean_str).parts:
+        return False, f"Path traversal '..' je zakázán: {clean_str}", None
+
+    try:
+        resolved_path = pathlib.Path(clean_str).resolve()
+    except Exception as e:
+        return False, f"Neplatná cesta: {e}", None
+
+    allowed_roots: list[pathlib.Path] = [
+        pathlib.Path(tempfile.gettempdir()).resolve(),
+        pathlib.Path("/tmp").resolve(),
+    ]
+    try:
+        project_root = pathlib.Path(__file__).resolve().parent
+        allowed_roots.append((project_root / "scratch").resolve())
+        allowed_roots.append((project_root / "renders").resolve())
+        allowed_roots.append((project_root / "rag_storage").resolve())
+    except Exception:
+        pass
+
+    if allowed_dirs:
+        for d in allowed_dirs:
+            try:
+                allowed_roots.append(pathlib.Path(d).resolve())
+            except Exception:
+                pass
+
+    is_inside = any(
+        root in resolved_path.parents or resolved_path.parent == root
+        for root in allowed_roots
+    )
+
+    if not is_inside:
+        return False, f"Zápis mimo povolené adresáře je zakázán: {resolved_path}", None
+
+    return True, "", resolved_path
 
 
 def get_blender_auth_token(fail_closed: bool = True) -> str:
@@ -432,6 +482,11 @@ def capture_viewport_render(output_path="/tmp/blender_viewport.png"):
     Uloží aktuální 3D viewport render do souboru pomocí:
     bpy.ops.render.opengl(write_still=True, view_context=True)
     """
+    is_safe, err_msg, safe_path = is_safe_output_path(output_path)
+    if not is_safe or safe_path is None:
+        raise ValueError(f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta: {err_msg}")
+    output_path = str(safe_path)
+
     import os
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
@@ -3528,7 +3583,11 @@ def process_blender_queue_timer():
 
         # 19. Vyrenderování scény / náhledu (action == "render")
         if action == "render":
-            output_path = message.get("output_path", "/tmp/blender_render.png")
+            raw_output_path = message.get("output_path", "/tmp/blender_render.png")
+            is_safe, err_msg, safe_path = is_safe_output_path(raw_output_path)
+            if not is_safe or safe_path is None:
+                raise ValueError(f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro render: {err_msg}")
+            output_path = str(safe_path)
             engine = message.get("engine")
             use_viewport = bool(message.get("viewport", False))
             print(f"\n[AI-Blender] >>> Vykonávám render (cíl={output_path}, engine={engine})...")

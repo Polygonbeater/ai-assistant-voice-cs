@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import ast
 import logging
+import pathlib
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,15 @@ BANNED_BUILTINS: frozenset[str] = frozenset({
 # Alias pro zpětnou kompatibilitu a audit
 BLOCKED_FUNCTIONS: frozenset[str] = BANNED_BUILTINS
 
+# Zákaz metod ukládání souborů a renderů na disk
+BANNED_SAVE_METHODS: frozenset[str] = frozenset({
+    "save",
+    "save_render",
+    "save_as",
+    "save_all_modified",
+    "save_sequence",
+})
+
 # Zákaz přístupu k dunder atributům pro zamezení reflexe a sandbox escape
 BANNED_ATTRIBUTES: frozenset[str] = frozenset({
     "__subclasses__",
@@ -67,6 +78,21 @@ BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
     "ops.script",
     "bpy.ops.console",
     "ops.console",
+    "bpy.ops.image",
+    "ops.image",
+    "bpy.ops.render",
+    "ops.render",
+    "bpy.ops.sound",
+    "ops.sound",
+    "bpy.ops.render.render",
+    "ops.render.render",
+    "bpy.ops.render.opengl",
+    "ops.render.opengl",
+    "save",
+    "save_render",
+    "save_as",
+    "save_all_modified",
+    "save_sequence",
     "bpy.data.images.load",
     "data.images.load",
     "bpy.data.libraries.load",
@@ -112,6 +138,12 @@ BANNED_BPY_PREFIXES: tuple[str, ...] = (
     "ops.script.",
     "bpy.ops.console.",
     "ops.console.",
+    "bpy.ops.image.",
+    "ops.image.",
+    "bpy.ops.render.",
+    "ops.render.",
+    "bpy.ops.sound.",
+    "ops.sound.",
     "bpy.ops.export_",
     "ops.export_",
     "bpy.ops.import_",
@@ -151,6 +183,57 @@ BANNED_BPY_PREFIXES: tuple[str, ...] = (
 )
 
 
+def is_safe_output_path(filepath: str, allowed_dirs: list[str] | None = None) -> tuple[bool, str, pathlib.Path | None]:
+    """
+    Bezpečnostní validace a sandboxing cílové cesty pro render/viewport/export.
+    Ověří, že cílová cesta leží výhradně v povoleném adresáři (/tmp, tempfile, scratch/ uvnitř projektu)
+    a neobsahuje nepovolený path traversal ('..').
+    """
+    if not filepath or not str(filepath).strip():
+        return False, "Výstupní cesta nesmí být prázdná.", None
+
+    clean_str = str(filepath).strip().strip("'\"`:*#")
+
+    # Zákaz '..'
+    if ".." in pathlib.Path(clean_str).parts:
+        return False, f"Path traversal '..' je zakázán: {clean_str}", None
+
+    try:
+        resolved_path = pathlib.Path(clean_str).resolve()
+    except Exception as e:
+        return False, f"Neplatná cesta: {e}", None
+
+    # Standardní povolené kořenové složky
+    allowed_roots: list[pathlib.Path] = [
+        pathlib.Path(tempfile.gettempdir()).resolve(),
+        pathlib.Path("/tmp").resolve(),
+    ]
+    try:
+        project_root = pathlib.Path(__file__).resolve().parent
+        allowed_roots.append((project_root / "scratch").resolve())
+        allowed_roots.append((project_root / "renders").resolve())
+        allowed_roots.append((project_root / "rag_storage").resolve())
+    except Exception:
+        pass
+
+    if allowed_dirs:
+        for d in allowed_dirs:
+            try:
+                allowed_roots.append(pathlib.Path(d).resolve())
+            except Exception:
+                pass
+
+    is_inside = any(
+        root in resolved_path.parents or resolved_path.parent == root
+        for root in allowed_roots
+    )
+
+    if not is_inside:
+        return False, f"Zápis mimo povolené adresáře je zakázán: {resolved_path}", None
+
+    return True, "", resolved_path
+
+
 def get_attribute_chain(node: ast.AST) -> str:
     """Rekurzivně sestaví tečkový řetězec atributů, např. 'bpy.data.texts.load'."""
     parts: list[str] = []
@@ -182,7 +265,12 @@ class BlenderCodeValidator(ast.NodeVisitor):
         chain = get_attribute_chain(node)
         if not chain:
             return
-        if chain in BANNED_BPY_PATTERNS or any(chain.startswith(p) for p in BANNED_BPY_PREFIXES):
+        if (
+            chain in BANNED_BPY_PATTERNS
+            or any(chain.startswith(p) for p in BANNED_BPY_PREFIXES)
+            or any(chain.endswith("." + m) for m in BANNED_SAVE_METHODS)
+            or chain in BANNED_SAVE_METHODS
+        ):
             raise ValueError(
                 f"Bezpečnostní pojistka: Přístup k nebezpečnému atributu nebo souborové I/O operaci '{chain}' je zakázán."
             )
@@ -227,13 +315,15 @@ class BlenderCodeValidator(ast.NodeVisitor):
             if func_name in BLOCKED_FUNCTIONS:
                 raise ValueError(f"Bezpečnostní pojistka: Zneužití zakázané funkce nebo proměnné '{func_name}' je striktně zakázáno.")
 
-        # Volání přes atribut (např. os.system(), builtins.eval(), obj.__subclasses__(), bpy.ops.wm.save_as_mainfile())
+        # Volání přes atribut (např. os.system(), builtins.eval(), obj.__subclasses__(), bpy.ops.wm.save_as_mainfile(), img.save_render())
         elif isinstance(node.func, ast.Attribute):
             attr_name = node.func.attr
             if attr_name in BLOCKED_FUNCTIONS:
                 raise ValueError(f"Bezpečnostní pojistka: Volání zakázané funkce/metody '{attr_name}()' je zakázáno.")
             elif attr_name.startswith("__") or attr_name in BANNED_ATTRIBUTES:
                 raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{attr_name}) je striktně zakázán.")
+            elif attr_name in BANNED_SAVE_METHODS or attr_name.endswith("save_render") or attr_name.endswith("_save") or attr_name.startswith("save_"):
+                raise ValueError(f"Bezpečnostní pojistka: Volání metody ukládání souborů/renderu '{attr_name}()' je zakázáno.")
             self._check_attribute_chain_safety(node.func)
 
         self.generic_visit(node)
@@ -243,6 +333,8 @@ class BlenderCodeValidator(ast.NodeVisitor):
             raise ValueError(f"Bezpečnostní pojistka: Přístup k interním dunder atributům (.{node.attr}) je striktně zakázán.")
         if node.attr in BANNED_ATTRIBUTES:
             raise ValueError(f"Bezpečnostní pojistka: Přístup k atributu '{node.attr}' je z bezpečnostních důvodů zakázán.")
+        if node.attr in BANNED_SAVE_METHODS or node.attr.endswith("save_render") or node.attr.endswith("_save") or node.attr.startswith("save_"):
+            raise ValueError(f"Bezpečnostní pojistka: Přístup k metodě/atributu ukládání '{node.attr}' je z bezpečnostních důvodů zakázán.")
         self._check_attribute_chain_safety(node)
         self.generic_visit(node)
 

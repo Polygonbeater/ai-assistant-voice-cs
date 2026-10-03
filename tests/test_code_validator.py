@@ -206,6 +206,25 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
             self.assertFalse(is_valid, f"Exekuční bpy snippet '{snippet}' nebyl zablokován!")
             self.assertIn("Bezpečnostní pojistka", msg)
 
+    def test_bpy_save_and_render_methods_are_blocked(self):
+        """Ověří, že ukládání obrázků, renderování a save metody jsou AST validátorem zablokovány."""
+        save_and_render_snippets = [
+            "import bpy\nimg = bpy.data.images.new('test', 10, 10)\nimg.save_render('/tmp/out.png')",
+            "import bpy\nimg.save()",
+            "import bpy\nimg.save_as('/tmp/out.png')",
+            "import bpy\nbpy.ops.image.save_as(filepath='/tmp/out.png')",
+            "import bpy\nbpy.ops.render.render(write_still=True)",
+            "import bpy\nbpy.ops.render.opengl(write_still=True)",
+            "import bpy\nbpy.ops.sound.mixdown(filepath='/tmp/audio.wav')",
+            "import bpy\nfn = img.save_render",
+            "import bpy\nfn = img.save",
+            "import bpy\nfn = bpy.ops.image.save",
+        ]
+        for snippet in save_and_render_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Save/render snippet '{snippet}' nebyl zablokován!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

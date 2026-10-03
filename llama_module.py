@@ -2804,11 +2804,19 @@ class UnifiedToolDispatcher:
 
     def _execute_inspect_blender_scene(self) -> dict[str, Any]:
         from blender_connector import request_scene_inspection, is_blender_available
+        from code_validator import is_safe_output_path
 
         blender_cfg = self.config.get("blender", {})
         host = blender_cfg.get("host", "127.0.0.1")
         port = int(blender_cfg.get("port", 9876))
-        output_path = blender_cfg.get("viewport_snapshot_path", "/tmp/blender_viewport.png")
+        raw_output_path = blender_cfg.get("viewport_snapshot_path", "/tmp/blender_viewport.png")
+        is_safe, err_msg, safe_out = is_safe_output_path(raw_output_path)
+        if not is_safe or safe_out is None:
+            err = f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro inspekci: {err_msg}"
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Inspekce selhala:** `{err}`\n")
+            return {"status": "error", "tool": "inspect_blender_scene", "error": "UnsafeOutputPath", "result": err}
+        output_path = str(safe_out)
 
         if self.status_callback:
             self.status_callback("● 📸 Pořizuji snímek viewportu a telemetrii scény…")
@@ -2894,13 +2902,27 @@ class UnifiedToolDispatcher:
         """
         import os
         from blender_connector import request_scene_inspection, is_blender_available
+        from code_validator import is_safe_output_path
 
         blender_cfg = self.config.get("blender", {})
         host = blender_cfg.get("host", "127.0.0.1")
         port = int(blender_cfg.get("port", 9876))
-        snap_path = blender_cfg.get("viewport_snapshot_path", output_path)
+        raw_snap_path = blender_cfg.get("viewport_snapshot_path", output_path)
 
         tool_label = "analyze_viewport_image"
+
+        is_safe, err_msg, safe_snap = is_safe_output_path(raw_snap_path)
+        if not is_safe or safe_snap is None:
+            err = f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro viewport: {err_msg}"
+            if self.callback_on_token:
+                self.callback_on_token(f"\n❌ **Vision AI:** `{err}`\n")
+            return {
+                "status": "error",
+                "tool": tool_label,
+                "error": "UnsafeOutputPath",
+                "result": err,
+            }
+        snap_path = str(safe_snap)
 
         if self.status_callback:
             self.status_callback("● 👁️ Vision AI: Pořizuji snímek viewportu…")

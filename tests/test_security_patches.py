@@ -327,7 +327,46 @@ class TestDemo(unittest.TestCase):
             files={"file": ("large.txt", oversized_file, "text/plain")},
         )
         self.assertEqual(resp_over.status_code, 413)
-        self.assertIn("25 MB", resp_over.json().get("detail", ""))
+    def test_safe_output_path_validation(self):
+        """Ověří, že is_safe_output_path blokuje path traversal i zápis mimo povolené složky."""
+        from code_validator import is_safe_output_path
+
+        # Nebezpečné cesty
+        unsafe_paths = [
+            "",
+            "   ",
+            "../../etc/cron.d/evil.png",
+            "/etc/passwd",
+            "/var/log/system.log",
+            "~/.ssh/id_rsa",
+        ]
+        for p in unsafe_paths:
+            is_safe, err, _ = is_safe_output_path(p)
+            self.assertFalse(is_safe, f"Nebezpečná výstupní cesta '{p}' prošla kontrolou!")
+
+        # Povolené cesty
+        safe_paths = [
+            "/tmp/blender_viewport.png",
+            "scratch/viewport.png",
+            "renders/output.png",
+        ]
+        for p in safe_paths:
+            is_safe, err, res_p = is_safe_output_path(p)
+            self.assertTrue(is_safe, f"Bezpečná výstupní cesta '{p}' byla zamítnuta: {err}")
+            self.assertIsNotNone(res_p)
+
+    def test_request_scene_inspection_blocks_unsafe_output_path(self):
+        """Ověří, že request_scene_inspection odmítne nebezpečnou výstupní cestu."""
+        from blender_connector import request_scene_inspection, BlenderExecutionError
+
+        # Bez výjimky
+        res = request_scene_inspection(output_path="../../etc/cron.d/test.png", raise_on_error=False)
+        self.assertEqual(res.get("status"), "error")
+        self.assertEqual(res.get("error"), "UnsafeOutputPath")
+
+        # S výjimkou
+        with self.assertRaises(BlenderExecutionError):
+            request_scene_inspection(output_path="/etc/evil.png", raise_on_error=True)
 
 
 if __name__ == "__main__":

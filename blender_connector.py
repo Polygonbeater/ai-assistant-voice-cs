@@ -277,6 +277,15 @@ def request_scene_inspection(
 
     Pokud je nastaveno raise_on_error=True a přijde chyba, vyvolá výjimku BlenderExecutionError.
     """
+    from code_validator import is_safe_output_path
+    is_safe, err_msg, safe_output_path = is_safe_output_path(output_path)
+    if not is_safe or safe_output_path is None:
+        err = f"Bezpečnostní pojistka: Neplatná nebo nepovolená výstupní cesta pro inspekci: {err_msg}"
+        if raise_on_error:
+            raise BlenderExecutionError(err)
+        return {"status": "error", "error": "UnsafeOutputPath", "message": err}
+    output_path = str(safe_output_path)
+
     sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
