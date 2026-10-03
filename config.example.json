@@ -32,7 +32,8 @@
   "blender": {
     "enabled": true,
     "host": "127.0.0.1",
-    "port": 9876
+    "port": 9876,
+    "auth_token": "polygon-blender-bridge-secret"
   },
   "rag": {
     "enabled": true,

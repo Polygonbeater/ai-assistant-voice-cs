@@ -17,6 +17,8 @@ import contextlib
 import io
 import json
 import logging
+import os
+import pathlib
 import queue
 import socket
 import sys
@@ -27,6 +29,36 @@ import bpy
 
 HOST = "127.0.0.1"
 PORT = 9876
+DEFAULT_AUTH_TOKEN = "polygon-blender-bridge-secret"
+
+
+def get_blender_auth_token() -> str:
+    """
+    Získá autentizační token pro Blender Bridge:
+    1. Z proměnné prostředí POLYGON_BLENDER_AUTH_TOKEN nebo BLENDER_BRIDGE_TOKEN
+    2. Z config.json (klíč blender.auth_token)
+    3. Výchozí fallback hodnota DEFAULT_AUTH_TOKEN
+    """
+    env_token = os.environ.get("POLYGON_BLENDER_AUTH_TOKEN") or os.environ.get("BLENDER_BRIDGE_TOKEN")
+    if env_token and env_token.strip():
+        return env_token.strip()
+
+    try:
+        candidates = [
+            pathlib.Path(__file__).resolve().parent / "config.json",
+            pathlib.Path.cwd() / "config.json",
+        ]
+        for cfg_path in candidates:
+            if cfg_path.is_file():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    tok = cfg.get("blender", {}).get("auth_token")
+                    if tok and str(tok).strip():
+                        return str(tok).strip()
+    except Exception:
+        pass
+
+    return DEFAULT_AUTH_TOKEN
 
 # Globální instance pro správu běhu serveru
 _RECEIVER_INSTANCE = None
@@ -190,6 +222,19 @@ class BlenderSocketServer:
 
             if not isinstance(message, dict):
                 resp = {"status": "error", "error": "Neplatný formát zprávy: očekáván JSON objekt."}
+                conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+                conn.close()
+                return
+
+            # Bezpečnostní ověření autentizačního tokenu
+            expected_token = get_blender_auth_token()
+            incoming_token = message.get("auth_token") or message.get("token")
+            if not incoming_token or incoming_token != expected_token:
+                resp = {
+                    "status": "error",
+                    "error_type": "Unauthorized",
+                    "error": "Neautorizovaný přístup: Neplatný nebo chybějící autentizační token pro Blender Bridge.",
+                }
                 conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
                 conn.close()
                 return

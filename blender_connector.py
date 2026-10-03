@@ -5,6 +5,8 @@ Umožňuje asistentovi odesílat vygenerovaný Python (bpy) kód přímo do bě�
 
 import json
 import logging
+import os
+import pathlib
 import socket
 from typing import Any
 
@@ -15,6 +17,36 @@ logger = logging.getLogger(__name__)
 DEFAULT_BLENDER_HOST = "127.0.0.1"
 DEFAULT_BLENDER_PORT = 9876
 DEFAULT_TIMEOUT = 65.0
+DEFAULT_AUTH_TOKEN = "polygon-blender-bridge-secret"
+
+
+def get_blender_auth_token() -> str:
+    """
+    Získá autentizační token pro komunikaci s Blender Bridge:
+    1. Z proměnné prostředí POLYGON_BLENDER_AUTH_TOKEN nebo BLENDER_BRIDGE_TOKEN
+    2. Z config.json (klíč blender.auth_token)
+    3. Výchozí fallback hodnota DEFAULT_AUTH_TOKEN
+    """
+    env_token = os.environ.get("POLYGON_BLENDER_AUTH_TOKEN") or os.environ.get("BLENDER_BRIDGE_TOKEN")
+    if env_token and env_token.strip():
+        return env_token.strip()
+
+    try:
+        candidates = [
+            pathlib.Path(__file__).resolve().parent / "config.json",
+            pathlib.Path.cwd() / "config.json",
+        ]
+        for cfg_path in candidates:
+            if cfg_path.is_file():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    tok = cfg.get("blender", {}).get("auth_token")
+                    if tok and str(tok).strip():
+                        return str(tok).strip()
+    except Exception:
+        pass
+
+    return DEFAULT_AUTH_TOKEN
 
 
 def is_blender_available(host: str = DEFAULT_BLENDER_HOST, port: int = DEFAULT_BLENDER_PORT) -> bool:
@@ -34,7 +66,7 @@ def ping_blender(host: str = DEFAULT_BLENDER_HOST, port: int = DEFAULT_BLENDER_P
     """
     try:
         with socket.create_connection((host, port), timeout=2.0) as sock:
-            payload = json.dumps({"action": "ping"}) + "\n"
+            payload = json.dumps({"action": "ping", "auth_token": get_blender_auth_token()}) + "\n"
             sock.sendall(payload.encode("utf-8"))
 
             data = b""
@@ -123,6 +155,7 @@ def send_code_to_blender(
         request_payload = {
             "action": "run_bpy_script",
             "code": code.strip(),
+            "auth_token": get_blender_auth_token(),
         }
         raw_msg = json.dumps(request_payload) + "\n"
         sock.sendall(raw_msg.encode("utf-8"))
@@ -250,6 +283,7 @@ def request_scene_inspection(
         request_payload = {
             "action": "inspect_scene",
             "output_path": output_path,
+            "auth_token": get_blender_auth_token(),
         }
         raw_msg = json.dumps(request_payload) + "\n"
         sock.sendall(raw_msg.encode("utf-8"))
@@ -363,6 +397,9 @@ def _send_blender_request(
     Interní helper: odešle libovolný JSON payload do Blenderu a vrátí JSON odpověď.
     Sdílená logika pro všechny speciální akce (audit, repair, …).
     """
+    if "auth_token" not in payload:
+        payload["auth_token"] = get_blender_auth_token()
+
     sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

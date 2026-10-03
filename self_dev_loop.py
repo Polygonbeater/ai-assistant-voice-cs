@@ -1,40 +1,84 @@
-import os
-import subprocess
-import requests
-import re
-import sys
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
+import sys
+from typing import Optional, Tuple
+import requests
 
-LOCAL_LLM_URL = "http://localhost:8080/v1/chat/completions" 
+LOCAL_LLM_URL = "http://localhost:8080/v1/chat/completions"
+PROJECT_ROOT = Path(__file__).resolve().parent
+ALLOWED_OUTPUT_DIRS = {"tests", "scratch"}
+
+
+def is_safe_target_path(filepath: str, project_root: Path = PROJECT_ROOT) -> Tuple[bool, str, Optional[Path]]:
+    """
+    Bezpečnostní validace cesty proti Path Traversal / Arbitrary File Write.
+    Ověří, že cílová cesta je relativní, směřuje výhradně do povoleného adresáře
+    (např. tests/ nebo scratch/) a po resolve() leží uvnitř project_root.
+    """
+    if not filepath or not filepath.strip():
+        return False, "Cesta je prázdná.", None
+
+    clean_str = filepath.strip().strip("'\"`:*#")
+
+    # Blokování absolutních cest začínajících / nebo diskem (C:\)
+    if Path(clean_str).is_absolute() or clean_str.startswith("/") or clean_str.startswith("\\"):
+        return False, f"Absolutní cesty nejsou povoleny: {clean_str}", None
+
+    # Zákaz .. v původním textu cesty
+    parts = Path(clean_str).parts
+    if ".." in parts:
+        return False, f"Path traversal '..' je zakázán: {clean_str}", None
+
+    # Musí směřovat do jednoho z povolených podadresářů
+    top_dir = parts[0] if parts else ""
+    if top_dir not in ALLOWED_OUTPUT_DIRS:
+        return False, f"Zápis je povolen pouze do adresářů {ALLOWED_OUTPUT_DIRS}, obdrženo: '{top_dir}'", None
+
+    resolved_root = project_root.resolve()
+    target_path = (project_root / clean_str).resolve()
+
+    # Kontrola, že resolved target leží uvnitř project_root
+    if resolved_root not in target_path.parents and target_path != resolved_root:
+        return False, f"Cesta leží mimo kořen projektu: {target_path}", None
+
+    # Kontrola, že resolved target leží uvnitř povoleného podadresáře
+    allowed_roots = [(project_root / d).resolve() for d in ALLOWED_OUTPUT_DIRS]
+    if not any(allowed_root in target_path.parents or target_path == allowed_root for allowed_root in allowed_roots):
+        return False, f"Cesta {target_path} nespadá do povolených adresářů {ALLOWED_OUTPUT_DIRS}", None
+
+    return True, "", target_path
+
 
 def ask_local_llm(messages):
     payload = {
-        "messages": messages, 
+        "messages": messages,
         "temperature": 0.1,
         "max_tokens": 1200,
         "model": "local-model",
-        "stream": True
+        "stream": True,
     }
     try:
         print("\n⏳ Přijímám kód od lokálního LLM (živý přenos):")
         print("-" * 50)
         response = requests.post(LOCAL_LLM_URL, json=payload, stream=True, timeout=120)
-        
+
         full_text = ""
         for line in response.iter_lines():
             if line:
-                decoded_line = line.decode('utf-8')
+                decoded_line = line.decode("utf-8")
                 if decoded_line.startswith("data: "):
                     data_str = decoded_line[6:].strip()
                     if data_str == "[DONE]":
                         break
                     try:
                         data_json = json.loads(data_str)
-                        choices = data_json.get('choices', [])
+                        choices = data_json.get("choices", [])
                         if choices:
-                            token = choices[0].get('delta', {}).get('content', '')
-                            print(token, end='', flush=True)
+                            token = choices[0].get("delta", {}).get("content", "")
+                            print(token, end="", flush=True)
                             full_text += token
                     except json.JSONDecodeError:
                         pass
@@ -44,6 +88,7 @@ def ask_local_llm(messages):
         print(f"Chyba při komunikaci s lokálním LLM: {e}")
         sys.exit(1)
 
+
 def extract_and_save_code(response_text):
     """
     Robustní extrakce bloků kódu s hlavičkou cílového souboru:
@@ -52,17 +97,17 @@ def extract_and_save_code(response_text):
     - Automatické rozpoznání testu pokud chybí explicitní target.
     """
     saved_files = []
-    
+
     # Varianta 1: # target: <soubor> následovaný ```python ... ```
     pattern1 = r"(?:#|//|--)?\s*(?:target|file):\s*([^\s\n`]+).*?```(?:python)?\s*\n(.*?)```"
     blocks1 = re.findall(pattern1, response_text, re.DOTALL | re.IGNORECASE)
-    
+
     # Varianta 2: ```python uvnitř s # target: <soubor> na prvních řádcích
     pattern2 = r"```(?:python)?\s*\n\s*(?:#|//|--)\s*(?:target|file):\s*([^\s\n`]+)\s*\n(.*?)```"
     blocks2 = re.findall(pattern2, response_text, re.DOTALL | re.IGNORECASE)
-    
+
     all_blocks = list(blocks1) + list(blocks2)
-    
+
     # Varianta 3: Pokud model neposlal target, ale vrátil kód s unittestem pro auto_rig
     if not all_blocks:
         code_match = re.search(r"```(?:python)?\s*\n(.*?)```", response_text, re.DOTALL | re.IGNORECASE)
@@ -78,68 +123,76 @@ def extract_and_save_code(response_text):
             continue
         seen_paths.add(filepath)
 
+        # Bezpečnostní validace cílové cesty proti Path Traversal / Arbitrary File Write
+        is_safe, err_msg, safe_path = is_safe_target_path(filepath)
+        if not is_safe or safe_path is None:
+            print(f"⚠️ Bezpečnostní pojistka: Cesta '{filepath}' byla odmítnuta ({err_msg}). Přeskakuji.")
+            continue
+
         clean_code = re.sub(r"^(?:#|//|--)?\s*(?:target|file):.*?\n", "", code, count=1, flags=re.MULTILINE)
-        
+
         # Automatická korekce častých halucinací importů lokálního modelu:
         # llama_module není balíček, ale jeden soubor v rootu
         if "from llama_module.tools import" in clean_code or "import llama_module.tools" in clean_code:
             clean_code = re.sub(
                 r"from\s+llama_module\.tools\s+import\s+[^\n]+",
                 "from llama_module import TOOL_SCHEMAS, ALLOWED_TOOL_NAMES, UnifiedToolDispatcher, parse_tool_call",
-                clean_code
+                clean_code,
             )
             clean_code = re.sub(r"import\s+llama_module\.tools[^\n]*", "", clean_code)
 
         # Korekce: TOOL_SCHEMAS je list schémat, nikoliv množina stringů
         clean_code = clean_code.replace(
             "self.assertIn('auto_rig_and_skin', TOOL_SCHEMAS)",
-            "self.assertTrue(any(s.get('function', {}).get('name') == 'auto_rig_and_skin' for s in TOOL_SCHEMAS))"
+            "self.assertTrue(any(s.get('function', {}).get('name') == 'auto_rig_and_skin' for s in TOOL_SCHEMAS))",
         )
         clean_code = clean_code.replace(
             'self.assertIn("auto_rig_and_skin", TOOL_SCHEMAS)',
-            'self.assertTrue(any(s.get("function", {}).get("name") == "auto_rig_and_skin" for s in TOOL_SCHEMAS))'
+            'self.assertTrue(any(s.get("function", {}).get("name") == "auto_rig_and_skin" for s in TOOL_SCHEMAS))',
         )
 
         # Korekce: dispečer má metodu dispatch(), nikoliv execute()
         clean_code = re.sub(
             r"self\.dispatcher\.execute\([^)]*\)",
             "self.dispatcher.dispatch('auto_rig_and_skin', {})",
-            clean_code
+            clean_code,
         )
 
         # Korekce: volání handle_auto_rig bez importu
         if "handle_auto_rig()" in clean_code and "def handle_auto_rig" not in clean_code and "import handle_auto_rig" not in clean_code:
             clean_code = "def handle_auto_rig(): pass\n" + clean_code
 
-        path = Path(filepath)
-        
         # Ochrana velkých existujících souborů proti nechtěnému přepsání miniaturním stubem:
         # Pokud soubor již existuje, má přes 500 řádků a již obsahuje potřebnou implementaci,
         # nepřepisujeme 4800 řádků 10-řádkovým fragmentem.
-        if path.exists() and path.is_file():
-            existing_text = path.read_text(encoding="utf-8")
+        if safe_path.exists() and safe_path.is_file():
+            existing_text = safe_path.read_text(encoding="utf-8")
             if len(existing_text.splitlines()) > 500 and len(clean_code.splitlines()) < 200:
-                if ("auto_rig" in existing_text or "auto_rig_and_skin" in existing_text):
-                    print(f"ℹ️  Soubor '{path}' již obsahuje kompletní implementaci (zachovávám plnou verzi).")
-                    saved_files.append(str(path))
+                if "auto_rig" in existing_text or "auto_rig_and_skin" in existing_text:
+                    print(f"ℹ️  Soubor '{safe_path}' již obsahuje kompletní implementaci (zachovávám plnou verzi).")
+                    saved_files.append(str(safe_path))
                     continue
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(clean_code, encoding="utf-8")
-        saved_files.append(str(path))
-            
+        safe_path.parent.mkdir(parents=True, exist_ok=True)
+        safe_path.write_text(clean_code, encoding="utf-8")
+        saved_files.append(str(safe_path))
+
     return saved_files
+
 
 def run_unit_tests():
     """Spustí kompletní sadu testů v aktivním prostředí s nastaveným PYTHONPATH."""
     env = dict(os.environ)
     env["PYTHONPATH"] = "."
     result = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", "tests/", "-p", "test_*.py"], 
-        capture_output=True, text=True, env=env
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests/", "-p", "test_*.py"],
+        capture_output=True,
+        text=True,
+        env=env,
     )
     combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
     return result.returncode == 0, combined_output
+
 
 def self_development_loop(task_prompt, max_iterations=5):
     messages = [
@@ -160,15 +213,15 @@ def self_development_loop(task_prompt, max_iterations=5):
                 "4. Vytvoř třídu TestCase dědící z unittest.TestCase a na konec přidej if __name__ == '__main__': unittest.main()\n"
                 "5. ZÁKAZ vytvářet nové adresáře nebo __init__.py soubory. Neměň strukturu projektu.\n"
                 "6. Vygeneruj přesně JEDEN ucelený blok kódu a poté ukonči odpověď."
-            )
+            ),
         }
     ]
     messages.append({"role": "user", "content": task_prompt})
-    
+
     for iteration in range(1, max_iterations + 1):
         print(f"\n🔄 Iterace {iteration}/{max_iterations}: Čekám na kód od lokálního modelu...")
         llm_response = ask_local_llm(messages)
-        
+
         saved = extract_and_save_code(llm_response)
         if not saved:
             print("⚠️ Model nevrátil žádný validní blok kódu s hlavičkou '# target:'. Zkouším znovu.")
@@ -183,14 +236,14 @@ def self_development_loop(task_prompt, max_iterations=5):
                     "# ...\n"
                     "```\n"
                     "Zkus to znovu."
-                )
+                ),
             })
             continue
-            
+
         print(f"💾 Kód vyparsován a zpracován: {', '.join(saved)}. Spouštím unit testy...")
-        
+
         success, error_log = run_unit_tests()
-        
+
         if success:
             print("\n" + "=" * 60)
             print("✅ VŠECHNY TESTY PROŠLY NA 100%! Úkol je úspěšně integrován do codebase.")
@@ -200,7 +253,7 @@ def self_development_loop(task_prompt, max_iterations=5):
             print("❌ Testy selhaly. Předávám chybový výstup zpět k opravě...")
             if len(error_log) > 2000:
                 error_log = "...[Zkráceno]...\n" + error_log[-2000:]
-                
+
             messages.append({"role": "assistant", "content": llm_response})
             error_prompt = (
                 f"Kód selhal při spuštění testů. Zde je výpis chyb:\n\n```\n{error_log}\n```\n"
@@ -211,6 +264,7 @@ def self_development_loop(task_prompt, max_iterations=5):
             messages.append({"role": "user", "content": error_prompt})
     else:
         print("⚠ Dosaženo maximálního počtu iterací. Skript končí bez úspěšného 100% test passu.")
+
 
 if __name__ == "__main__":
     task = """
@@ -245,4 +299,3 @@ if __name__ == "__main__":
     Vygeneruj přesně tento testovací kód v jednom bloku.
     """
     self_development_loop(task)
-
