@@ -7,7 +7,7 @@
     "model": "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     "n_ctx": 16384,
     "n_gpu_layers": 12,
-    "max_tokens": 1024,
+    "max_tokens": 8192,
     "temperature": 0.7,
     "system_prompt": "Jsi užitečná a zdvořilá AI asistentka s expertními schopnostmi v 3D grafice a CAD modelování. Odpovídej stručně a k věci v češtině."
   },
@@ -63,8 +63,7 @@
       "base_url": "https://api.openai.com/v1",
       "api_key": "",
       "model": "gpt-4o",
-      "temperature": 0.7,
-      "max_tokens": 2048
+      "temperature": 0.7
     }
   }
 }

@@ -10,6 +10,8 @@ import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+DEFAULT_MAX_RESPONSE_TOKENS = 8192
+
 PRESETS_CATALOG = {
     "standard": {
         "id": "standard",
@@ -456,7 +458,7 @@ class OpenAICompatibleClient:
     def create_chat_completion(
         self,
         messages: list[dict[str, Any]],
-        max_tokens: int = 1024,
+        max_tokens: int = 8192,
         temperature: float = 0.7,
         stream: bool = True,
         **kwargs: Any,
@@ -5271,14 +5273,14 @@ def generate_response(
     # Určení maximálního počtu tokenů
     raw_max = llama_config.get('max_tokens', 'auto')
     if str(raw_max).strip().lower() in ('auto', '0', ''):
-        max_tokens = 2048 if analytical_prompt else 1024
+        max_tokens = DEFAULT_MAX_RESPONSE_TOKENS
     else:
         try:
             max_tokens = int(raw_max)
             if max_tokens <= 0:
-                max_tokens = 1024
+                max_tokens = DEFAULT_MAX_RESPONSE_TOKENS
         except ValueError:
-            max_tokens = 1024
+            max_tokens = DEFAULT_MAX_RESPONSE_TOKENS
 
     temperature = float(llama_config.get("temperature", 0.7))
 
@@ -5286,7 +5288,7 @@ def generate_response(
         # --- 1. TAH: Detekce volání nástroje vs. přímá odpověď ---
         first_stream = llm.create_chat_completion(
             messages=messages,
-            max_tokens=max_tokens if not tools_enabled else min(max_tokens, 1024),
+            max_tokens=max_tokens,
             temperature=0.1 if tools_enabled else temperature,
             stream=True,
         )
