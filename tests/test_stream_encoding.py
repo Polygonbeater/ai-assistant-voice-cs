@@ -6,6 +6,20 @@ from llama_module import OpenAICompatibleClient
 
 
 class StreamEncodingTests(unittest.TestCase):
+    def test_gemini_v1main_base_url_uses_supported_v1beta_endpoint(self):
+        for model in ("gemini-1.5-flash", "gemini-2.0-flash"):
+            with self.subTest(model=model):
+                client = OpenAICompatibleClient(
+                    base_url="https://generativelanguage.googleapis.com/v1main/openai/",
+                    model=model,
+                )
+
+                self.assertEqual(
+                    client.endpoint,
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                )
+                self.assertEqual(client.model, model)
+
     def test_non_stream_response_decodes_utf8_json(self):
         response = MagicMock()
         response.ok = True

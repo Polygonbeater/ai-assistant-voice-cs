@@ -5,6 +5,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 from llama_cpp import Llama
 import requests
 
@@ -447,6 +448,12 @@ class OpenAICompatibleClient:
         base = (base_url or "").strip().rstrip("/")
         if not base:
             base = "https://api.openai.com/v1"
+        parsed_base = urlsplit(base)
+        if parsed_base.hostname == "generativelanguage.googleapis.com":
+            path_parts = parsed_base.path.split("/")
+            if len(path_parts) > 1 and path_parts[1] == "v1main":
+                path_parts[1] = "v1beta"
+                base = urlunsplit(parsed_base._replace(path="/".join(path_parts))).rstrip("/")
         if not base.endswith("/chat/completions"):
             self.endpoint = f"{base}/chat/completions"
         else:
