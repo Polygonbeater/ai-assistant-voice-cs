@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Vulkan Accelerated](https://img.shields.io/badge/Vulkan-Hardware%20Offload-red.svg?logo=vulkan)](https://www.khronos.org/vulkan/)
 [![AST Protected](https://img.shields.io/badge/Security-AST%20Gatekeeper-success.svg)]()
-[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-27%2F27%20Passed%20(100%25)-brightgreen.svg)]()
+[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-58%2F58%20Passed%20(100%25)-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Polygon Beater** je pokročilý, 100% suverénní lokální hlasový asistent s integrovaným 3D kognitivním jádrem pro přímou procedurální tvorbu, parametrické CAD modelování, inspekci topologie a automatizaci renderovací pipeline v **Blenderu 4.x LTS**.  
@@ -279,6 +279,13 @@ Zkopírujte vzorovou konfiguraci do [`config.json`](file:///home/polygon/ai-assi
 cp config.example.json config.json
 ```
 
+> **Bezpečnostní autentizační token pro Blender Bridge (Fail-Secure):**
+> V souladu s bezpečnostním modelem systém nepoužívá žádný výchozí/hardcoded tajný klíč.
+> Vygenerujte náhodný token (např. `openssl rand -hex 16`) a vložte jej do `config.json` pod klíč `blender.auth_token`, nebo nastavte proměnnou prostředí `POLYGON_BLENDER_AUTH_TOKEN`:
+> ```bash
+> export POLYGON_BLENDER_AUTH_TOKEN="$(openssl rand -hex 16)"
+> ```
+
 ### Krok 4: Spuštění webového serveru a aplikace
 Spusťte backend server:
 ```bash
@@ -310,13 +317,14 @@ ai-assistant-voice-cs/
 ├── code_validator.py       # AST bezpečnostní validátor pro statickou analýzu Python kódu
 ├── document_service.py     # Lokální vektorová dokumentová báze (RAG) a sémantická paměť (FAISS)
 ├── history_repository.py   # Správa a ukládání relací a zpráv v JSON formátu
-├── web_search.py           # Odlehčené vyhledávání přes DuckDuckGo s optimalizací kontextu
+├── web_search.py           # Odlehčené vyhledávání přes DuckDuckGo / ddgs s optimalizací kontextu
 ├── config.example.json     # Referenční šablona konfigurace
 ├── requirements.txt        # Konsolidovaný seznam přesně pinovaných závislostí
-├── tests/                  # Sada 27 automatických unit testů (AST, API, Blender, RAG)
+├── tests/                  # Sada 58 automatických unit testů (AST, API, Blender, RAG, Security)
 │   ├── test_code_validator.py
 │   ├── test_llm_connection_endpoint.py
 │   ├── test_blender_connector.py
+│   ├── test_security_patches.py
 │   └── test_web_server.py
 └── web_ui/                 # Dark-Tech frontend (Vanilla JS, CSS Grid, 0 CDN závislostí)
     ├── index.html          # Hlavní HTML struktura s 3D workspace a modálními dialogy
@@ -329,7 +337,7 @@ ai-assistant-voice-cs/
 ## 🧪 Testování a verifikace
 
 ```bash
-# Spuštění celé sady 27 unit testů
+# Spuštění celé sady unit testů
 venv/bin/python -m unittest discover -s tests
 
 # Kontrola kompilace Pythonu a JavaScriptu

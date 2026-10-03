@@ -61,6 +61,12 @@ BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
     "bpy.data.texts",
     "data.texts",
     "texts",
+    "bpy.ops.text",
+    "ops.text",
+    "bpy.ops.script",
+    "ops.script",
+    "bpy.ops.console",
+    "ops.console",
     "bpy.data.images.load",
     "data.images.load",
     "bpy.data.libraries.load",
@@ -100,6 +106,12 @@ BANNED_BPY_PATTERNS: frozenset[str] = frozenset({
 BANNED_BPY_PREFIXES: tuple[str, ...] = (
     "bpy.data.texts.",
     "data.texts.",
+    "bpy.ops.text.",
+    "ops.text.",
+    "bpy.ops.script.",
+    "ops.script.",
+    "bpy.ops.console.",
+    "ops.console.",
     "bpy.ops.export_",
     "ops.export_",
     "bpy.ops.import_",
@@ -183,6 +195,8 @@ class BlenderCodeValidator(ast.NodeVisitor):
                     f"Bezpečnostní pojistka: Importování modulu '{alias.name}' není povoleno. "
                     f"Povolené moduly jsou: {', '.join(sorted(ALLOWED_MODULES))}."
                 )
+            if alias.name in BANNED_BPY_PATTERNS or any(alias.name.startswith(p) for p in BANNED_BPY_PREFIXES):
+                raise ValueError(f"Bezpečnostní pojistka: Importování nebezpečného modulu/prvku '{alias.name}' je zakázáno.")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
@@ -194,10 +208,16 @@ class BlenderCodeValidator(ast.NodeVisitor):
                 f"Povolené moduly jsou: {', '.join(sorted(ALLOWED_MODULES))}."
             )
         for alias in node.names:
+            full_imported = f"{mod_name}.{alias.name}" if mod_name else alias.name
             if alias.name in BANNED_BUILTINS or alias.name in BANNED_ATTRIBUTES or alias.name.startswith("__"):
                 raise ValueError(f"Bezpečnostní pojistka: Importování prvku '{alias.name}' je z bezpečnostních důvodů zakázáno.")
-            if alias.name in BANNED_BPY_PATTERNS or any(alias.name.startswith(p) for p in BANNED_BPY_PREFIXES):
-                raise ValueError(f"Bezpečnostní pojistka: Importování nebezpečného prvku '{alias.name}' je zakázáno.")
+            if (
+                full_imported in BANNED_BPY_PATTERNS
+                or alias.name in BANNED_BPY_PATTERNS
+                or any(full_imported.startswith(p) for p in BANNED_BPY_PREFIXES)
+                or any(alias.name.startswith(p) for p in BANNED_BPY_PREFIXES)
+            ):
+                raise ValueError(f"Bezpečnostní pojistka: Importování nebezpečného prvku '{full_imported}' je zakázáno.")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:

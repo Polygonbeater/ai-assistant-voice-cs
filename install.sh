@@ -71,7 +71,7 @@ for arg in "$@"; do
             echo "Přepínače:"
             echo "  --with-tripo   Automaticky zkompiluje a nainstaluje TripoSR a torchmcubes z gitu"
             echo "  -y, --yes      Neinteraktivní režim (odpoví 'ano' na standardní dotazy)"
-            echo "  --skip-tests   Přeskočí závěrečné spuštění 176 unit testů"
+            echo "  --skip-tests   Přeskočí závěrečné spuštění unit testů"
             echo "  -h, --help     Zobrazí tuto nápovědu"
             exit 0
             ;;
@@ -264,14 +264,15 @@ fi
 
 if [ "$INSTALL_TRIPO" = true ]; then
     log_info "Instaluji C++ rozšíření torchmcubes z GitHubu (fixovaný commit)..."
-    TRIPOSR_COMMIT="1b6826c71c4c9fa8617865298a0b0d42d385f903"
-    if pip install "git+https://github.com/tatsy/torchmcubes.git@${TRIPOSR_COMMIT}"; then
+    TORCHMCUBES_COMMIT="2013898f09b2e2d091fb72d42bfad93630f9a733"
+    if pip install "git+https://github.com/tatsy/torchmcubes.git@${TORCHMCUBES_COMMIT}"; then
         log_success "torchmcubes úspěšně zkompilován a nainstalován."
     else
         log_warning "Kompilace torchmcubes selhala (může chybět CUDA dev toolset). Asistent využije deterministický fallback."
     fi
 
     log_info "Instaluji balíček TripoSR z GitHubu (fixovaný commit)..."
+    TRIPOSR_COMMIT="1b6826c71c4c9fa8617865298a0b0d42d385f903"
     if pip install "git+https://github.com/VAST-AI-Research/TripoSR.git@${TRIPOSR_COMMIT}"; then
         log_success "TripoSR úspěšně nainstalován."
     else

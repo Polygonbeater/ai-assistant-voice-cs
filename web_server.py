@@ -932,8 +932,15 @@ def get_rag_documents():
 async def upload_rag_document(file: UploadFile = File(...)):
     """
     Nahraje a zindexuje dokument do RAG databáze.
-    Neblokuje FastAPI Event Loop a spolehlivě odstraňuje dočasné soubory po indexaci.
+    Neblokuje FastAPI Event Loop, omezuje maximální velikost souboru a odstraňuje dočasné soubory po indexaci.
     """
+    max_rag_bytes = 25 * 1024 * 1024  # 25 MB limit
+    contents = await file.read(max_rag_bytes + 1)
+    if not contents:
+        raise HTTPException(status_code=400, detail="Nahraný dokument je prázdný.")
+    if len(contents) > max_rag_bytes:
+        raise HTTPException(status_code=413, detail="Dokument překračuje maximální povolenou velikost 25 MB.")
+
     raw_filename = file.filename or "upload.txt"
     # Původní název uchováme pouze jako bezpečná metadata
     safe_metadata_filename = Path(raw_filename).name.strip() or "upload.txt"
@@ -951,11 +958,7 @@ async def upload_rag_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Neplatný název souboru.")
 
     try:
-        def _save_file():
-            with temp_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
-        await anyio.to_thread.run_sync(_save_file)
+        await anyio.to_thread.run_sync(temp_path.write_bytes, contents)
 
         if not document_service:
             raise HTTPException(status_code=400, detail="RAG služba není dostupná.")

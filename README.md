@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Vulkan Accelerated](https://img.shields.io/badge/Vulkan-Hardware%20Offload-red.svg?logo=vulkan)](https://www.khronos.org/vulkan/)
 [![AST Protected](https://img.shields.io/badge/Security-AST%20Gatekeeper-success.svg)]()
-[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-27%2F27%20Passed%20(100%25)-brightgreen.svg)]()
+[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-58%2F58%20Passed%20(100%25)-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Polygon Beater** is an advanced, 100% data-sovereign local voice AI assistant equipped with an integrated 3D cognitive director for procedural modeling, parametric CAD generation, topology audit, and post-production automation inside **Blender 4.x LTS**.
@@ -279,6 +279,13 @@ Copy the reference configuration to [`config.json`](file:///home/polygon/ai-assi
 cp config.example.json config.json
 ```
 
+> **Security Authentication Token for Blender Bridge (Fail-Secure):**
+> In alignment with our fail-secure design, no default hardcoded secret token is allowed.
+> Generate a random secret token (e.g. `openssl rand -hex 16`) and insert it into `config.json` under `blender.auth_token`, or set the environment variable `POLYGON_BLENDER_AUTH_TOKEN`:
+> ```bash
+> export POLYGON_BLENDER_AUTH_TOKEN="$(openssl rand -hex 16)"
+> ```
+
 ### Step 4: Launch Web Server & Application
 Start the backend server:
 ```bash
@@ -310,13 +317,14 @@ ai-assistant-voice-cs/
 ├── code_validator.py       # AST security gatekeeper for static code analysis
 ├── document_service.py     # Local document RAG and long-term semantic memory (FAISS)
 ├── history_repository.py   # Persistent session management and JSON conversation storage
-├── web_search.py           # Lightweight DuckDuckGo search with context optimization
+├── web_search.py           # Lightweight DuckDuckGo / ddgs search with context optimization
 ├── config.example.json     # Reference configuration template
 ├── requirements.txt        # Pinned dependency manifest
-├── tests/                  # Automated unit test suite (27 passing tests)
+├── tests/                  # Automated unit test suite (58 passing tests)
 │   ├── test_code_validator.py
 │   ├── test_llm_connection_endpoint.py
 │   ├── test_blender_connector.py
+│   ├── test_security_patches.py
 │   └── test_web_server.py
 └── web_ui/                 # Dark-Tech web frontend (Vanilla JS, CSS Grid, 0 CDN deps)
     ├── index.html          # HTML structure, 3D workspace, and modal dialogs
@@ -331,7 +339,7 @@ ai-assistant-voice-cs/
 Run the automated test suite and syntax compilation:
 
 ```bash
-# Run full unit test suite (27 tests)
+# Run full unit test suite
 venv/bin/python -m unittest discover -s tests
 
 # Verify Python and JavaScript compilation

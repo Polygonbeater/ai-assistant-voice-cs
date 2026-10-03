@@ -46,7 +46,7 @@ faiss-cpu>=1.7.4
 pymupdf>=1.23.0
 python-docx>=1.1.0
 trafilatura>=1.6.0
-duckduckgo_search>=6.0.0
+ddgs>=9.0.0
 requests>=2.31.0
 urllib3>=2.0.0
 

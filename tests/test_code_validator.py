@@ -189,6 +189,23 @@ data_str = json.dumps({"r": rgb[0], "g": rgb[1], "b": rgb[2]})
             self.assertFalse(is_valid, f"Nebezpečný bpy snippet '{snippet}' nebyl zablokován!")
             self.assertIn("Bezpečnostní pojistka", msg)
 
+    def test_bpy_text_and_script_execution_operators_are_blocked(self):
+        """Ověří, že spouštění kódu přes bpy.ops.text.*, bpy.ops.script.* a bpy.ops.console.* je zablokováno."""
+        execution_snippets = [
+            "import bpy\nbpy.ops.text.run_script()",
+            "import bpy\nbpy.ops.text.new(name='payload.py')",
+            "import bpy\nbpy.ops.text.insert(text='import os')",
+            "import bpy\nbpy.ops.script.python_file_run(filepath='/tmp/evil.py')",
+            "import bpy\nbpy.ops.script.execute_preset(filepath='/tmp/preset.py')",
+            "import bpy\nbpy.ops.console.execute()",
+            "from bpy.ops import text\ntext.run_script()",
+            "from bpy.ops import script\nscript.reload()",
+        ]
+        for snippet in execution_snippets:
+            is_valid, msg = validate_blender_code(snippet)
+            self.assertFalse(is_valid, f"Exekuční bpy snippet '{snippet}' nebyl zablokován!")
+            self.assertIn("Bezpečnostní pojistka", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

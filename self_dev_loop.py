@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,54 @@ import requests
 LOCAL_LLM_URL = "http://localhost:8080/v1/chat/completions"
 PROJECT_ROOT = Path(__file__).resolve().parent
 ALLOWED_OUTPUT_DIRS = {"tests", "scratch"}
+
+
+def validate_python_code_safety(code: str) -> Tuple[bool, str]:
+    """
+    Statická AST kontrola vygenerovaného kódu před jeho uložením a spuštěním.
+    Blokuje nebezpečné moduly (síťové sockety, surový shell mimo test fixtures, eval/exec reflexi).
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return False, f"Chyba syntaxe: {e}"
+
+    banned_calls = {"eval", "exec", "compile", "__import__"}
+    banned_modules = {"socket", "urllib", "paramiko", "telnetlib", "ftplib"}
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in banned_calls:
+                return False, f"Zakázané volání funkce: {node.func.id}"
+            if isinstance(node.func, ast.Attribute) and node.func.attr in banned_calls:
+                return False, f"Zakázané volání metody: {node.func.attr}"
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            mod = getattr(node, "module", None) or ""
+            for alias in node.names:
+                full_mod = f"{mod}.{alias.name}" if mod else alias.name
+                root_mod = full_mod.split(".")[0]
+                if root_mod in banned_modules:
+                    return False, f"Zakázaný import nebezpečného modulu: {root_mod}"
+    return True, ""
+
+
+def is_execution_authorized() -> bool:
+    """
+    Ověří explicitní autorizaci pro spouštění kódu vygenerovaného LLM.
+    Podporuje proměnnou prostředí SELF_DEV_ENABLE_EXECUTION=1 nebo interaktivní potvrzení v terminálu.
+    """
+    if os.environ.get("SELF_DEV_ENABLE_EXECUTION", "").strip().lower() in ("1", "true", "yes"):
+        return True
+
+    # Pokud běží v interaktivním terminálu, zeptáme se uživatele na explicitní potvrzení
+    if sys.stdin.isatty():
+        try:
+            choice = input("\n⚠️  [BEZPEČNOSTNÍ POJISTKA] LLM vygeneroval nový kód. Přejete si spustit unit testy? [y/N]: ").strip().lower()
+            return choice in ("y", "yes", "a", "ano")
+        except (EOFError, KeyboardInterrupt):
+            return False
+
+    return False
 
 
 def is_safe_target_path(filepath: str, project_root: Path = PROJECT_ROOT) -> Tuple[bool, str, Optional[Path]]:
@@ -131,6 +180,12 @@ def extract_and_save_code(response_text):
 
         clean_code = re.sub(r"^(?:#|//|--)?\s*(?:target|file):.*?\n", "", code, count=1, flags=re.MULTILINE)
 
+        # Bezpečnostní validace vygenerovaného kódu pomocí AST
+        is_safe_code, code_err = validate_python_code_safety(clean_code)
+        if not is_safe_code:
+            print(f"⚠️ Bezpečnostní pojistka: Vygenerovaný kód pro '{filepath}' neprošel AST kontrolou ({code_err}). Přeskakuji.")
+            continue
+
         # Automatická korekce častých halucinací importů lokálního modelu:
         # llama_module není balíček, ale jeden soubor v rootu
         if "from llama_module.tools import" in clean_code or "import llama_module.tools" in clean_code:
@@ -240,8 +295,16 @@ def self_development_loop(task_prompt, max_iterations=5):
             })
             continue
 
-        print(f"💾 Kód vyparsován a zpracován: {', '.join(saved)}. Spouštím unit testy...")
+        print(f"💾 Kód vyparsován a bezpečně zpracován: {', '.join(saved)}.")
 
+        # Bezpečnostní kontrola: Neprovádět spouštění kódu bez explicitní autorizace nebo interaktivního potvrzení
+        if not is_execution_authorized():
+            print("\n🛑 [BEZPEČNOSTNÍ POJISTKA] Spuštění testů nad autonomně generovaným kódem vyžaduje explicitní potvrzení.")
+            print("   Nastavte proměnnou prostředí SELF_DEV_ENABLE_EXECUTION=1 nebo potvrďte spuštění v interaktivním terminálu [y/N].")
+            print("   Testy nebyly spuštěny.")
+            break
+
+        print("🚀 Spouštím unit testy...")
         success, error_log = run_unit_tests()
 
         if success:

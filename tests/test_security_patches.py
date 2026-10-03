@@ -242,7 +242,92 @@ class TestSecurityPatches(unittest.TestCase):
                 with self.assertRaises(OSError):
                     await resolver.resolve("evil.local", 80)
         
-        asyncio.run(_test())
+    # =========================================================================
+    # 6. Self-Dev Loop Security & Sandboxing
+    # =========================================================================
+    def test_self_dev_loop_path_traversal_blocked(self):
+        """Ověří ochranu proti Path Traversal a zápisu mimo povolené složky v self_dev_loop."""
+        from self_dev_loop import is_safe_target_path
+        unsafe_paths = [
+            "/etc/passwd",
+            "../main.py",
+            "../../secret.txt",
+            "web_server.py",
+            "llama_module.py",
+            "C:\\Windows\\system32\\cmd.exe",
+            "tests/../../evil.py",
+        ]
+        for p in unsafe_paths:
+            is_safe, err, _ = is_safe_target_path(p)
+            self.assertFalse(is_safe, f"Nebezpečná cesta '{p}' prošla kontrolou!")
+
+        safe_paths = [
+            "tests/test_generated.py",
+            "scratch/scratch_test.py",
+        ]
+        for p in safe_paths:
+            is_safe, err, target_p = is_safe_target_path(p)
+            self.assertTrue(is_safe, f"Validní cesta '{p}' byla zamítnuta: {err}")
+            self.assertIsNotNone(target_p)
+
+    def test_self_dev_loop_code_safety_validator(self):
+        """Ověří, že vygenerovaný nebezpečný kód je zablokován AST kontrolou."""
+        from self_dev_loop import validate_python_code_safety
+        dangerous_codes = [
+            "import socket\ns = socket.socket()",
+            "import urllib.request\nurllib.request.urlopen('http://evil.com')",
+            "eval('__import__(\"os\").system(\"rm -rf /\")')",
+            "exec('import os')",
+            "compile('1+1', '', 'eval')",
+        ]
+        for c in dangerous_codes:
+            is_safe, err = validate_python_code_safety(c)
+            self.assertFalse(is_safe, f"Nebezpečný kód '{c}' prošel kontrolou!")
+
+        safe_code = """
+import unittest
+from llama_module import TOOL_SCHEMAS
+
+class TestDemo(unittest.TestCase):
+    def test_sample(self):
+        self.assertTrue(len(TOOL_SCHEMAS) > 0)
+"""
+        is_safe, err = validate_python_code_safety(safe_code)
+        self.assertTrue(is_safe, f"Bezpečný test kód byl zamítnut: {err}")
+
+    def test_self_dev_loop_execution_authorization(self):
+        """Ověří, že spuštění testů vyžaduje autorizaci (env var nebo potvrzení)."""
+        import os
+        from self_dev_loop import is_execution_authorized
+        with patch.dict(os.environ, {"SELF_DEV_ENABLE_EXECUTION": "0"}, clear=True):
+            with patch("sys.stdin.isatty", return_value=False):
+                self.assertFalse(is_execution_authorized())
+
+        with patch.dict(os.environ, {"SELF_DEV_ENABLE_EXECUTION": "1"}, clear=True):
+            self.assertTrue(is_execution_authorized())
+
+    def test_rag_upload_size_limit_and_empty_check(self):
+        """Ověří, že RAG upload endpoint odmítne prázdný soubor (400) a soubor přesahující limit (413)."""
+        import io
+
+        # 1. Prázdný soubor
+        empty_file = io.BytesIO(b"")
+        resp_empty = self.client.post(
+            "/api/rag/upload",
+            files={"file": ("empty.txt", empty_file, "text/plain")},
+        )
+        self.assertEqual(resp_empty.status_code, 400)
+        self.assertIn("prázdný", resp_empty.json().get("detail", ""))
+
+        # 2. Soubor přesahující 25 MB limit
+        oversized_data = b"A" * (25 * 1024 * 1024 + 10)
+        oversized_file = io.BytesIO(oversized_data)
+        resp_over = self.client.post(
+            "/api/rag/upload",
+            files={"file": ("large.txt", oversized_file, "text/plain")},
+        )
+        self.assertEqual(resp_over.status_code, 413)
+        self.assertIn("25 MB", resp_over.json().get("detail", ""))
 
 
 if __name__ == "__main__":
