@@ -462,7 +462,7 @@ class OpenAICompatibleClient:
         **kwargs: Any,
     ):
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json; charset=utf-8",
             "User-Agent": "Polygon-Beater/2.3",
         }
         if self.api_key:
@@ -485,21 +485,27 @@ class OpenAICompatibleClient:
             return self._stream_generator(payload, headers)
         else:
             resp = requests.post(self.endpoint, headers=headers, json=payload, timeout=self.timeout)
+            response_text = resp.content.decode("utf-8", errors="replace")
             if not resp.ok:
-                err_text = resp.text[:400]
+                err_text = response_text[:400]
                 raise RuntimeError(f"API Provider Error (HTTP {resp.status_code}): {err_text}")
-            return resp.json()
+            return json.loads(response_text)
 
     def _stream_generator(self, payload: dict[str, Any], headers: dict[str, str]):
         with requests.post(self.endpoint, headers=headers, json=payload, stream=True, timeout=self.timeout) as resp:
             if not resp.ok:
-                err_text = resp.text[:400]
+                err_text = resp.content.decode("utf-8", errors="replace")[:400]
                 raise RuntimeError(f"API Provider Error (HTTP {resp.status_code}): {err_text}")
 
-            for raw_line in resp.iter_lines(decode_unicode=True):
+            for raw_line in resp.iter_lines():
                 if not raw_line:
                     continue
-                line = raw_line.strip()
+                line_text = (
+                    raw_line.decode("utf-8", errors="replace")
+                    if isinstance(raw_line, bytes)
+                    else raw_line
+                )
+                line = line_text.strip()
                 if not line.startswith("data:"):
                     continue
                 data_str = line[5:].strip()

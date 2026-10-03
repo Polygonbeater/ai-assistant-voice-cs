@@ -155,12 +155,18 @@ def ask_local_llm(messages):
     try:
         print("\n⏳ Přijímám kód od lokálního LLM (živý přenos):")
         print("-" * 50)
-        response = requests.post(LOCAL_LLM_URL, json=payload, stream=True, timeout=120)
+        response = requests.post(
+            LOCAL_LLM_URL,
+            json=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            stream=True,
+            timeout=120,
+        )
 
         full_text = ""
         for line in response.iter_lines():
             if line:
-                decoded_line = line.decode("utf-8")
+                decoded_line = line.decode("utf-8", errors="replace")
                 if decoded_line.startswith("data: "):
                     data_str = decoded_line[6:].strip()
                     if data_str == "[DONE]":

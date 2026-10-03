@@ -19,12 +19,15 @@ class ChatWorkerErrorTests(unittest.TestCase):
                 json={
                     "session_id": "worker-error-test",
                     "prompt": "Test classifier failure",
+                    "language": "cs",
                     "analytical_preset": "⚡ Auto (Doporučit)",
                     "rag_enabled": False,
                 },
             )
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("text/event-stream; charset=utf-8", response.headers["content-type"])
+        self.assertIn("Určuji optimální analytickou metodiku…".encode("utf-8"), response.content)
         events = [line for line in response.iter_lines() if line.startswith("data: ")]
         self.assertTrue(any('"type": "error"' in event for event in events))
         self.assertTrue(any("classifier failed" in event for event in events))
