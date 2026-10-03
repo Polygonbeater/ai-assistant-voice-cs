@@ -50,6 +50,8 @@
     attachedImages: [],
     isFileLoading: false,
     pendingFileRead: null,
+    isRagUploading: false,
+    pendingRagUpload: null,
     isRecording: false,
     mediaRecorder: null,
     audioChunks: [],
@@ -2516,7 +2518,7 @@
   // CHAT STREAMING (SSE POST /api/chat)
   // ===========================================================================
   async function sendMessage(overridePrompt = null, options = {}) {
-    if (state.isStreaming) return;
+    if (state.isStreaming || state.isRagUploading) return;
 
     // Await pending asynchronous file read if still in progress
     if (state.isFileLoading && state.pendingFileRead) {
@@ -2527,10 +2529,26 @@
       }
     }
 
-    // Abort if an attached image failed to load or has empty content
+    // Await pending RAG document upload if still in progress
+    if (state.isRagUploading && state.pendingRagUpload) {
+      try {
+        await state.pendingRagUpload;
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (state.isRagUploading) return;
+
+    // Abort if an attached image failed to load or has empty base64 content
     if (state.attachedFile && isImageFile(state.attachedFile)) {
-      if (!state.attachedImages || state.attachedImages.length === 0) {
-        logConsole('Cannot send message: attached image failed to read or is invalid.', 'error');
+      const hasValidImage = Array.isArray(state.attachedImages) && state.attachedImages.some(img => {
+        if (typeof img !== 'string') return false;
+        const commaIdx = img.indexOf(',');
+        const raw = (commaIdx !== -1) ? img.slice(commaIdx + 1).trim() : img.trim();
+        return raw.length > 0;
+      });
+      if (!hasValidImage) {
+        logConsole('Cannot send message: attached image failed to read or payload is empty.', 'error');
         showToast(t('image_read_error'), 'error');
         return;
       }
@@ -2944,9 +2962,17 @@
       const reader = new FileReader();
       reader.onload = () => {
         const res = reader.result;
-        resolve(typeof res === 'string' ? res : '');
+        if (typeof res === 'string' && res.length > 0) {
+          const commaIdx = res.indexOf(',');
+          const raw = (commaIdx !== -1) ? res.slice(commaIdx + 1).trim() : res.trim();
+          if (raw.length > 0) {
+            resolve(res);
+            return;
+          }
+        }
+        reject(new Error('Empty image payload'));
       };
-      reader.onerror = err => reject(err);
+      reader.onerror = err => reject(err || new Error('FileReader failed'));
       reader.readAsDataURL(file);
     });
   }
@@ -2975,8 +3001,14 @@
             if (currentUploadToken !== uploadToken) {
               return;
             }
-            if (b64) {
-              state.attachedImages = [b64];
+            if (b64 && typeof b64 === 'string') {
+              const commaIdx = b64.indexOf(',');
+              const rawData = (commaIdx !== -1) ? b64.slice(commaIdx + 1).trim() : b64.trim();
+              if (rawData.length > 0) {
+                state.attachedImages = [b64];
+              } else {
+                throw new Error('Empty base64 payload');
+              }
             } else {
               throw new Error('Empty file content');
             }
@@ -2991,7 +3023,7 @@
             if (currentUploadToken === uploadToken) {
               state.isFileLoading = false;
               state.pendingFileRead = null;
-              if (el.btnSend && !state.isStreaming) {
+              if (el.btnSend && !state.isStreaming && !state.isRagUploading) {
                 el.btnSend.disabled = false;
               }
             }
@@ -3002,7 +3034,7 @@
       } else {
         state.isFileLoading = false;
         state.pendingFileRead = null;
-        if (el.btnSend && !state.isStreaming) {
+        if (el.btnSend && !state.isStreaming && !state.isRagUploading) {
           el.btnSend.disabled = false;
         }
       }
@@ -3014,7 +3046,7 @@
       }
       if (el.fileInput) el.fileInput.value = '';
       state.attachedImages = [];
-      if (el.btnSend && !state.isStreaming) {
+      if (el.btnSend && !state.isStreaming && !state.isRagUploading) {
         el.btnSend.disabled = false;
       }
     }
@@ -3027,48 +3059,56 @@
       return true;
     }
 
+    state.isRagUploading = true;
     state.isFileLoading = true;
     if (el.btnSend) {
       el.btnSend.disabled = true;
     }
 
-    const formData = new FormData();
-    formData.append('file', state.attachedFile);
+    const uploadPromise = (async () => {
+      const formData = new FormData();
+      formData.append('file', state.attachedFile);
 
-    try {
-      logConsole(`Uploading document to RAG: ${state.attachedFile.name}...`, 'info');
-      const res = await fetch('/api/rag/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        let detail = res.statusText;
-        try {
-          const data = await res.json();
-          detail = data.detail || detail;
-        } catch (e) {
-          // Keep status text
+      try {
+        logConsole(`Uploading document to RAG: ${state.attachedFile.name}...`, 'info');
+        const res = await fetch('/api/rag/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          let detail = res.statusText;
+          try {
+            const data = await res.json();
+            detail = data.detail || detail;
+          } catch (e) {
+            // Keep status text
+          }
+          throw new Error(`HTTP ${res.status}: ${detail}`);
         }
-        throw new Error(`HTTP ${res.status}: ${detail}`);
+        const data = await res.json();
+        if (!Number.isInteger(data.chunks_indexed) || data.chunks_indexed < 1) {
+          throw new Error('No indexable text found in file.');
+        }
+        logConsole(`Indexing complete: ${data.filename} (${data.chunks_indexed} chunks)`, 'info');
+        setAttachedFile(null);
+        await refreshSystemStatus();
+        return true;
+      } catch (err) {
+        logConsole(`Attachment indexing error: ${err.message}`, 'error');
+        showToast(`${t('rag_upload_error')} (${err.message})`, 'error');
+        return false;
+      } finally {
+        state.isRagUploading = false;
+        state.isFileLoading = false;
+        state.pendingRagUpload = null;
+        if (el.btnSend && !state.isStreaming) {
+          el.btnSend.disabled = false;
+        }
       }
-      const data = await res.json();
-      if (!Number.isInteger(data.chunks_indexed) || data.chunks_indexed < 1) {
-        throw new Error('No indexable text found in file.');
-      }
-      logConsole(`Indexing complete: ${data.filename} (${data.chunks_indexed} chunks)`, 'info');
-      setAttachedFile(null);
-      await refreshSystemStatus();
-      return true;
-    } catch (err) {
-      logConsole(`Attachment indexing error: ${err.message}`, 'error');
-      showToast(`${t('rag_upload_error')} (${err.message})`, 'error');
-      return false;
-    } finally {
-      state.isFileLoading = false;
-      if (el.btnSend && !state.isStreaming) {
-        el.btnSend.disabled = false;
-      }
-    }
+    })();
+
+    state.pendingRagUpload = uploadPromise;
+    return await uploadPromise;
   }
 
   // ===========================================================================
@@ -3982,7 +4022,7 @@ print(f"Active object: {act.name if act else 'None'}")
       el.promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          if (state.isFileLoading || (el.btnSend && el.btnSend.disabled)) {
+          if (state.isFileLoading || state.isRagUploading || state.isStreaming || (el.btnSend && el.btnSend.disabled)) {
             return;
           }
           sendMessage();
@@ -3998,6 +4038,9 @@ print(f"Active object: {act.name if act else 'None'}")
     // Suggestion chips
     document.querySelectorAll('.suggestion-chip').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (state.isFileLoading || state.isRagUploading || state.isStreaming || (el.btnSend && el.btnSend.disabled)) {
+          return;
+        }
         const text = btn.dataset.prompt;
         if (text && el.promptInput) {
           el.promptInput.value = text;
