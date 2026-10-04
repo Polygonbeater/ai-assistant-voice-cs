@@ -58,6 +58,7 @@ from llama_module import (
     apply_workspace_write_proposal,
     classify_methodology,
     detect_analytical_mode,
+    detect_workspace_request,
     generate_response,
     get_workspace_dir,
     is_default_workspace,
@@ -68,6 +69,7 @@ from llama_module import (
     set_workspace_dir,
     test_provider_connection,
     unload_llama_model,
+    WORKSPACE_AGENT_TOOL_NAMES,
 )
 from web_search import PublicOnlyResolver, _safe_get, is_safe_web_url
 
@@ -1062,6 +1064,25 @@ async def chat_stream(req: ChatRequest, request: Request):
                 detected = classify_methodology(llm, user_prompt, language=req_lang)
                 req_config["llama"]["analytical_preset"] = detected
                 event_queue.put({"type": "methodology", "content": detected})
+
+                # AGENTNÍ WORKSPACE REŽIM: dotazy cílící na soubory/kód/projekt
+                # nikdy nespadnou do standardního chatu. Vynutíme function calling
+                # (ReAct smyčku) a plnou sadu 8 workspace nástrojů (3 web + 5 system).
+                if detect_workspace_request(user_prompt):
+                    req_config["llama"]["function_calling"] = True
+                    req_config["llama"]["online_mode"] = True
+                    req_config["llama"]["rag_enabled"] = True
+                    active_tools = req_config["llama"].get("active_tools")
+                    if active_tools is not None:
+                        req_config["llama"]["active_tools"] = sorted(
+                            set(active_tools) | set(WORKSPACE_AGENT_TOOL_NAMES)
+                        )
+                    ws_status = (
+                        "● [AGENT] Workspace request: ReAct loop enabled (8 tools)…"
+                        if req_lang == "en"
+                        else "● [AGENT] Workspace dotaz: aktivuji ReAct smyčku (8 nástrojů)…"
+                    )
+                    event_queue.put({"type": "status", "content": ws_status})
 
             def _on_token(token: str):
                 event_queue.put({"type": "token", "content": token, "chunk": token})

@@ -456,6 +456,55 @@ ANALYSIS_MODE_PATTERNS = {
         r"\b(vyvrať\s+mi\s+to|falsifikuj|popperovsk[a-ž]+\s+falsifikac[a-ž]*|falsifikačn[a-ž]+\s+kritéri[a-ž]*)\b",
     ],
 }
+# ============================================================================
+# AGENTNÍ WORKSPACE DETECE (práce se soubory / kódem / projektem)
+# ============================================================================
+# Dotazy obsahující tato klíčová slova MUSÍ být v režimu Auto vždy směrovány
+# do agentního režimu (function calling + workspace nástroje) a NIKDY
+# nespadnout do fallbacku „Vypnuto (Standardní chat)“.
+WORKSPACE_QUERY_PATTERNS = [
+    # Česky – soubory, složky, projekt, kód
+    r"\bsoubor\w*",
+    r"\bsložk\w*|\bslozk\w*",
+    r"\badresář\w*|\badresar\w*",
+    r"\bprojekt\w*",
+    r"\bstruktur\w*",
+    r"\bvytvoř\w*|\bvytvor\w*|\bvytvář\w*",
+    r"\bkód\w*|\bkod\w*",
+    r"\bskript\w*",
+    r"\brepozit[áa]ř\w*|\bworkspace\b",
+    # Anglicky – files, folders, project, code, script
+    r"\bfiles?\b|\bfolders?\b|\bdirector(?:y|ies)\b",
+    r"\bprojects?\b|\bstructures?\b",
+    r"\bcodes?\b|\bscripts?\b|\bcodebase\b",
+    r"\brepositor(?:y|ies)\b",
+    # Cesty a přípony souborů (vytvoř v src/pages/index.astro …)
+    r"\b(?:src|public|app|pages|components|lib|docs)/",
+    r"\.(?:astro|py|js|jsx|ts|tsx|json|md|html|css|scss|sh|yml|yaml|toml|sql|php|rs|go|java|cpp|cs)\b",
+]
+
+
+def detect_workspace_request(prompt: str) -> bool:
+    """Rozpozná dotaz cílící na práci se soubory, kódem nebo projektem.
+
+    Detekce se vztahuje POUZE na text uživatele – pokud prompt obsahuje
+    marker „DOTAZ UŽIVATELE:“ (web server vkládá RAG kontext), odřízne se
+    cizí dokumentový kontext, aby klíčová slova z nahraných souborů
+    neaktivovala agentní režim falešně.
+    """
+    text = (prompt or "").strip()
+    if not text:
+        return False
+
+    if "DOTAZ UŽIVATELE:" in text:
+        text = text.split("DOTAZ UŽIVATELE:", 1)[1].strip()
+    elif "<untrusted_context>" in text:
+        # Cizí dokumentový kontext bez markeru – jeho obsah se ignoruje.
+        text = re.sub(r"<untrusted_context>.*?</untrusted_context>", " ", text, flags=re.DOTALL)
+
+    clean_p = text.lower()
+    return any(re.search(pattern, clean_p, re.IGNORECASE) for pattern in WORKSPACE_QUERY_PATTERNS)
+
 
 ANALYTICAL_ROUTER_SYSTEM_PROMPT = (
     "Jsi bleskový router analytických metodik. Rozhodni, zda dotaz vyžaduje jeden ze 3 expertních frameworků:\n"
@@ -501,6 +550,13 @@ def detect_analytical_mode(
                 break
         if res_key:
             break
+
+    # 1b. AGENTNÍ WORKSPACE REŽIM – dotazy s prací se soubory/kódem/projektem
+    #     nikdy nespadnou do standardního chatu; směrují se na kódový framework
+    #     First Principles a zachovají aktivní function calling (nástroje).
+    if not res_key and detect_workspace_request(prompt):
+        res_key = "first_principles"
+        logging.info("Analytický router: workspace/kód dotaz -> first_principles (agentní režim)")
 
     # 2. Blesková klasifikace modelem (pokud je explicitně vyžádána v režimu Auto)
     if not res_key and allow_llm_classifier and llm is not None:
@@ -994,31 +1050,73 @@ def initialize_llama(config: dict) -> Llama:
         raise
 
 
+# Předpony běžných matematických dotazů (odříznou se před vyhodnocením).
+_MATH_LEAD_IN_RE = re.compile(
+    r"^\s*(?:kolik\s+(?:je|bude|by\s+bylo|stojí)|vypočít[áa]j|vypočti|spočít[áa]j|spočti|"
+    r"vypocitej|vypocti|spocitej|spocti|calculate|compute|what(?:'s|\s+is)|"
+    r"how\s+much\s+is|rovná\s+se|=)\s*",
+    re.IGNORECASE,
+)
+# Po normalizaci musí být výraz tvořen POUZE číslicemi, operátory, závorkami
+# a desetinnou tečkou – žádná písmena (klíčové pro odmítnutí běžného textu).
+_MATH_EXPR_RE = re.compile(r"^[-+*/()0-9\s.]+$")
+
+
 def _try_evaluate_math(prompt: str) -> str | None:
-    """Rozpozná a spočítá jednoduchý matematický výraz v textu."""
-    clean = prompt.lower().replace('mínus', '-').replace('plus', '+').replace('krát', '*').replace('děleno', '/').replace('x', '*')
-    match = re.search(r'(-?\d+)\s*([+\-*/])\s*(-?\d+)', clean)
-    if match:
-        try:
-            num1 = float(match.group(1))
-            op = match.group(2)
-            num2 = float(match.group(3))
-            if op == '+':
-                res = num1 + num2
-            elif op == '-':
-                res = num1 - num2
-            elif op == '*':
-                res = num1 * num2
-            elif op == '/':
-                if num2 == 0:
-                    return "Dělení nulou není povoleno."
-                res = num1 / num2
-            if res.is_integer():
-                res = int(res)
-            return f"Výsledek je {res}."
-        except Exception:
-            return None
-    return None
+    """Rozpozná a spočítá jednoduchý matematický výraz v textu.
+
+    Aktivuje se výhradně tehdy, když je celý dotaz (po ořezání předpony
+    jako „kolik je“ či „vypočítej“) prakticky čistým aritmetickým výrazem.
+    Nikdy tak nereaguje na čísla náhodně obsažená v RAG kontextu, historii
+    nebo běžném textu (dříve tak vznikaly falešné odpovědi „Výsledek je 0.“).
+    """
+    text = (prompt or "").strip()
+    if not text:
+        return None
+
+    # Web server vkládá před uživatelův dotaz RAG blok zakončený markerem.
+    if "DOTAZ UŽIVATELE:" in text:
+        text = text.split("DOTAZ UŽIVATELE:", 1)[1].strip()
+    elif "<untrusted_context>" in text or "[Úsek" in text:
+        # Cizí kontext bez markeru – kalkulačka se nesmí aktivovat.
+        return None
+
+    text = _MATH_LEAD_IN_RE.sub("", text, count=1).strip()
+    text = text.strip("?=! \t")
+    if not text:
+        return None
+
+    clean = (
+        text.lower()
+        .replace("mínus", "-").replace("minus", "-")
+        .replace("plus", "+")
+        .replace("krát", "*").replace("krat", "*")
+        .replace("děleno", "/").replace("deleno", "/")
+        .replace(",", ".")
+    )
+    # „x“ jako násobič jen mezi číslicemi (6x7), nikoli v běžném textu.
+    clean = re.sub(r"(?<=\d)\s*[x×]\s*(?=\d)", "*", clean)
+
+    if not _MATH_EXPR_RE.fullmatch(clean):
+        return None
+
+    try:
+        # `clean` prošel přísným fullmatchem (pouze číslice a operátory),
+        # takže eval nemůže interpretovat nic jiného než aritmetiku.
+        res = eval(clean, {"__builtins__": {}}, {})  # noqa: S307
+    except ZeroDivisionError:
+        return "Dělení nulou není povoleno."
+    except Exception:
+        return None
+
+    if isinstance(res, bool) or not isinstance(res, (int, float)):
+        return None
+    if isinstance(res, float):
+        if res.is_integer():
+            res = int(res)
+        else:
+            res = round(res, 10)
+    return f"Výsledek je {res}."
 
 
 
@@ -2580,6 +2678,13 @@ TOOL_CATEGORIES: dict[str, str] = {
 BLENDER_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "3d"}
 WEB_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "web"}
 SYSTEM_TOOL_NAMES: set[str] = {name for name, cat in TOOL_CATEGORIES.items() if cat == "system"}
+
+# Agentní sada workspace nástrojů (ReAct smyčka): všech 8 non-3D nástrojů –
+# web/rešerše (3) + systémové souborové nástroje (5). Používá se k vynucení
+# aktivní sady při dotazech rozpoznaných jako práce se soubory/kódem.
+WORKSPACE_AGENT_TOOL_NAMES: list[str] = sorted(
+    name for name, cat in TOOL_CATEGORIES.items() if cat in ("web", "system")
+)
 
 STANDARD_CHAT_PRESETS = {
     "standard",
