@@ -12,6 +12,7 @@ from llama_module import (
     reset_workspace_dir,
     set_workspace_dir,
     validate_workspace_path,
+    apply_workspace_write_proposal,
 )
 
 
@@ -66,7 +67,9 @@ class WorkspaceToolsTests(unittest.TestCase):
             "write_file",
             {"file_path": relative_file, "content": "first needle_token\nsecond line\n"},
         )
-        self.assertEqual(write_result["status"], "success")
+        self.assertEqual(write_result["status"], "proposal")
+        self.assertIn("proposal", write_result)
+        apply_workspace_write_proposal(write_result["proposal"])
         self.assertEqual(
             Path(get_workspace_dir(), relative_file).read_text(encoding="utf-8"),
             "first needle_token\nsecond line\n",

@@ -2716,49 +2716,50 @@ def parse_tool_call(text: str) -> dict[str, Any] | None:
         return None
 
     clean = text.strip()
+    # Text před vyříznutým blokem (pro detekci `nazev_nastroje ```json {…}````)
+    outer_prefix = ""
 
     # 1. Kontrola XML obalu (<tool_call>...</tool_call> nebo <function_call>...</function_call>)
     xml_match = re.search(r"<(?:tool_call|function_call)>(.*?)</(?:tool_call|function_call)>", clean, re.DOTALL | re.IGNORECASE)
     if xml_match:
+        outer_prefix = clean[: xml_match.start()]
         clean = xml_match.group(1).strip()
 
     # 2. Kontrola Markdown bloku ```json ... ``` nebo ``` ... ```
-    md_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL | re.IGNORECASE)
+    md_match = re.search(r"```(?:json)?\s*(.*?\{.*?\})\s*```", clean, re.DOTALL | re.IGNORECASE)
     if md_match:
+        outer_prefix = outer_prefix + " " + clean[: md_match.start()]
         clean = md_match.group(1).strip()
 
-    # 3. Vyhledání JSON objektu v textu
-    candidates = []
-    if clean.startswith("{") and clean.endswith("}"):
-        candidates.append(clean)
-    else:
-        start_idx = clean.find("{")
-        while start_idx != -1:
-            depth = 0
-            in_string = False
-            escape = False
-            for i in range(start_idx, len(clean)):
-                char = clean[i]
-                if in_string:
-                    if escape:
-                        escape = False
-                    elif char == "\\":
-                        escape = True
-                    elif char == '"':
-                        in_string = False
-                else:
-                    if char == '"':
-                        in_string = True
-                    elif char == "{":
-                        depth += 1
-                    elif char == "}":
-                        depth -= 1
-                        if depth == 0:
-                            candidates.append(clean[start_idx : i + 1])
-                            break
-            start_idx = clean.find("{", start_idx + 1)
+    # 3. Vyhledání JSON objektů v textu: (index začátku, kandidát)
+    candidates: list[tuple[int, str]] = []
+    start_idx = clean.find("{")
+    while start_idx != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start_idx, len(clean)):
+            char = clean[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+            else:
+                if char == '"':
+                    in_string = True
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidates.append((start_idx, clean[start_idx : i + 1]))
+                        break
+        start_idx = clean.find("{", start_idx + 1)
 
-    for cand in candidates:
+    for cand_start, cand in candidates:
         try:
             data = json.loads(cand)
             if not isinstance(data, dict):
@@ -2790,6 +2791,16 @@ def parse_tool_call(text: str) -> dict[str, Any] | None:
                 tool_name = data["function"]
                 tool_args = data.get("arguments", {})
 
+            # Formát `nazev_nastroje {"arg": "val"}` – název leží těsně před složenou závorkou
+            if not (isinstance(tool_name, str) and tool_name.strip() in ALLOWED_TOOL_NAMES):
+                preceding = clean[:cand_start]
+                if not preceding.strip(_BARE_TOOL_SEPARATORS):
+                    preceding = outer_prefix
+                bare_name = _extract_preceding_tool_name(preceding)
+                if bare_name:
+                    tool_name = bare_name
+                    tool_args = data
+
             if not tool_name or not isinstance(tool_name, str):
                 continue
 
@@ -2813,6 +2824,42 @@ def parse_tool_call(text: str) -> dict[str, Any] | None:
             continue
 
     return None
+
+
+# Znaky, které mohou oddělovat holý název nástroje od JSON argumentů
+_BARE_TOOL_SEPARATORS = " \t\r\n`'\":"
+
+
+def _extract_preceding_tool_name(preceding: str) -> str | None:
+    """Vrátí schválený název nástroje stojící bezprostředně před `{` (jinak None)."""
+    tail = (preceding or "").rstrip(_BARE_TOOL_SEPARATORS)
+    match = re.search(r"([A-Za-z_][A-Za-z0-9_]*)$", tail)
+    if not match:
+        return None
+    name = match.group(1)
+    return name if name in ALLOWED_TOOL_NAMES else None
+
+
+def classify_bare_tool_call_prefix(text: str) -> str:
+    """
+    Klasifikuje začátek streamu pro formát `nazev_nastroje {…}`:
+    - "yes"   – schválený název následovaný `{`
+    - "maybe" – zatím neúplné (prefix názvu nebo název čekající na `{`)
+    - "no"    – nejde o holé volání nástroje
+    """
+    s = (text or "").lstrip(_BARE_TOOL_SEPARATORS)
+    match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)(.*)$", s, re.DOTALL)
+    if not match:
+        return "no"
+    word, rest = match.group(1), match.group(2)
+    if not rest:
+        return "maybe" if any(name.startswith(word) for name in ALLOWED_TOOL_NAMES) else "no"
+    if word not in ALLOWED_TOOL_NAMES:
+        return "no"
+    rest = rest.lstrip(_BARE_TOOL_SEPARATORS)
+    if not rest:
+        return "maybe"
+    return "yes" if rest.startswith("{") else "no"
 
 
 class UnifiedToolDispatcher:
@@ -5857,7 +5904,11 @@ def generate_response(
                 if not stripped:
                     continue
                 tool_prefixes = ("{", "<", "```", "tool_call", "function_call")
-                if stripped.startswith(tool_prefixes) or any(
+                bare_state = classify_bare_tool_call_prefix(stripped)
+                if bare_state == "maybe":
+                    # Možný začátek `nazev_nastroje {…}` – čekáme na další tokeny
+                    continue
+                if bare_state == "yes" or stripped.startswith(tool_prefixes) or any(
                     prefix.startswith(stripped) for prefix in tool_prefixes
                 ):
                     is_tool_candidate = True
@@ -5924,6 +5975,12 @@ def generate_response(
                 "type": "function",
                 "function": streamed_function_call,
             }, ensure_ascii=False))
+
+        if is_tool_candidate is None and first_turn_buffer and not tool_call_detected:
+            # Stream skončil ve stavu "maybe" (např. jen slovo podobné názvu nástroje)
+            is_tool_candidate = False
+            emit_answer_token(first_turn_buffer)
+            sentence_buffer += first_turn_buffer
 
         if not is_tool_candidate:
             final_chunks, _ = extract_sentence_chunks(sentence_buffer, is_final=True)
