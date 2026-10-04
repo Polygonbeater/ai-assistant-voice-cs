@@ -73,6 +73,12 @@
     workspacePath: '',
     workspaceIsDefault: true,
     pendingWorkspaceDiff: null,
+
+    // Projects
+    projects: [],
+    activeProject: null,
+    quickDirs: [],
+    isBrowsingFolder: false,
   };
 
   let lastKnownBlenderCode = "";
@@ -346,6 +352,26 @@
     btnNewChat: document.getElementById('btn-new-chat'),
     sessionSearch: document.getElementById('session-search-input'),
     sessionsContainer: document.getElementById('sessions-container'),
+
+    // Projects
+    btnNewProject: document.getElementById('btn-new-project'),
+    btnActiveProject: document.getElementById('btn-active-project'),
+    btnNewProjectChat: document.getElementById('btn-new-project-chat'),
+    activeProjectName: document.getElementById('active-project-name'),
+    activeProjectPath: document.getElementById('active-project-path'),
+    projectsContainer: document.getElementById('projects-container'),
+    modalProject: document.getElementById('modal-project'),
+    btnCloseProjectModal: document.getElementById('btn-close-project-modal'),
+    btnCancelProject: document.getElementById('btn-cancel-project'),
+    btnSubmitProject: document.getElementById('btn-submit-project'),
+    projectPathInput: document.getElementById('project-path-input'),
+    projectNameInput: document.getElementById('project-name-input'),
+    projectCreateCheckbox: document.getElementById('project-create-checkbox'),
+    projectPathHint: document.getElementById('project-path-hint'),
+    projectStatus: document.getElementById('project-status'),
+    projectRecentList: document.getElementById('project-recent-list'),
+    btnBrowseFolder: document.getElementById('btn-browse-folder'),
+    projectQuickDirsList: document.getElementById('project-quick-dirs-list'),
 
     // Inspector Tabs & Panes
     tabBtn3d: document.getElementById('tab-btn-3d'),
@@ -624,6 +650,39 @@
       unnamed_session: 'Untitled conversation',
       delete_session_title: 'Delete session',
 
+      section_projects: 'PROJECTS',
+      section_recent_projects: 'RECENT PROJECTS',
+      project_new_title: 'New / Open project',
+      project_change_title: 'Change active project',
+      project_new_chat_title: 'New conversation in the active project',
+      project_modal_title: 'New / Open project',
+      project_path_label: 'Project directory',
+      project_path_placeholder: '/home/user/my-project',
+      project_path_hint: 'Absolute path or relative to your home folder (~).',
+      project_name_label: 'Project name (optional)',
+      project_name_placeholder: 'My project',
+      project_create_checkbox: 'Create folder if it does not exist',
+      project_recent_title: 'RECENT PROJECTS',
+      project_submit: 'Open project',
+      project_switch: 'Switch to this project',
+      project_no_recent: 'No recent projects yet.',
+      project_opening: 'Opening project…',
+      project_opened: 'Project "{name}" is now active.',
+      project_switched: 'Switched to project "{name}".',
+      project_create_error: 'Project could not be created: {error}',
+      project_count_label: '{count} conversations',
+      project_missing_dir: 'folder missing',
+      project_browse: 'Browse…',
+      project_browse_title: 'Choose a folder with the system dialog',
+      project_browsing: 'Opening folder picker…',
+      project_browse_cancelled: 'Folder selection cancelled.',
+      project_browse_selected: 'Selected folder: {path}',
+      project_browse_error: 'Folder picker failed: {error}',
+      project_quick_dirs: 'QUICK FOLDERS',
+      project_quick_home: '~ Home',
+      project_quick_workspace: 'Current workspace',
+      project_quick_projects: 'Projects folder',
+
       chat_loading: 'Loading...',
       click_to_rename: 'Click to rename session',
       chat_tools_count: '22 Tools Active',
@@ -875,6 +934,7 @@
       run_in_blender_short: 'Run in Blender',
       run_in_blender_title: 'Execute script directly in Blender',
       diff_identical: 'Code is identical to the last known script.',
+      close: 'Close',
       btn_close: 'Close',
     },
     cs: {
@@ -897,6 +957,39 @@
       no_sessions: 'Žádné relace.',
       unnamed_session: 'Nepojmenovaná relace',
       delete_session_title: 'Smazat relaci',
+
+      section_projects: 'PROJEKTY',
+      section_recent_projects: 'NEDÁVNÉ PROJEKTY',
+      project_new_title: 'Nový / Otevřít projekt',
+      project_change_title: 'Změnit aktivní projekt',
+      project_new_chat_title: 'Nová konverzace v aktivním projektu',
+      project_modal_title: 'Nový / Otevřít projekt',
+      project_path_label: 'Adresář projektu',
+      project_path_placeholder: '/home/uzivatel/muj-projekt',
+      project_path_hint: 'Absolutní cesta nebo cesta relativní k domovské složce (~).',
+      project_name_label: 'Název projektu (volitelné)',
+      project_name_placeholder: 'Můj projekt',
+      project_create_checkbox: 'Vytvořit složku, pokud neexistuje',
+      project_recent_title: 'NEDÁVNÉ PROJEKTY',
+      project_submit: 'Otevřít projekt',
+      project_switch: 'Přepnout na tento projekt',
+      project_no_recent: 'Zatím žádné nedávné projekty.',
+      project_opening: 'Otevírám projekt…',
+      project_opened: 'Projekt „{name}“ je nyní aktivní.',
+      project_switched: 'Přepnuto na projekt „{name}“.',
+      project_create_error: 'Projekt nelze vytvořit: {error}',
+      project_count_label: '{count} konverzací',
+      project_missing_dir: 'složka chybí',
+      project_browse: 'Procházet…',
+      project_browse_title: 'Vybrat složku pomocí systémového dialogu',
+      project_browsing: 'Otevírám výběr složky…',
+      project_browse_cancelled: 'Výběr složky byl zrušen.',
+      project_browse_selected: 'Vybraná složka: {path}',
+      project_browse_error: 'Výběr složky se nezdařil: {error}',
+      project_quick_dirs: 'RYCHLÉ SLOŽKY',
+      project_quick_home: '~ Domov',
+      project_quick_workspace: 'Aktuální workspace',
+      project_quick_projects: 'Složka s projekty',
 
       chat_loading: 'Načítám...',
       click_to_rename: 'Klikněte pro přejmenování relace',
@@ -1149,6 +1242,7 @@
       run_in_blender_short: 'Spustit v Blenderu',
       run_in_blender_title: 'Spustit skript přímo v Blenderu',
       diff_identical: 'Kód je identický s naposledy evidovaným skriptem.',
+      close: 'Zavřít',
       btn_close: 'Zavřít',
     }
   };
@@ -1298,6 +1392,10 @@
 
     applyTranslations(lang);
     renderSessionsList();
+    renderProjects();
+    if (el.modalProject && el.modalProject.style.display !== 'none') {
+      renderProjectRecentList();
+    }
     updateActiveToolsBadge();
     if (el.modalTools && el.modalTools.style.display !== 'none') {
       renderToolsInspector();
@@ -2382,7 +2480,10 @@
       renderSessionsList();
 
       if (state.sessions.length > 0) {
-        const first = state.sessions[0];
+        // Prefer a conversation that belongs to the currently active project.
+        const projectSessions = sessionsForActiveProject();
+        const pool = projectSessions.length > 0 ? projectSessions : state.sessions;
+        const first = pool[0];
         const idToSelect = targetSelectId || state.sessionId || (first ? (first.session_id || first.id) : null);
         await selectSession(idToSelect);
       } else {
@@ -2398,7 +2499,7 @@
     el.sessionsContainer.innerHTML = '';
 
     const query = filterText.toLowerCase().trim();
-    const filtered = state.sessions.filter(s => {
+    const filtered = sessionsForActiveProject().filter(s => {
       return !query || (s.title && s.title.toLowerCase().includes(query));
     });
 
@@ -2454,6 +2555,373 @@
     });
   }
 
+  // ===========================================================================
+  // PROJECTS MANAGEMENT
+  // ===========================================================================
+  function normalizeProjectPath(path) {
+    if (!path) return '';
+    return String(path).replace(/[\\/]+$/, '') || '/';
+  }
+
+  function projectNameFromPath(path) {
+    return (path || '').split(/[\\/]/).filter(Boolean).pop() || path || '';
+  }
+
+  function sessionsForActiveProject() {
+    const activePath = normalizeProjectPath(state.activeProject?.path || state.workspacePath);
+    if (!activePath) return state.sessions;
+    return state.sessions.filter(s => normalizeProjectPath(s.workspace_path) === activePath);
+  }
+
+  function setActiveProjectDisplay() {
+    const project = state.activeProject;
+    if (el.activeProjectName) {
+      el.activeProjectName.textContent = project?.name || '—';
+    }
+    if (el.activeProjectPath) {
+      el.activeProjectPath.textContent = project?.path || '';
+      el.activeProjectPath.title = project?.path || '';
+    }
+    if (el.workspaceHeaderBadge && project) {
+      el.workspaceHeaderBadge.textContent = t('workspace_active', { name: project.name });
+      el.workspaceHeaderBadge.title = project.path;
+    }
+  }
+
+  function renderProjects() {
+    setActiveProjectDisplay();
+    if (!el.projectsContainer) return;
+    el.projectsContainer.innerHTML = '';
+
+    const projects = state.projects || [];
+    if (projects.length === 0) return;
+
+    const activePath = normalizeProjectPath(state.activeProject?.path);
+
+    projects.forEach(project => {
+      const projectPath = normalizeProjectPath(project.path);
+      const isActive = projectPath === activePath;
+
+      const item = document.createElement('div');
+      item.className = `project-item ${isActive ? 'active' : ''}`;
+      item.dataset.path = project.path;
+      item.title = isActive ? project.path : t('project_switch');
+
+      const missing = project.exists === false ? ` • ${t('project_missing_dir')}` : '';
+
+      item.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>
+        <div class="project-item-main">
+          <div class="project-item-name">${escapeHtml(project.name || project.path)}</div>
+          <div class="project-item-meta">${escapeHtml(project.path + missing)}</div>
+        </div>
+        <span class="project-item-count">${project.conversation_count || 0}</span>
+      `;
+
+      item.addEventListener('click', () => {
+        if (isActive) return;
+        switchProject(project.path);
+      });
+
+      el.projectsContainer.appendChild(item);
+    });
+  }
+
+  function renderProjectRecentList() {
+    if (!el.projectRecentList) return;
+    el.projectRecentList.innerHTML = '';
+
+    const projects = state.projects || [];
+    if (projects.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'project-recent-empty';
+      empty.textContent = t('project_no_recent');
+      el.projectRecentList.appendChild(empty);
+      return;
+    }
+
+    projects.forEach(project => {
+      const item = document.createElement('div');
+      item.className = `project-item ${project.is_active ? 'active' : ''}`;
+      item.title = project.is_active ? project.path : t('project_switch');
+      item.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>
+        <div class="project-item-main">
+          <div class="project-item-name">${escapeHtml(project.name || project.path)}</div>
+          <div class="project-item-meta">${escapeHtml(project.path)}</div>
+        </div>
+        <span class="project-item-count">${project.conversation_count || 0}</span>
+      `;
+
+      item.addEventListener('click', () => {
+        if (project.is_active) {
+          closeProjectModal();
+          return;
+        }
+        switchProject(project.path, { closeModal: true });
+      });
+
+      el.projectRecentList.appendChild(item);
+    });
+  }
+
+  async function loadProjects() {
+    try {
+      const res = await fetch('/api/projects');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      state.projects = data.projects || [];
+      if (data.active && data.active.path) {
+        state.activeProject = { name: data.active.name, path: data.active.path };
+      }
+      renderProjects();
+      return data;
+    } catch (err) {
+      logConsole(`Error loading projects: ${err.message}`, 'error');
+      return null;
+    }
+  }
+
+  function setProjectStatus(message, kind = '') {
+    if (!el.projectStatus) return;
+    el.projectStatus.textContent = message;
+    el.projectStatus.className = `project-status ${kind}`.trim();
+  }
+
+  async function loadQuickDirs() {
+    try {
+      const res = await fetch('/api/fs/quick-dirs');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      state.quickDirs = Array.isArray(data.dirs) ? data.dirs : [];
+    } catch (err) {
+      state.quickDirs = [];
+      logConsole(`Error loading quick folders: ${err.message}`, 'warn');
+    }
+    renderQuickDirs();
+  }
+
+  // Kořenové složky naposledy použitých projektů (rodiče jejich cest)
+  function recentProjectRoots(limit = 4) {
+    const roots = [];
+    const seen = new Set();
+    (state.projects || []).forEach(project => {
+      const path = ((project && project.path) || '').trim().replace(/\/+$/, '');
+      if (!path || path === '/' || path === '~') return;
+      const parent = path.split('/').slice(0, -1).join('/') || '/';
+      if (!parent || parent === '/' || seen.has(parent)) return;
+      seen.add(parent);
+      roots.push(parent);
+    });
+    return roots.slice(0, limit);
+  }
+
+  function createQuickDirChip(path, label) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'project-quick-dir-chip';
+    chip.title = path;
+    chip.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>
+      <span>${escapeHtml(label)}</span>
+    `;
+    chip.addEventListener('click', () => {
+      if (el.projectPathInput) {
+        el.projectPathInput.value = path;
+        el.projectPathInput.focus();
+      }
+      if (el.projectStatus) {
+        el.projectStatus.textContent = '';
+        el.projectStatus.className = 'project-status';
+      }
+    });
+    return chip;
+  }
+
+  function renderQuickDirs() {
+    if (!el.projectQuickDirsList) return;
+    el.projectQuickDirsList.innerHTML = '';
+
+    const seen = new Set();
+    const homeEntry = (state.quickDirs || []).find(dir => dir && dir.key === 'home');
+    const homePath = (homeEntry && homeEntry.path) || '';
+    const add = (path, label) => {
+      const value = (path || '').trim();
+      if (!value || seen.has(value)) return;
+      if (homePath && value === homePath) return; // domov je už pokrytý odkazem ~
+      seen.add(value);
+      el.projectQuickDirsList.appendChild(createQuickDirChip(value, label));
+    };
+
+    // 1) Domovská složka (~) – vždy první
+    seen.add('~');
+    el.projectQuickDirsList.appendChild(createQuickDirChip('~', t('project_quick_home')));
+
+    // 2) Bezpečné výchozí složky z backendu
+    (state.quickDirs || []).forEach(dir => {
+      if (!dir || !dir.path || dir.key === 'home') return;
+      let label = dir.label || dir.path;
+      if (dir.key === 'workspace') label = t('project_quick_workspace');
+      if (dir.key === 'projects') label = t('project_quick_projects');
+      add(dir.path, label);
+    });
+
+    // 3) Naposledy použité kořenové složky
+    recentProjectRoots().forEach(root => add(root, root));
+  }
+
+  async function browseFolder() {
+    if (state.isBrowsingFolder) return;
+    state.isBrowsingFolder = true;
+    const button = el.btnBrowseFolder;
+    if (button) {
+      button.disabled = true;
+      button.classList.add('loading');
+      const label = button.querySelector('.project-browse-btn-label');
+      if (label) label.textContent = t('project_browsing');
+    }
+    setProjectStatus(t('project_browsing'));
+
+    try {
+      const res = await fetch('/api/projects/browse-folder', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+      if (data.status !== 'success' || !data.path) {
+        setProjectStatus(t('project_browse_cancelled'));
+        return;
+      }
+
+      if (el.projectPathInput) el.projectPathInput.value = data.path;
+      // Předvyplnění názvu projektu podle vybrané složky (jen pokud je pole prázdné)
+      const base = String(data.path).replace(/\/+$/, '').split('/').filter(Boolean).pop();
+      if (el.projectNameInput && !el.projectNameInput.value.trim() && base) {
+        el.projectNameInput.value = base;
+      }
+      setProjectStatus(t('project_browse_selected', { path: data.path }), 'success');
+      logConsole(t('project_browse_selected', { path: data.path }), 'info');
+      if (el.projectPathInput) el.projectPathInput.focus();
+    } catch (err) {
+      setProjectStatus(t('project_browse_error', { error: err.message }), 'error');
+      logConsole(t('project_browse_error', { error: err.message }), 'error');
+    } finally {
+      state.isBrowsingFolder = false;
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('loading');
+        const label = button.querySelector('.project-browse-btn-label');
+        if (label) label.textContent = t('project_browse');
+      }
+    }
+  }
+
+  function openProjectModal() {
+    if (!el.modalProject) return;
+    if (el.projectPathInput) {
+      el.projectPathInput.value = state.activeProject?.path || state.workspacePath || '';
+    }
+    if (el.projectNameInput) el.projectNameInput.value = '';
+    if (el.projectCreateCheckbox) el.projectCreateCheckbox.checked = true;
+    if (el.projectStatus) {
+      el.projectStatus.textContent = '';
+      el.projectStatus.className = 'project-status';
+    }
+    if (el.projectPathHint) el.projectPathHint.textContent = t('project_path_hint');
+    renderProjectRecentList();
+    renderQuickDirs();
+    loadQuickDirs();
+    el.modalProject.style.display = 'flex';
+    if (el.projectPathInput) {
+      el.projectPathInput.focus();
+      el.projectPathInput.select();
+    }
+  }
+
+  function closeProjectModal() {
+    if (el.modalProject) el.modalProject.style.display = 'none';
+  }
+
+  async function submitProject() {
+    const path = el.projectPathInput?.value.trim() || '';
+    const name = el.projectNameInput?.value.trim() || '';
+    const createIfMissing = el.projectCreateCheckbox ? el.projectCreateCheckbox.checked : true;
+
+    const setStatus = setProjectStatus;
+
+    if (!path) {
+      setStatus(state.language === 'cs' ? 'Zadejte cestu k adresáři projektu.' : 'Enter a project directory path.', 'error');
+      return;
+    }
+
+    const button = el.btnSubmitProject;
+    if (button) button.disabled = true;
+    setStatus(t('project_opening'));
+
+    try {
+      const body = { path, create_if_missing: createIfMissing };
+      if (name) body.name = name;
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status !== 'success') {
+        throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      }
+
+      state.activeProject = { name: data.project.name, path: data.project.path };
+      closeProjectModal();
+      logConsole(t('project_opened', { name: data.project.name }), 'info');
+      await loadProjects();
+      await loadSessions(data.session_id);
+      try {
+        await refreshWorkspaceStatus({ syncInput: true });
+      } catch (err) { /* status refresh is best effort */ }
+    } catch (err) {
+      setStatus(t('project_create_error', { error: err.message }), 'error');
+      logConsole(t('project_create_error', { error: err.message }), 'error');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function switchProject(path, { closeModal = false } = {}) {
+    if (state.isStreaming) {
+      logConsole(state.language === 'cs' ? 'Během generování nelze přepínat projekty.' : 'Cannot switch projects while generation is in progress.', 'warn');
+      return;
+    }
+    if (!path) return;
+
+    try {
+      const res = await fetch('/api/projects/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status !== 'success') {
+        throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      }
+
+      state.activeProject = { name: data.project.name, path: data.project.path };
+      if (closeModal) closeProjectModal();
+      logConsole(t('project_switched', { name: data.project.name }), 'info');
+      await loadProjects();
+      await loadSessions(data.session_id);
+      try {
+        await refreshWorkspaceStatus({ syncInput: true });
+      } catch (err) { /* status refresh is best effort */ }
+    } catch (err) {
+      const message = t('project_create_error', { error: err.message });
+      if (el.projectStatus) {
+        el.projectStatus.textContent = message;
+        el.projectStatus.className = 'project-status error';
+      }
+      logConsole(message, 'error');
+    }
+  }
+
   async function createNewSession() {
     if (state.isStreaming) {
       logConsole('Cannot create a new session while generation is in progress.', 'warn');
@@ -2468,6 +2936,7 @@
       const sid = newSess.session_id || newSess.id;
       await selectSession(sid);
       renderSessionsList();
+      loadProjects();
       logConsole(`Session created: ${sid}`, 'info');
       el.promptInput.focus();
     } catch (err) {
@@ -2508,6 +2977,19 @@
         return;
       }
       
+      // Keep the active project in sync with the opened conversation.
+      if (data.workspace_path) {
+        const currentPath = normalizeProjectPath(state.activeProject?.path);
+        if (normalizeProjectPath(data.workspace_path) !== currentPath) {
+          state.activeProject = {
+            name: data.project_name || projectNameFromPath(data.workspace_path),
+            path: data.workspace_path,
+          };
+          renderProjects();
+          renderSessionsList(el.sessionSearch ? el.sessionSearch.value : '');
+        }
+      }
+
       const current = state.sessions.find(s => (s.session_id === sessionId || s.id === sessionId));
       if (el.activeSessionTitle) {
         el.activeSessionTitle.textContent = current ? (current.title || t('unnamed_session')) : t('new_chat_title');
@@ -4100,8 +4582,11 @@ print(f"Active object: {act.name if act else 'None'}")
     }
 
     const folderName = state.workspacePath.split(/[\\/]/).filter(Boolean).pop() || state.workspacePath;
+    const projectMatchesWorkspace = state.activeProject
+      && normalizeProjectPath(state.activeProject.path) === normalizeProjectPath(state.workspacePath);
+    const displayName = projectMatchesWorkspace ? state.activeProject.name : folderName;
     if (el.workspaceHeaderBadge) {
-      el.workspaceHeaderBadge.textContent = t('workspace_active', { name: folderName || '—' });
+      el.workspaceHeaderBadge.textContent = t('workspace_active', { name: displayName || '—' });
       el.workspaceHeaderBadge.title = state.workspacePath;
       el.workspaceHeaderBadge.classList.toggle('workspace-header-default', state.workspaceIsDefault);
     }
@@ -4553,6 +5038,32 @@ print(f"Active object: {act.name if act else 'None'}")
     // New conversation button
     if (el.btnNewChat) el.btnNewChat.addEventListener('click', createNewSession);
 
+    // Projects: new/open, active project, modal and recent list
+    if (el.btnNewProject) el.btnNewProject.addEventListener('click', openProjectModal);
+    if (el.btnActiveProject) el.btnActiveProject.addEventListener('click', openProjectModal);
+    if (el.btnNewProjectChat) el.btnNewProjectChat.addEventListener('click', createNewSession);
+    if (el.workspaceHeaderBadge) el.workspaceHeaderBadge.addEventListener('click', openProjectModal);
+    if (el.btnCloseProjectModal) el.btnCloseProjectModal.addEventListener('click', closeProjectModal);
+    if (el.btnCancelProject) el.btnCancelProject.addEventListener('click', closeProjectModal);
+    if (el.btnSubmitProject) el.btnSubmitProject.addEventListener('click', submitProject);
+    if (el.btnBrowseFolder) el.btnBrowseFolder.addEventListener('click', browseFolder);
+    if (el.projectPathInput) {
+      el.projectPathInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitProject();
+        }
+      });
+    }
+    if (el.projectCreateCheckbox) {
+      el.projectCreateCheckbox.addEventListener('change', () => {
+        if (el.projectStatus) {
+          el.projectStatus.textContent = '';
+          el.projectStatus.className = 'project-status';
+        }
+      });
+    }
+
     // Filter sessions search input
     if (el.sessionSearch) {
       el.sessionSearch.addEventListener('input', (e) => {
@@ -4902,6 +5413,7 @@ print(f"Active object: {act.name if act else 'None'}")
       if (e.target === el.modalSettings) closeSettingsModal();
       if (e.target === el.modalBlenderCode) closeBlenderCodeModal();
       if (e.target === el.modalDiff) closeDiffModal();
+      if (e.target === el.modalProject) closeProjectModal();
       if (e.target === el.imageLightbox) el.imageLightbox.style.display = 'none';
     });
 
@@ -4963,6 +5475,7 @@ print(f"Active object: {act.name if act else 'None'}")
         closeToolsModal();
         closeBlenderCodeModal();
         closeDiffModal();
+        closeProjectModal();
         if (el.imageLightbox) el.imageLightbox.style.display = 'none';
       }
     });
@@ -4980,6 +5493,8 @@ print(f"Active object: {act.name if act else 'None'}")
     setupEventListeners();
 
     logConsole(state.language === 'cs' ? 'Inicializuji Polygon Beater Web UI klienta...' : 'Initializing Polygon Beater Web UI client...', 'info');
+    await loadProjects();
+    await loadQuickDirs();
     await loadSessions();
     try {
       await refreshWorkspaceStatus();

@@ -86,7 +86,12 @@ class HistoryRepository:
             pass
         return session_folder
 
-    def create_session(self, title: str = "Nový chat") -> SessionSummary:
+    def create_session(
+        self,
+        title: str = "Nový chat",
+        workspace_path: str | None = None,
+        project_name: str | None = None,
+    ) -> SessionSummary:
         with self._lock:
             session_id = f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:8]}"
             session = {
@@ -96,9 +101,29 @@ class HistoryRepository:
                 "updated_at": self._now(),
                 "messages": [],
             }
+            if workspace_path:
+                session["workspace_path"] = workspace_path
+                session["project_name"] = project_name or Path(workspace_path).name or workspace_path
             self._write_session(session_id, session)
             self.get_session_dir(session_id)
             return self._summary(session)
+
+    def get_session_project(self, session_id: str) -> dict[str, str | None]:
+        """Vrátí vazbu relace na projekt (workspace_path, project_name)."""
+        with self._lock:
+            session = self._read_session(session_id)
+            return {
+                "workspace_path": session.get("workspace_path"),
+                "project_name": session.get("project_name"),
+            }
+
+    def set_session_project(self, session_id: str, workspace_path: str, project_name: str | None = None) -> None:
+        """Přiřadí relaci k projektovému adresáři."""
+        with self._lock:
+            session = self._read_session(session_id)
+            session["workspace_path"] = workspace_path
+            session["project_name"] = project_name or Path(workspace_path).name or workspace_path
+            self._write_session(session_id, session)
 
     def list_sessions(self) -> list[SessionSummary]:
         with self._lock:
@@ -255,6 +280,8 @@ class HistoryRepository:
             "session_id": session["session_id"],
             "title": session["title"],
             "updated_at": session["updated_at"],
+            "workspace_path": session.get("workspace_path"),
+            "project_name": session.get("project_name"),
         }
 
     @staticmethod

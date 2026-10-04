@@ -16,6 +16,7 @@ import queue
 import re
 import shutil
 import signal
+import subprocess
 import tempfile
 import threading
 import time
@@ -46,10 +47,12 @@ from blender_connector import (
 )
 from document_service import ConversationMemoryService, DocumentService
 from history_repository import HistoryRepository
+from project_repository import ProjectPathError, ProjectRepository, clean_project_name, ensure_project_dir, resolve_project_path
 from llama_module import (
     ANALYTICAL_PRESETS,
     DEFAULT_ANALYTICAL_PRESET,
     DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_WORKSPACE_DIR,
     PRESETS_CATALOG,
     OpenAICompatibleClient,
     apply_workspace_write_proposal,
@@ -147,6 +150,7 @@ def get_active_provider_info() -> dict[str, Any]:
 
 # Repositář historie a služeb
 history_repository = HistoryRepository()
+project_repository = ProjectRepository(history_repository.sessions_dir.parent / "projects.json")
 document_service = DocumentService(config=config)
 memory_service = ConversationMemoryService(
     config=config,
@@ -526,21 +530,45 @@ async def open_external_url(req: ExternalUrlRequest, request: Request):
     return {"status": "ok"}
 
 
+def _default_project_path() -> str:
+    return os.path.realpath(DEFAULT_WORKSPACE_DIR)
+
+
+def _session_project_path(s: dict) -> str:
+    """Legacy relace bez vazby patří do výchozího projektu (repozitář asistenta)."""
+    return s.get("workspace_path") or _default_project_path()
+
+
+def _active_project() -> dict[str, str]:
+    path = os.path.realpath(get_workspace_dir())
+    record = project_repository.get(path)
+    return {"path": path, "name": (record or {}).get("name") or clean_project_name(None, path)}
+
+
 def _normalize_session_summary(s: dict) -> dict:
     sid = s.get("session_id") or s.get("id") or ""
+    project_path = _session_project_path(s)
     return {
         "id": sid,
         "session_id": sid,
         "title": s.get("title", "Nový chat"),
         "updated_at": s.get("updated_at", ""),
+        "workspace_path": project_path,
+        "project_name": s.get("project_name") or clean_project_name(None, project_path),
     }
+
+
+def _create_session_in_active_project(title: str) -> dict:
+    project = _active_project()
+    return history_repository.create_session(title, workspace_path=project["path"], project_name=project["name"])
+
 
 @app.get("/api/sessions")
 def list_sessions(request: Request):
     require_loopback_client(request)
     sessions = history_repository.list_sessions()
     if not sessions:
-        new_sess = history_repository.create_session("Nový chat")
+        new_sess = _create_session_in_active_project("Nový chat")
         sessions = [new_sess]
     return {"sessions": [_normalize_session_summary(s) for s in sessions]}
 
@@ -548,8 +576,256 @@ def list_sessions(request: Request):
 def create_session(request: Request, title: str = "New chat"):
     require_loopback_client(request)
     clean_title = (title or "New chat").strip()
-    sess = history_repository.create_session(clean_title)
+    sess = _create_session_in_active_project(clean_title)
     return _normalize_session_summary(sess)
+
+
+# ------------------------------------------------------------------------------
+# Endpoints: Projekty (Projects)
+# ------------------------------------------------------------------------------
+
+class ProjectCreateRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    name: Optional[str] = Field(default=None, max_length=200)
+    create_if_missing: bool = True
+
+
+class ProjectSwitchRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    session_id: Optional[str] = Field(default=None, max_length=128)
+
+
+def _activate_project(path: str, name: Optional[str] = None) -> dict[str, Any]:
+    """Aktivuje workspace projektu a zaeviduje ho mezi nedávné projekty."""
+    try:
+        active_path = set_workspace_dir(path)
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record = project_repository.touch(active_path, name)
+    logger.info("[Projects] Aktivní projekt: %s (%s)", record["name"], active_path)
+    return {"name": record["name"], "path": active_path}
+
+
+@app.get("/api/projects")
+def list_projects(request: Request):
+    require_loopback_client(request)
+    stats: dict[str, dict[str, Any]] = {}
+    for s in history_repository.list_sessions():
+        path = _session_project_path(s)
+        entry = stats.setdefault(path, {"conversation_count": 0, "last_activity": "", "name": s.get("project_name")})
+        entry["conversation_count"] += 1
+        entry["last_activity"] = max(entry["last_activity"], s.get("updated_at") or "")
+
+    projects: dict[str, dict[str, Any]] = {}
+    for record in project_repository.list_projects():
+        projects[record["path"]] = {
+            "name": record.get("name") or clean_project_name(None, record["path"]),
+            "path": record["path"],
+            "last_activity": record.get("last_opened", ""),
+        }
+    for path, entry in stats.items():
+        proj = projects.setdefault(path, {
+            "name": entry["name"] or clean_project_name(None, path),
+            "path": path,
+            "last_activity": "",
+        })
+        proj["last_activity"] = max(proj["last_activity"], entry["last_activity"])
+
+    active = _active_project()
+    projects.setdefault(active["path"], {"name": active["name"], "path": active["path"], "last_activity": ""})
+    result = []
+    for path, proj in projects.items():
+        proj["conversation_count"] = stats.get(path, {}).get("conversation_count", 0)
+        proj["exists"] = os.path.isdir(path)
+        proj["is_active"] = path == active["path"]
+        result.append(proj)
+    # Aktivní první, pak podle poslední aktivity sestupně
+    active_items = [p for p in result if p["is_active"]]
+    others = sorted((p for p in result if not p["is_active"]), key=lambda p: p["last_activity"], reverse=True)
+    return {"status": "ok", "active": active, "projects": active_items + others}
+
+
+@app.post("/api/projects")
+def create_or_open_project(req: ProjectCreateRequest, request: Request):
+    require_loopback_client(request)
+    try:
+        path = ensure_project_dir(req.path, create_if_missing=req.create_if_missing)
+    except ProjectPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Adresář projektu nelze vytvořit: {exc}") from exc
+
+    project = _activate_project(path, req.name)
+    session = history_repository.create_session("Nový chat", workspace_path=project["path"], project_name=project["name"])
+    return {
+        "status": "success",
+        "project": project,
+        "session_id": session["session_id"],
+        "session": _normalize_session_summary(session),
+    }
+
+
+@app.post("/api/projects/switch")
+def switch_project(req: ProjectSwitchRequest, request: Request):
+    require_loopback_client(request)
+    try:
+        path = resolve_project_path(req.path)
+    except ProjectPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Adresář projektu již neexistuje.")
+
+    project = _activate_project(path)
+    sessions = [
+        _normalize_session_summary(s)
+        for s in history_repository.list_sessions()
+        if os.path.realpath(_session_project_path(s)) == project["path"]
+    ]
+    session_id = None
+    if req.session_id and is_safe_session_id(req.session_id):
+        if any(s["session_id"] == req.session_id for s in sessions):
+            session_id = req.session_id
+    if session_id is None:
+        if sessions:
+            session_id = sessions[0]["session_id"]
+        else:
+            new_sess = history_repository.create_session("Nový chat", workspace_path=project["path"], project_name=project["name"])
+            sessions = [_normalize_session_summary(new_sess)]
+            session_id = new_sess["session_id"]
+    return {"status": "success", "project": project, "session_id": session_id, "sessions": sessions}
+
+
+# ------------------------------------------------------------------------------
+# Endpoints: Výběr složky (nativní dialog pro Create / Open Project)
+# ------------------------------------------------------------------------------
+
+_FOLDER_DIALOG_TITLE = "Vyberte složku projektu"
+_FOLDER_DIALOG_TIMEOUT = 60  # sekund – dialog nesmí navěky blokovat API endpoint
+# Systémové stromy, do kterých nikdy nesmí mířit rychlá volba složky
+_QUICK_DIR_BLOCKED_TREES = ("/etc", "/sys", "/proc", "/usr", "/bin", "/sbin", "/boot", "/dev", "/lib", "/run", "/var")
+# Výchozí složky, ve kterých uživatel obvykle drží své projekty
+_QUICK_DIR_PROJECTS_NAMES = ("Projects", "projects", "Projekty", "projekty")
+
+
+def _zenity_folder_dialog(timeout: int = _FOLDER_DIALOG_TIMEOUT) -> tuple[str, Optional[str]]:
+    """Otevře nativní dialog pro výběr složky přes zenity (Ubuntu/Linux).
+
+    Vrací dvojici (status, cesta), kde status je "success" | "cancelled" | "unavailable".
+    """
+    try:
+        result = subprocess.run(
+            ["zenity", "--file-selection", "--directory", f"--title={_FOLDER_DIALOG_TITLE}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        # Uživatel dialog zapomněl otevřený – bereme to jako zrušení
+        return "cancelled", None
+    except (FileNotFoundError, OSError):
+        # zenity není nainstalováno → zkusíme zálohu
+        return "unavailable", None
+
+    path = (result.stdout or "").strip()
+    if result.returncode == 0 and path:
+        return "success", path
+    # zenity vrací nulový/kód 1 podle toho, zda uživatel zrušil dialog
+    return "cancelled", None
+
+
+def _tkinter_folder_dialog() -> tuple[str, Optional[str]]:
+    """Záložní dialog pro výběr složky přes tkinter (bez závislosti na zenity)."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception:
+        return "unavailable", None
+
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+        selected = filedialog.askdirectory(title=_FOLDER_DIALOG_TITLE, mustexist=True)
+    except Exception:
+        # Headless prostředí bez DISPLAY atd.
+        return "unavailable", None
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    if selected:
+        return "success", str(selected)
+    return "cancelled", None
+
+
+def _pick_folder_interactively() -> tuple[str, Optional[str]]:
+    """Otevře zenity dialog, není-li k dispozici, použije tkinter. Vrací (status, cesta)."""
+    status, path = _zenity_folder_dialog()
+    if status == "unavailable":
+        status, path = _tkinter_folder_dialog()
+    if status == "success" and path:
+        return "success", os.path.realpath(str(path).strip())
+    return status, None
+
+
+@app.post("/api/projects/browse-folder")
+def browse_project_folder(request: Request):
+    """Otevře nativní dialog pro výběr složky projektu na hostitelském systému."""
+    require_loopback_client(request)
+    status, path = _pick_folder_interactively()
+    if status == "success" and path:
+        return {"status": "success", "path": path}
+    if status == "cancelled":
+        return {"status": "cancelled", "path": None}
+    raise HTTPException(
+        status_code=503,
+        detail="Dialog pro výběr složky není v tomto prostředí k dispozici (chybí zenity i tkinter).",
+    )
+
+
+def _is_safe_quick_dir(path: str) -> bool:
+    """Rychlá složka musí existovat a nesmí mířit do systémového stromu."""
+    if not path or not os.path.isdir(path):
+        return False
+    resolved = os.path.realpath(path)
+    for tree in _QUICK_DIR_BLOCKED_TREES:
+        canonical = os.path.realpath(tree)
+        if resolved == canonical or resolved.startswith(canonical + os.sep):
+            return False
+    return True
+
+
+@app.get("/api/fs/quick-dirs")
+def quick_dirs(request: Request):
+    """Vrátí bezpečné výchozí složky pro rychlý výběr v dialogu projektu."""
+    require_loopback_client(request)
+    home = os.path.realpath(os.path.expanduser("~"))
+    candidates: list[tuple[str, str]] = [("home", home)]
+    try:
+        candidates.append(("workspace", os.path.realpath(get_workspace_dir())))
+    except Exception:
+        pass
+    candidates.extend(("projects", os.path.join(home, name)) for name in _QUICK_DIR_PROJECTS_NAMES)
+
+    seen: set[str] = set()
+    dirs: list[dict[str, Any]] = []
+    for key, path in candidates:
+        if not _is_safe_quick_dir(path):
+            continue
+        if path in seen:
+            continue
+        seen.add(path)
+        dirs.append({"key": key, "path": path, "label": "~" if key == "home" else path})
+    return {"status": "ok", "dirs": dirs}
+
 
 @app.get("/api/sessions/{session_id}")
 def get_session(session_id: str, request: Request):
@@ -558,7 +834,20 @@ def get_session(session_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Neplatné ID relace.")
     try:
         messages = history_repository.load_session(session_id)
-        return {"session_id": session_id, "messages": messages}
+        proj = history_repository.get_session_project(session_id)
+        w_path = proj.get("workspace_path") or _default_project_path()
+        w_name = proj.get("project_name") or clean_project_name(None, w_path)
+        if os.path.isdir(w_path):
+            try:
+                set_workspace_dir(w_path)
+            except Exception:
+                pass
+        return {
+            "session_id": session_id,
+            "messages": messages,
+            "workspace_path": w_path,
+            "project_name": w_name,
+        }
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Relace nenalezena: {e}")
 
@@ -644,25 +933,37 @@ async def chat_stream(req: ChatRequest, request: Request):
         if existing and (existing[0].get("session_id") or existing[0].get("id")):
             session_id = existing[0].get("session_id") or existing[0].get("id")
         else:
-            new_sess = await anyio.to_thread.run_sync(history_repository.create_session, "Nový chat")
+            new_sess = await anyio.to_thread.run_sync(_create_session_in_active_project, "Nový chat")
             session_id = new_sess.get("session_id") or new_sess.get("id")
     else:
         # Ověříme, že relace existuje na disku, jinak ji vytvoříme
         def _ensure_session():
             session_file = history_repository.sessions_dir / f"{session_id}.json"
             if not session_file.exists():
+                active = _active_project()
                 session_data = {
                     "session_id": session_id,
                     "title": "Nový chat",
                     "created_at": history_repository._now(),
                     "updated_at": history_repository._now(),
                     "messages": [],
+                    "workspace_path": active["path"],
+                    "project_name": active["name"],
                 }
                 history_repository._write_session(session_id, session_data)
         try:
             await anyio.to_thread.run_sync(_ensure_session)
         except Exception as exc:
             logger.warning("Inicializace souboru relace %s selhala: %s", session_id, exc)
+
+    # Synchronizace aktivního workspace podle projektu relace
+    try:
+        sess_proj = await anyio.to_thread.run_sync(history_repository.get_session_project, session_id)
+        sp_path = sess_proj.get("workspace_path")
+        if sp_path and os.path.isdir(sp_path):
+            set_workspace_dir(sp_path)
+    except Exception:
+        pass
 
     # 2. Bezpečná resoluce promptu
     user_prompt = (req.prompt or req.message or "").strip()

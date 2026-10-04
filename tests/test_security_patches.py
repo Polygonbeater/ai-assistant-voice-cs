@@ -7,12 +7,15 @@ Unit testy pro 5 bezpečnostních záplat:
 5. SSRF & DNS Rebinding ochrana v is_safe_web_url
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 from code_validator import validate_blender_code
 from document_service import DocumentService, ConversationMemoryService
+from history_repository import HistoryRepository
 from llama_module import (
     DEFAULT_SYSTEM_PROMPT_CS,
     DEFAULT_SYSTEM_PROMPT_EN,
@@ -151,8 +154,30 @@ class TestSecurityPatches(unittest.TestCase):
 
     def test_loopback_ip_allowed_on_api_endpoints(self):
         """Ověří, že loopback klient má přístup k /api/."""
-        resp = self.client.get("/api/sessions")
-        self.assertEqual(resp.status_code, 200)
+        # GET /api/sessions si při prázdné historii automaticky vytvoří „Nový chat“.
+        # Repozitář proto izolujeme do temp složky, aby testy neznečisťovaly reálné sessions/.
+        real_sessions_dir = web_server.history_repository.sessions_dir
+        with (
+            tempfile.TemporaryDirectory(prefix="security-sessions-") as temp_dir,
+            patch(
+                "web_server.history_repository",
+                HistoryRepository(Path(temp_dir) / "chat_history.txt"),
+            ),
+        ):
+            resp = self.client.get("/api/sessions")
+            self.assertEqual(resp.status_code, 200)
+            created = resp.json().get("sessions", [])
+            self.assertTrue(created, "GET /api/sessions nevrátil žádnou relaci.")
+            # Relace vznikla jen v temp repozitáři.
+            session_id = created[0]["session_id"]
+            self.assertTrue(
+                (Path(temp_dir) / "sessions" / f"{session_id}.json").is_file(),
+                "Relace nebyla zapsána do izolovaného temp repozitáře.",
+            )
+            self.assertFalse(
+                (real_sessions_dir / f"{session_id}.json").exists(),
+                "Test znečistil reálný soubor sessions/.",
+            )
 
     # =========================================================================
     # 4. Prompt Injection Defense & XML Breakout Sanitization
