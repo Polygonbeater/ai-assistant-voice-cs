@@ -6488,8 +6488,16 @@ def generate_response(
                         salvaged_name.strip(),
                     )
                     salvaged_args = salvaged_args if isinstance(salvaged_args, dict) else {}
-                    # Obsah byl doplněn ručně – návrh je nutné v UI označit jako zkrácený.
-                    salvaged_args["_is_truncated"] = True
+                    # Zkráceno pouze pokud byl JSON poškozený nebo limitován délkou:
+                    raw_check = first_turn_buffer.strip()
+                    if "{" in raw_check:
+                        raw_check = raw_check[raw_check.find("{"):].strip().rstrip("`").strip()
+                    try:
+                        json.loads(raw_check)
+                        is_really_truncated = False
+                    except Exception:
+                        is_really_truncated = True
+                    salvaged_args["_is_truncated"] = is_really_truncated or turn_hit_token_limit
                     tool_call_detected = {
                         "name": salvaged_name.strip(),
                         "arguments": salvaged_args,
