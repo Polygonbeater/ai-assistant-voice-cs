@@ -262,6 +262,7 @@
             <!-- STREAMING STATUS BADGE -->
             <div class="live-status-badge" id="live-status-badge" style="display: none;">
               <span class="pulse-ring"></span>
+              <span class="live-status-clock" id="live-status-clock" aria-hidden="true">[00:00.0]</span>
               <span id="live-status-text" data-i18n="thinking_status">Thinking…</span>
             </div>
 
@@ -692,6 +693,10 @@
               <div class="card-header">
                 <span class="card-title" data-i18n="workspace_diff_title">NÁVRH ZMĚN SOUBORU</span>
                 <span class="card-badge" id="workspace-diff-file">Žádný návrh</span>
+              </div>
+              <div class="workspace-diff-truncated" id="workspace-diff-truncated" role="alert" hidden>
+                <span class="workspace-diff-truncated-badge" id="workspace-diff-truncated-badge" data-i18n="workspace_diff_truncated">⚠ OBSAH ZKRÁCEN LIMITEM TOKENŮ</span>
+                <p class="workspace-diff-truncated-text" id="workspace-diff-truncated-text" data-i18n="workspace_diff_truncated_notice">Kód souboru byl modelem předčasně ukončen. Zkontrolujte konec souboru před aplikací změn.</p>
               </div>
               <div class="workspace-diff-empty" id="workspace-diff-empty" data-i18n="workspace_diff_empty">Zatím není k dispozici žádný návrh změn.</div>
               <pre class="workspace-diff-content" id="workspace-diff-content" hidden></pre>

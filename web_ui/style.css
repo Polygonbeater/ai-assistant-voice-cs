@@ -1047,6 +1047,26 @@ select option:checked {
   color: var(--text-secondary);
 }
 
+/* Technický telemetrický tag v hlavičce odpovědi (HUD styl) */
+.telemetry-tag {
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(56, 189, 248, 0.35);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(148, 163, 184, 0.85);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.telemetry-tag:hover {
+  color: rgba(125, 211, 252, 0.9);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 .message-content {
   padding: 14px 18px;
   border-radius: 10px;
@@ -1166,6 +1186,90 @@ a:hover {
   background: rgba(16, 185, 129, 0.15);
   border-color: rgba(16, 185, 129, 0.5);
   color: var(--emerald-accent);
+}
+
+/* Message quick actions (Retry / Copy) under assistant answers */
+.message-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.message-card.assistant .message-quick-actions:hover,
+.message-card.assistant .message-quick-actions:focus-within {
+  opacity: 1;
+}
+
+.message-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.message-quick-btn:hover {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: var(--cyan-primary);
+}
+
+.message-quick-btn:active {
+  transform: translateY(0);
+}
+
+.message-quick-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.message-quick-btn.copied {
+  color: var(--emerald-accent);
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.message-quick-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+}
+
+/* Spinner místo ikony, když se odpověď (znovu) generuje */
+.quick-btn-spinner {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border: 2px solid rgba(56, 189, 248, 0.25);
+  border-top-color: var(--cyan-primary);
+  border-radius: 50%;
+  animation: quickBtnSpin 0.8s linear infinite;
+}
+
+@keyframes quickBtnSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Retry zamčen, dokud se generuje nová odpověď */
+.messages-flow.streaming-disabled .retry-msg-btn {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* Tool execution card */
@@ -1429,7 +1533,17 @@ pre {
   gap: 8px;
   font-size: 11px;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--amber-accent);
+}
+.live-status-clock {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(125, 211, 252, 0.75);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 .pulse-ring {
   width: 8px;
@@ -1786,10 +1900,50 @@ pre {
   font-size: 12px;
   text-align: center;
 }
+
+#workspace-diff-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 60%;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.workspace-diff-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.workspace-diff-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+#workspace-diff-file.is-new-file .workspace-diff-badge {
+  border-color: rgba(46, 160, 67, 0.5);
+  background: rgba(46, 160, 67, 0.16);
+  color: #7ee787;
+}
+#workspace-diff-file.is-changed-file .workspace-diff-badge {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.16);
+  color: var(--cyan-primary);
+}
 .workspace-diff-content {
   flex: 1;
   min-height: 0;
   margin: 0;
+  padding: 4px 0;
   overflow: auto;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -1801,27 +1955,79 @@ pre {
   tab-size: 4;
 }
 .workspace-diff-line {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   min-height: 1.55em;
   padding: 0 8px;
+}
+.workspace-diff-sign {
+  flex: 0 0 1ch;
+  color: var(--text-muted);
+  user-select: none;
+}
+.workspace-diff-code {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: pre;
 }
-.workspace-diff-line.diff-added-line {
+.workspace-diff-line.diff-add-line {
   background: rgba(46, 160, 67, 0.2);
   color: #7ee787;
 }
-.workspace-diff-line.diff-removed-line {
+.workspace-diff-line.diff-del-line {
   background: rgba(248, 81, 73, 0.2);
   color: #ff7b72;
+}
+.workspace-diff-line.diff-add-line .workspace-diff-sign {
+  color: #7ee787;
+}
+.workspace-diff-line.diff-del-line .workspace-diff-sign {
+  color: #ff7b72;
+}
+.workspace-diff-line.diff-ctx-line {
+  color: #c9d1d9;
 }
 .workspace-diff-line.diff-hunk-line {
   background: rgba(56, 189, 248, 0.12);
   color: var(--cyan-primary);
 }
-.workspace-diff-line.diff-file-line {
-  color: var(--text-secondary);
-  font-weight: 600;
+.workspace-diff-content.is-new-file .workspace-diff-line {
+  background: rgba(46, 160, 67, 0.14);
 }
+.workspace-diff-content.is-new-file .workspace-diff-line.diff-ctx-line {
+  color: #7ee787;
+}
+.workspace-diff-truncated {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-left: 3px solid #f59e0b;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.12);
+}
+.workspace-diff-truncated-badge {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.workspace-diff-truncated-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .workspace-diff-actions {
   display: flex;
   flex-wrap: wrap;

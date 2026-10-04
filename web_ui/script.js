@@ -383,6 +383,9 @@
     paneAgent: document.getElementById('pane-agent'),
     paneCode: document.getElementById('pane-code'),
     workspaceDiffFile: document.getElementById('workspace-diff-file'),
+    workspaceDiffTruncated: document.getElementById('workspace-diff-truncated'),
+    workspaceDiffTruncatedBadge: document.getElementById('workspace-diff-truncated-badge'),
+    workspaceDiffTruncatedText: document.getElementById('workspace-diff-truncated-text'),
     workspaceDiffEmpty: document.getElementById('workspace-diff-empty'),
     workspaceDiffContent: document.getElementById('workspace-diff-content'),
     workspaceDiffActions: document.getElementById('workspace-diff-actions'),
@@ -436,6 +439,7 @@
     attachedFileName: document.getElementById('attached-file-name'),
     btnRemoveAttachment: document.getElementById('btn-remove-attachment'),
     liveStatusBadge: document.getElementById('live-status-badge'),
+    liveStatusClock: document.getElementById('live-status-clock'),
     liveStatusText: document.getElementById('live-status-text'),
 
     // 3D Inspector
@@ -762,6 +766,15 @@
       workspace_diff_discard: 'Discard Proposal',
       workspace_diff_applied: 'Approved changes saved to {path}.',
       workspace_diff_discarded: 'Change proposal discarded.',
+      workspace_diff_new_file: 'NEW FILE',
+      workspace_diff_changed: 'MODIFIED',
+      workspace_diff_label_new: 'New file',
+      workspace_diff_label_changed: 'Modified',
+      workspace_diff_truncated: '⚠ CONTENT TRUNCATED BY TOKEN LIMIT',
+      workspace_diff_truncated_title: 'The model stopped generating before finishing the file',
+      telemetry_step: 'step',
+      telemetry_steps: 'steps',
+      workspace_diff_truncated_notice: 'The file code was cut off early by the model. Check the end of the file before applying the changes.',
       card_viewport_title: 'LIVE VIEWPORT PREVIEW',
       viewport_active: 'Active',
       viewport_offline: 'Offline',
@@ -875,6 +888,12 @@
       new_chat_title: 'New chat',
       copy_code: 'Copy',
       copied_code: 'Copied!',
+      retry_answer: 'Try again',
+      retry_answer_title: 'Regenerate the answer',
+      copy_answer: 'Copy',
+      copy_answer_title: 'Copy text',
+      copied_answer: 'Copied!',
+      retry_missing_prompt: 'Previous user message not found – cannot regenerate the answer.',
       you: 'You',
       stopped_pill: 'Generation stopped',
       rag_status_files: 'RAG: {docs} files ({chunks} chunks)',
@@ -1070,6 +1089,15 @@
       workspace_diff_discard: 'Zahodit návrh',
       workspace_diff_applied: 'Schválené změny byly uloženy do {path}.',
       workspace_diff_discarded: 'Návrh změny byl zahozen.',
+      workspace_diff_new_file: 'NOVÝ SOUBOR',
+      workspace_diff_changed: 'ZMĚNĚNO',
+      workspace_diff_label_new: 'Nový soubor',
+      workspace_diff_label_changed: 'Změněno',
+      workspace_diff_truncated: '⚠ OBSAH ZKRÁCEN LIMITEM TOKENŮ',
+      workspace_diff_truncated_title: 'Model ukončil generování dříve, než soubor dokončil',
+      telemetry_step: 'krok',
+      telemetry_steps: 'kroků',
+      workspace_diff_truncated_notice: 'Kód souboru byl modelem předčasně ukončen. Zkontrolujte konec souboru před aplikací změn.',
       card_viewport_title: 'ŽIVÝ NÁHLED VIEWPORTU',
       viewport_active: 'Aktivní',
       viewport_offline: 'Offline',
@@ -1183,6 +1211,12 @@
       new_chat_title: 'Nový chat',
       copy_code: 'Kopírovat',
       copied_code: 'Zkopírováno!',
+      retry_answer: 'Zkusit znovu',
+      retry_answer_title: 'Znovu vygenerovat odpověď',
+      copy_answer: 'Kopírovat',
+      copy_answer_title: 'Kopírovat text',
+      copied_answer: 'Zkopírováno!',
+      retry_missing_prompt: 'Předchozí zpráva uživatele nebyla nalezena – nelze odpověď vygenerovat znovu.',
       you: 'Vy',
       stopped_pill: 'Generování zastaveno',
       rag_status_files: 'RAG: {docs} souborů ({chunks} úseků)',
@@ -1342,9 +1376,11 @@
       }
     });
 
+    // Re-render the pending code diff header so badge labels follow the language
+    if (state.pendingWorkspaceDiff) renderWorkspaceDiff(state.pendingWorkspaceDiff);
+
     // Suggestion chips prompt payloads
-    document.querySelectorAll('.suggestion-chip').forEach(btn => {
-      const chipKey = btn.dataset.chipKey;
+    document.querySelectorAll('.suggestion-chip').forEach(btn => {      const chipKey = btn.dataset.chipKey;
       if (chipKey && CHIP_PROMPTS[lang] && CHIP_PROMPTS[lang][chipKey]) {
         btn.dataset.prompt = CHIP_PROMPTS[lang][chipKey];
       }
@@ -1983,35 +2019,110 @@
     el.agentStepsTimeline.scrollTop = el.agentStepsTimeline.scrollHeight;
   }
 
+  function normalizeDiffPath(filePath) {
+    return String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+  }
+
+  function isNewWorkspaceDiffFile(proposal) {
+    if (typeof proposal.original_exists === 'boolean') return !proposal.original_exists;
+    const original = String(proposal.original_content || '');
+    if (original) return false;
+    // Fallback: no "-" lines in the unified diff means nothing was replaced.
+    return !String(proposal.unified_diff || '').split('\n').some(line => line.startsWith('-') && !line.startsWith('---'));
+  }
+
+  function buildInlineDiffLines(proposal) {
+    const isNewFile = isNewWorkspaceDiffFile(proposal);
+    const raw = String(proposal.unified_diff || '');
+    const lines = raw.split('\n');
+
+    // Drop trailing empty artifacts produced by a trailing newline.
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+
+    if (!raw.trim() || raw === '(bez změn)') {
+      return String(proposal.new_content || '').split('\n').map(line => ({
+        kind: isNewFile ? 'add' : 'ctx',
+        text: line,
+      }));
+    }
+
+    const output = [];
+    for (const line of lines) {
+      if (line.startsWith('---') || line.startsWith('+++')) continue;
+      if (line.startsWith('@@')) {
+        output.push({ kind: 'hunk', text: line });
+        continue;
+      }
+      if (line.startsWith('+')) output.push({ kind: 'add', text: line.slice(1) });
+      else if (line.startsWith('-')) output.push({ kind: 'del', text: line.slice(1) });
+      else output.push({ kind: 'ctx', text: line.startsWith(' ') ? line.slice(1) : line });
+    }
+    return output;
+  }
+
   function renderWorkspaceDiff(proposal) {
     state.pendingWorkspaceDiff = proposal;
-    if (el.workspaceDiffFile) el.workspaceDiffFile.textContent = proposal.file_path;
+    const relativePath = normalizeDiffPath(proposal.file_path);
+    const isNewFile = isNewWorkspaceDiffFile(proposal);
+    const isTruncated = proposal.is_truncated === true;
+
+    if (el.workspaceDiffFile) {
+      const badge = document.createElement('span');
+      badge.className = 'workspace-diff-badge';
+      badge.textContent = t(isNewFile ? 'workspace_diff_new_file' : 'workspace_diff_changed');
+      badge.title = t(isNewFile ? 'workspace_diff_label_new' : 'workspace_diff_label_changed');
+      const pathLabel = document.createElement('span');
+      pathLabel.className = 'workspace-diff-path';
+      pathLabel.textContent = relativePath;
+      pathLabel.title = relativePath;
+      el.workspaceDiffFile.classList.toggle('is-new-file', isNewFile);
+      el.workspaceDiffFile.classList.toggle('is-changed-file', !isNewFile);
+      el.workspaceDiffFile.replaceChildren(badge, pathLabel);
+    }
+
     if (el.workspaceDiffEmpty) el.workspaceDiffEmpty.hidden = true;
+    if (el.workspaceDiffTruncated) el.workspaceDiffTruncated.hidden = !isTruncated;
+    if (el.workspaceDiffTruncatedBadge) {
+      el.workspaceDiffTruncatedBadge.title = t('workspace_diff_truncated_title');
+    }
     if (el.workspaceDiffContent) {
       el.workspaceDiffContent.hidden = false;
-      el.workspaceDiffContent.innerHTML = String(proposal.unified_diff || '')
-        .split('\n')
-        .map(line => {
-          let className = 'diff-context-line';
-          if (line.startsWith('+++') || line.startsWith('---')) className = 'diff-file-line';
-          else if (line.startsWith('@@')) className = 'diff-hunk-line';
-          else if (line.startsWith('+')) className = 'diff-added-line';
-          else if (line.startsWith('-')) className = 'diff-removed-line';
-          return `<span class="workspace-diff-line ${className}">${escapeHtml(line || ' ')}</span>`;
-        })
-        .join('');
+      el.workspaceDiffContent.classList.toggle('is-new-file', isNewFile);
+      el.workspaceDiffContent.replaceChildren(...buildInlineDiffLines(proposal).map(entry => {
+        const row = document.createElement('span');
+        row.className = `workspace-diff-line diff-${entry.kind}-line`;
+        const sign = document.createElement('span');
+        sign.className = 'workspace-diff-sign';
+        sign.setAttribute('aria-hidden', 'true');
+        sign.textContent = entry.kind === 'add' ? '+' : entry.kind === 'del' ? '-' : '';
+        const code = document.createElement('span');
+        code.className = 'workspace-diff-code';
+        code.textContent = entry.text || ' ';
+        row.append(sign, code);
+        return row;
+      }));
     }
     if (el.workspaceDiffActions) el.workspaceDiffActions.hidden = false;
     if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = '';
+
+    // Auto-switch the inspector to the "Code & Diff" tab so the proposal is visible.
     switchInspectorTab('code');
   }
 
   function clearWorkspaceDiff() {
     state.pendingWorkspaceDiff = null;
-    if (el.workspaceDiffFile) el.workspaceDiffFile.textContent = t('workspace_diff_empty');
+    if (el.workspaceDiffFile) {
+      el.workspaceDiffFile.classList.remove('is-new-file', 'is-changed-file');
+      el.workspaceDiffFile.replaceChildren(Object.assign(document.createElement('span'), {
+        className: 'workspace-diff-path',
+        textContent: t('workspace_diff_empty'),
+      }));
+    }
     if (el.workspaceDiffEmpty) el.workspaceDiffEmpty.hidden = false;
+    if (el.workspaceDiffTruncated) el.workspaceDiffTruncated.hidden = true;
     if (el.workspaceDiffContent) {
       el.workspaceDiffContent.hidden = true;
+      el.workspaceDiffContent.classList.remove('is-new-file');
       el.workspaceDiffContent.textContent = '';
     }
     if (el.workspaceDiffActions) el.workspaceDiffActions.hidden = true;
@@ -2051,6 +2162,12 @@
     if (!proposal || !el.btnDiscardWorkspaceDiff) return;
     el.btnApplyWorkspaceDiff.disabled = true;
     el.btnDiscardWorkspaceDiff.disabled = true;
+    clearWorkspaceDiff();
+    const message = `[FS] ${t('workspace_diff_discarded')}`;
+    addAgentStep(message, 'info', 'FS', FS_TOOL_ICONS.write);
+    logConsole(message, 'info');
+    el.btnApplyWorkspaceDiff.disabled = false;
+    el.btnDiscardWorkspaceDiff.disabled = false;
     try {
       const response = await fetch('/api/workspace/discard-diff', {
         method: 'POST',
@@ -2061,16 +2178,8 @@
       if (!response.ok || data.status !== 'ok') {
         throw new Error(data.detail || data.error || `HTTP ${response.status}`);
       }
-      clearWorkspaceDiff();
-      const message = `[FS] ${t('workspace_diff_discarded')}`;
-      addAgentStep(message, 'info', 'FS', FS_TOOL_ICONS.write);
-      logConsole(message, 'info');
     } catch (error) {
-      if (el.workspaceDiffStatus) el.workspaceDiffStatus.textContent = error.message;
-      logConsole(`Diff discard failed: ${error.message}`, 'error');
-    } finally {
-      el.btnApplyWorkspaceDiff.disabled = false;
-      el.btnDiscardWorkspaceDiff.disabled = false;
+      logConsole(`Diff discard notify failed: ${error.message}`, 'error');
     }
   }
 
@@ -3121,7 +3230,12 @@
       <div class="message-tool-status-area" style="display: none;"></div>
       <div class="message-body message-content">${isUser ? linkifyBareUrls(escapeHtml(initialContent)) : renderMarkdown(initialContent)}</div>
       <div class="message-actions-footer" style="display: none;"></div>
+      ${isUser ? '' : '<div class="message-quick-actions"></div>'}
     `;
+
+    if (!isUser) {
+      setupQuickActions(card);
+    }
 
     el.messagesContainer.appendChild(card);
     scrollToBottom();
@@ -3328,6 +3442,96 @@
     }
   }
 
+  // ===========================================================================
+  // MESSAGE QUICK ACTIONS (RETRY / COPY ANSWER)
+  // ===========================================================================
+  const MSG_RETRY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>';
+  const MSG_COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  const MSG_CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+  const MSG_SPINNER_HTML = '<span class="quick-btn-spinner" aria-hidden="true"></span>';
+
+  // Postaví lištu akcí (Zkusit znovu / Kopírovat) pod odpověď asistenta
+  function setupQuickActions(card) {
+    const bar = card.querySelector('.message-quick-actions');
+    if (!bar) return;
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'message-quick-btn retry-msg-btn';
+    retryBtn.title = t('retry_answer_title');
+    retryBtn.innerHTML = `${MSG_RETRY_SVG}<span class="quick-btn-label">${escapeHtml(t('retry_answer'))}</span>`;
+    retryBtn.addEventListener('click', () => retryMessageGeneration(card, retryBtn));
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'message-quick-btn copy-msg-btn';
+    copyBtn.title = t('copy_answer_title');
+    copyBtn.innerHTML = `${MSG_COPY_SVG}<span class="quick-btn-label">${escapeHtml(t('copy_answer'))}</span>`;
+    copyBtn.addEventListener('click', () => copyMessageText(card, copyBtn));
+
+    bar.appendChild(retryBtn);
+    bar.appendChild(copyBtn);
+  }
+
+  // Vyhledá text bezprostředně předcházejícího uživatelského dotazu,
+  // odstraní nepovedenou odpověď a znovu spustí standardní odesílací rutinu
+  // (aktivní workspace, režim agenta, web nástroje a RAG se berou ze state).
+  function retryMessageGeneration(card, btn) {
+    if (state.isStreaming || isSendingLock) return;
+
+    let prev = card.previousElementSibling;
+    while (prev && !(prev.classList && prev.classList.contains('message-card') && prev.classList.contains('user'))) {
+      prev = prev.previousElementSibling;
+    }
+    const prevBody = prev ? prev.querySelector('.message-body') : null;
+    const promptText = prevBody ? (prevBody.innerText || prevBody.textContent || '').trim() : '';
+
+    if (!promptText) {
+      showToast(t('retry_missing_prompt'), 'warn');
+      return;
+    }
+
+    // Dočasně deaktivuj tlačítko a zobraz spinner
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `${MSG_SPINNER_HTML}<span class="quick-btn-label">${escapeHtml(t('retry_answer'))}</span>`;
+    }
+
+    // Odstraň aktuální (nepovedenou) odpověď asistenta z DOMu
+    card.remove();
+
+    // Znovu spusť odeslání dotazu přes standardní rutinu se všemi aktuálními parametry.
+    // skipUserCard: původní uživatelská zpráva v DOMu zůstává (nesmí se duplikovat)
+    // preserveDraft: rozepsaný text ve vstupu se během retry nesmaže
+    sendMessage(promptText, { skipUserCard: true, preserveDraft: true });
+  }
+
+  // Zkopíruje čistý text odpovědi do schránky a krátce změní ikonu na fajfku
+  function copyMessageText(card, btn) {
+    if (btn && btn.classList.contains('copied')) return;
+
+    const body = card.querySelector('.message-body');
+    const text = body ? (body.innerText || body.textContent || '') : '';
+    if (!text.trim()) return;
+
+    const originalHtml = btn ? btn.innerHTML : '';
+    const originalTitle = btn ? btn.title : '';
+
+    navigator.clipboard.writeText(text).then(() => {
+      if (!btn) return;
+      btn.classList.add('copied');
+      btn.title = t('copied_answer');
+      btn.innerHTML = `${MSG_CHECK_SVG}<span class="quick-btn-label">${escapeHtml(t('copied_answer'))}</span>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.title = originalTitle;
+        btn.innerHTML = originalHtml;
+      }, 1800);
+    }).catch(err => {
+      logConsole(`Clipboard write failed: ${err.message}`, 'error');
+    });
+  }
+
   async function triggerAiProofreading() {
     if (state.isStreaming) return;
 
@@ -3418,7 +3622,7 @@
       }
 
     const promptText = effectivePrompt;
-    if (el.promptInput) {
+    if (el.promptInput && !(options && options.preserveDraft)) {
       el.promptInput.value = '';
       el.promptInput.style.height = 'auto';
     }
@@ -3444,8 +3648,10 @@
       }
     }
 
-    // Append user card
-    appendMessageCard('user', promptText, false);
+    // Append user card (při retry zůstává původní uživatelská zpráva v DOMu)
+    if (!(options && options.skipUserCard)) {
+      appendMessageCard('user', promptText, false);
+    }
 
     // Prepare assistant response card
     state.isStreaming = true;
@@ -3454,6 +3660,10 @@
     const assistantCard = appendMessageCard('assistant', '', true);
     const bodyEl = assistantCard.querySelector('.message-body');
     const toolArea = assistantCard.querySelector('.message-tool-status-area');
+
+    // Telemetrie odezvy (HUD stopky)
+    const telemetry = createResponseTelemetry();
+    telemetry.start();
 
     let fullText = '';
     let reader = null;
@@ -3583,7 +3793,13 @@
             }
           } else if (data.type === 'tool_start') {
             const toolName = data.tool || data.name || 'tool';
+            telemetry.markStep();
+            const stepLimit = TELEMETRY_STEP_LIMIT_FALLBACK;
             const statusMsg = `[TOOL] ${t('tool_running')}: ${toolName}…`;
+            const clock = el.liveStatusClock ? el.liveStatusClock.textContent : '[00:00.0]';
+            if (el.liveStatusText) {
+              el.liveStatusText.textContent = `${clock} • ReAct ${telemetry.steps}/${stepLimit}: ${toolName}`;
+            }
             if (toolArea) {
               toolArea.style.display = 'block';
               const pill = document.createElement('div');
@@ -3724,6 +3940,10 @@
       state.abortController = null;
       isSendingLock = false;
       updateStreamingUi(false);
+      // Telemetrie: zastavíme hodiny a vložíme konečný tag do hlavičky zprávy
+      telemetry.stop();
+      attachTelemetryTag(assistantCard, telemetry);
+      if (el.liveStatusClock) el.liveStatusClock.textContent = '[00:00.0]';
       // Extra pojistka: odstranění visícího textu načítání
       const titleEl = document.getElementById('active-session-title');
       if (titleEl && (titleEl.textContent === 'Načítám...' || titleEl.textContent === 'Loading...')) {
@@ -3760,6 +3980,75 @@
     }
   }
 
+  // ===========================================================================
+  // RESPONSE TELEMETRY (HUD) – čistý technický stopkám, žádné emodgie
+  // ===========================================================================
+  // Formát: [MM:SS.d] v živém stavovém pruhu, [14.2s • 3 kroky] v hlavičce.
+  const TELEMETRY_STEP_LIMIT_FALLBACK = 10;
+
+  function formatElapsedClock(ms) {
+    const totalTenths = Math.max(0, Math.floor(ms / 100));
+    const minutes = Math.floor(totalTenths / 600);
+    const seconds = Math.floor((totalTenths % 600) / 10);
+    const tenths = totalTenths % 10;
+    return `[${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}]`;
+  }
+
+  function formatElapsedSeconds(ms) {
+    return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
+  }
+
+  function createResponseTelemetry() {
+    const startedAt = performance.now();
+    let steps = 0;
+    let timerId = null;
+    return {
+      start() {
+        if (timerId === null) {
+          timerId = setInterval(() => this.renderClock(), 100);
+        }
+      },
+      stop() {
+        if (timerId !== null) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      },
+      get elapsedMs() {
+        return performance.now() - startedAt;
+      },
+      get steps() {
+        return steps;
+      },
+      markStep() {
+        steps += 1;
+        this.renderClock();
+      },
+      renderClock() {
+        if (el.liveStatusClock) {
+          el.liveStatusClock.textContent = formatElapsedClock(performance.now() - startedAt);
+        }
+      },
+      /** Vrací hotový technický tag pro hlavičku zprávy. */
+      buildTag() {
+        const stepPart = steps > 0
+          ? ` • ${steps} ${steps === 1 ? t('telemetry_step') : t('telemetry_steps')}`
+          : '';
+        return `[${formatElapsedSeconds(performance.now() - startedAt)}${stepPart}]`;
+      },
+    };
+  }
+
+  function attachTelemetryTag(card, telemetry) {
+    if (!card) return;
+    const header = card.querySelector('.message-card-header');
+    if (!header) return;
+    const tag = document.createElement('span');
+    tag.className = 'telemetry-tag';
+    tag.textContent = telemetry.buildTag();
+    header.appendChild(tag);
+  }
+
   function updateStreamingUi(isStreaming) {
     if (el.btnSend) {
       el.btnSend.style.display = isStreaming ? 'none' : 'flex';
@@ -3783,6 +4072,10 @@
     }
     if (el.sessionsContainer) {
       el.sessionsContainer.classList.toggle('disabled-streaming', isStreaming);
+    }
+    // Během generování se zamyká tlačítko "Zkusit znovu" u všech odpovědí
+    if (el.messagesContainer) {
+      el.messagesContainer.classList.toggle('streaming-disabled', isStreaming);
     }
     if (el.btnNewChat) {
       el.btnNewChat.disabled = isStreaming;

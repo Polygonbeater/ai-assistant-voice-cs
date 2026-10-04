@@ -1116,7 +1116,9 @@ async def chat_stream(req: ChatRequest, request: Request):
                             "file_path": proposal["file_path"],
                             "original_content": proposal["original_content"],
                             "new_content": proposal["new_content"],
+                            "original_exists": proposal["original_exists"],
                             "unified_diff": proposal["unified_diff"],
+                            "is_truncated": bool(proposal.get("is_truncated", False)),
                         }
                 if data.get("tool") == "write_file" and isinstance(data.get("arguments"), dict):
                     payload["arguments"] = {
